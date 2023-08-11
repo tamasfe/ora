@@ -10,7 +10,7 @@ description = "Part of the Ora scheduler framework."
 
 [dependencies]
 minstant = { version = "0.1.2", optional = true }
-tokio = { version = "1.29.1", features = ["rt", "time", "sync"], optional = true }
+tokio = { version = "1.29.1", features = ["rt", "time", "sync", "macros"], optional = true }
 tracing = "0.1.37"
 
 [dev-dependencies]
