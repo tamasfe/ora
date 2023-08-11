@@ -1,0 +1,28 @@
+[package]
+name = "ora-e2e"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.72"
+axum = "0.6.19"
+base64 = "0.21.2"
+console-subscriber = "0.1.10"
+eyre = "0.6.8"
+ora = { version = "0.1.0", path = "../ora", features = ["store-memory", "store-sqlx-postgres"] }
+ora-client = { version = "0.1.0", path = "../ora-client" }
+ora-common = { version = "0.1.0", path = "../ora-common" }
+ora-graphql = { version = "0.1.0", path = "../ora-graphql" }
+ora-scheduler = { version = "0.1.0", path = "../ora-scheduler" }
+ora-store-sqlx = { version = "0.1.0", path = "../ora-store-sqlx" }
+serde = { version = "1.0.174", features = ["derive"] }
+sqlx = { version = "0.7.1", features = ["postgres", "runtime-tokio-rustls"] }
+time = "0.3.23"
+tokio = { version = "1.29.1", features = ["time", "macros", "rt-multi-thread"] }
+tower-http = { version = "0.4.3", features = ["cors"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+uuid = { version = "1.4.1", features = ["v4"] }

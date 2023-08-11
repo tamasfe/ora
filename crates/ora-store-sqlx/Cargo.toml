@@ -1,0 +1,49 @@
+[package]
+name = "ora-store-sqlx"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-stream = "0.3.5"
+async-trait = "0.1.72"
+eyre = "0.6.8"
+futures = "0.3.28"
+ora-client = { version = "0.1.0", path = "../ora-client" }
+ora-common = { version = "0.1.0", path = "../ora-common" }
+ora-scheduler = { version = "0.1.0", path = "../ora-scheduler" }
+ora-worker = { version = "0.1.0", path = "../ora-worker" }
+sea-query = { version = "0.30.0", default-features = false, features = [
+  "with-uuid",
+  "with-time",
+  "with-json",
+  "derive",
+  "backend-postgres",
+] }
+sea-query-binder = { version = "0.5.0", features = [
+  "with-uuid",
+  "with-time",
+  "with-json",
+  "sqlx-postgres",
+] }
+serde_json = { version = "1.0.104", features = ["raw_value"] }
+sqlx = { version = "0.7.1", features = [
+  "time",
+  "uuid",
+  "json",
+], default-features = false }
+sqlx-migrate = { version = "0.7.0" }
+time = "0.3.23"
+tokio = { version = "1.29.1", features = ["time", "rt", "sync", "macros"] }
+tracing = "0.1.37"
+uuid = { version = "1.4.1", features = ["v4"] }
+
+[features]
+default = ["postgres"]
+postgres = ["sqlx/postgres", "sqlx-migrate/postgres"]
+
+[build-dependencies]
+sqlx-migrate = { version = "0.7.0", features = ["generate"] }

@@ -1,0 +1,51 @@
+[package]
+name = "ora"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.71"
+eyre = "0.6.8"
+futures = "0.3.28"
+ora-api = { version = "0.1.0", path = "../ora-api", optional = true }
+ora-client = { version = "0.1.0", path = "../ora-client" }
+ora-common = { version = "0.1.0", path = "../ora-common" }
+ora-scheduler = { version = "0.1.0", path = "../ora-scheduler", optional = true }
+ora-store-memory = { version = "0.1.0", path = "../ora-store-memory", optional = true }
+ora-store-sqlx = { version = "0.1.0", path = "../ora-store-sqlx", optional = true }
+ora-worker = { version = "0.1.0", path = "../ora-worker", optional = true }
+ora-test = { version = "0.1.0", path = "../ora-test", optional = true }
+pin-project-lite = "0.2.10"
+rmp-serde = "1.1.1"
+serde = "1.0.171"
+serde_json = "1.0.101"
+time = "0.3.23"
+uuid = "1.4.0"
+
+[features]
+default = ["api", "scheduler", "worker"]
+scheduler = ["dep:ora-scheduler"]
+api = ["dep:ora-api"]
+worker = ["dep:ora-worker"]
+store-memory = ["dep:ora-store-memory"]
+store-sqlx-postgres = ["dep:ora-store-sqlx", "ora-store-sqlx/postgres"]
+test = ["dep:ora-test"]
+
+[dev-dependencies]
+async-graphql = "6.0.0"
+async-graphql-axum = "6.0.0"
+async-trait = "0.1.71"
+axum = "0.6.19"
+ora-graphql = { version = "0.1.0", path = "../ora-graphql" }
+serde = { version = "1.0.171", features = ["derive"] }
+tokio = { version = "1.29.1", features = ["rt", "rt-multi-thread", "macros"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.17"
+
+[[example]]
+name = "in-memory"
+required-features = ["api", "scheduler", "worker", "store-memory"]

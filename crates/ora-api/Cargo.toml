@@ -1,0 +1,22 @@
+[package]
+name = "ora-api"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.71"
+eyre = "0.6.8"
+futures = "0.3.28"
+ora-client = { version = "0.1.0", path = "../ora-client" }
+ora-common = { version = "0.1.0", path = "../ora-common" }
+ora-worker = { version = "0.1.0", path = "../ora-worker" }
+pin-project-lite = "0.2.10"
+rmp-serde = "1.1.1"
+serde = "1.0.171"
+serde_json = "1.0.101"
+time = "0.3.23"
+uuid = "1.4.0"
