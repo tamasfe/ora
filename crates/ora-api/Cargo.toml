@@ -1,6 +1,6 @@
 [package]
 name = "ora-api"
-version.workspace = true
+version= "0.1.0"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
@@ -12,9 +12,9 @@ description = "Part of the Ora scheduler framework."
 async-trait = "0.1.71"
 eyre = "0.6.8"
 futures = "0.3.28"
-ora-client = { version = "0.1.0", path = "../ora-client" }
-ora-common = { version = "0.1.0", path = "../ora-common" }
-ora-worker = { version = "0.1.0", path = "../ora-worker" }
+ora-client = { version = "^0.1.0", path = "../ora-client" }
+ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-worker = { version = "^0.1.0", path = "../ora-worker" }
 pin-project-lite = "0.2.10"
 rmp-serde = "1.1.1"
 serde = "1.0.171"

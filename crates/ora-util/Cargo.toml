@@ -1,6 +1,6 @@
 [package]
 name = "ora-util"
-version.workspace = true
+version= "0.1.0"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
@@ -11,5 +11,5 @@ description = "Part of the Ora scheduler framework."
 [dependencies]
 chrono = { version = "0.4.26", default-features = false }
 cron = "0.12.0"
-ora-common = { version = "0.1.0", path = "../ora-common" }
+ora-common = { version = "^0.1.0", path = "../ora-common" }
 tracing = "0.1.37"

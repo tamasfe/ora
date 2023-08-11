@@ -1,6 +1,6 @@
 [package]
 name = "ora-test"
-version.workspace = true
+version= "0.1.0"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
@@ -10,10 +10,10 @@ license.workspace = true
 [dependencies]
 async-trait = "0.1.72"
 eyre = "0.6.8"
-ora-api = { version = "0.1.0", path = "../ora-api" }
-ora-client = { version = "0.1.0", path = "../ora-client" }
-ora-common = { version = "0.1.0", path = "../ora-common" }
-ora-worker = { version = "0.1.0", path = "../ora-worker" }
+ora-api = { version = "^0.1.0", path = "../ora-api" }
+ora-client = { version = "^0.1.0", path = "../ora-client" }
+ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-worker = { version = "^0.1.0", path = "../ora-worker" }
 tokio = { version = "1.29.1", features = ["rt", "time"] }
 tokio-util = "0.7.8"
 uuid = { version = "1.4.1", features = ["v4"] }

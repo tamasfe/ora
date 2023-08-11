@@ -12,12 +12,12 @@ axum = "0.6.19"
 base64 = "0.21.2"
 console-subscriber = "0.1.10"
 eyre = "0.6.8"
-ora = { version = "0.1.0", path = "../ora", features = ["store-memory", "store-sqlx-postgres"] }
-ora-client = { version = "0.1.0", path = "../ora-client" }
-ora-common = { version = "0.1.0", path = "../ora-common" }
+ora = { version = "^0.1.0", path = "../ora", features = ["store-memory", "store-sqlx-postgres"] }
+ora-client = { version = "^0.1.0", path = "../ora-client" }
+ora-common = { version = "^0.1.0", path = "../ora-common" }
 ora-graphql = { version = "0.1.0", path = "../ora-graphql" }
-ora-scheduler = { version = "0.1.0", path = "../ora-scheduler" }
-ora-store-sqlx = { version = "0.1.0", path = "../ora-store-sqlx" }
+ora-scheduler = { version = "^0.1.0", path = "../ora-scheduler" }
+ora-store-sqlx = { version = "^0.1.0", path = "../ora-store-sqlx" }
 serde = { version = "1.0.174", features = ["derive"] }
 sqlx = { version = "0.7.1", features = ["postgres", "runtime-tokio-rustls"] }
 time = "0.3.23"
