@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v0.2.0 (2023-09-15)
+## v0.2.1 (2023-09-15)
 
 ### New Features
 
@@ -14,13 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
    - renamed Worker -> Handler
    - renamed WorkerPool -> Worker
 
+### Bug Fixes
+
+ - <csr-id-96e79cdc9a1e497b99c5b0cc4e1ef1bc6cb41efe/> add missing uuid feature
+
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
- - 1 commit contributed to the release.
+ - 3 commits contributed to the release.
  - 35 days passed between releases.
- - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -30,8 +34,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Add missing uuid feature ([`96e79cd`](https://github.com/tamasfe/ora/commit/96e79cdc9a1e497b99c5b0cc4e1ef1bc6cb41efe))
+    - Release ora-scheduler v0.2.0, ora-client v0.2.0, ora-worker v0.2.0, ora-api v0.2.0, ora-store-memory v0.2.0, ora-store-sqlx v0.2.0, ora-test v0.2.0, ora v0.2.0, ora-graphql v0.2.0, safety bump 6 crates ([`3d59b5b`](https://github.com/tamasfe/ora/commit/3d59b5bcf244b6abbbda7e1feff30cb7931dc03f))
     - Handle concurrent workers ([`933860b`](https://github.com/tamasfe/ora/commit/933860bc82503d990938ad1925846eb0eecb0ee5))
 </details>
+
+## v0.2.0 (2023-09-15)
+
+### New Features
+
+ - <csr-id-933860bc82503d990938ad1925846eb0eecb0ee5/> handle concurrent workers
+   - track workers per task to guarantee that at most one worker runs a task
+- renamed Worker -> Handler
+- renamed WorkerPool -> Worker
 
 ## v0.1.0 (2023-08-11)
 
