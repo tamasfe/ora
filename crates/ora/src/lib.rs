@@ -8,6 +8,7 @@ pub use ora_api::{client::Client, *};
 pub use ora_common::{
     schedule::*,
     task::{TaskDataFormat, TaskDefinition, TaskStatus},
+    timeout::TimeoutPolicy,
 };
 #[cfg(feature = "scheduler")]
 pub use ora_scheduler::scheduler::{Error as SchedulerError, Scheduler};
