@@ -17,7 +17,7 @@ use ora_common::{
 };
 use ora_scheduler::store::{
     schedule::{ActiveSchedule, SchedulerScheduleStore, SchedulerScheduleStoreEvent},
-    task::{PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
+    task::{ActiveTask, PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
 };
 use ora_worker::store::{ReadyTask, WorkerStore, WorkerStoreEvent};
 use parking_lot::Mutex;
@@ -222,6 +222,27 @@ impl SchedulerTaskStore for MemoryStore {
             .filter_map(|task| {
                 if let TaskStatus::Pending = task.status {
                     Some(PendingTask {
+                        id: task.id,
+                        target: task.definition.target,
+                        timeout: task.definition.timeout,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn active_tasks(&self) -> Result<Vec<ActiveTask>, Self::Error> {
+        Ok(self
+            .inner
+            .tasks
+            .lock()
+            .values()
+            .filter_map(|task| {
+                if let TaskStatus::Ready | TaskStatus::Started = task.status {
+                    Some(ActiveTask {
                         id: task.id,
                         target: task.definition.target,
                         timeout: task.definition.timeout,

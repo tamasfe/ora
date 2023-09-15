@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::store::{
     schedule::{SchedulerScheduleStore, SchedulerScheduleStoreEvent},
-    task::{SchedulerTaskStore, SchedulerTaskStoreEvent},
+    task::{ActiveTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
 };
 
 /// A scheduler that has a purpose of marking
@@ -59,6 +59,19 @@ where
                 &timer_handle,
                 &mut scheduled_tasks,
             );
+        }
+
+        // Schedule timeouts for existing tasks,
+        // this is done once at the beginning so no deduplication
+        // is done.
+        let active_tasks = self
+            .store
+            .active_tasks()
+            .await
+            .map_err(store_error)?;
+
+        for task in active_tasks {
+            schedule_timeout(task, &timer_handle);
         }
 
         loop {
@@ -130,21 +143,7 @@ fn handle_event(
             tracing::trace!(task_id = %task.id, "task scheduled");
             scheduled_tasks.insert(task.id, ScheduledTask::default());
             timer.schedule(TimerEntry::TaskReady(task.id), task_delay);
-
-            match task.timeout {
-                TimeoutPolicy::Never => {}
-                TimeoutPolicy::FromTarget { timeout } => {
-                    let timeout_delay: Duration = match timeout.try_into() {
-                        Ok(t) => t,
-                        Err(error) => {
-                            tracing::warn!(%error, "timeout out of range");
-                            return;
-                        }
-                    };
-
-                    timer.schedule(TimerEntry::TaskTimeout(task.id), task_delay + timeout_delay);
-                }
-            }
+            schedule_timeout(task.into(), timer);
         }
         SchedulerTaskStoreEvent::TaskCancelled(task_id) => {
             if let Some(task) = scheduled_tasks.get_mut(&task_id) {
@@ -156,6 +155,32 @@ fn handle_event(
             } else {
                 tracing::debug!(%task_id, "task was cancelled but it was not scheduled");
             }
+        }
+    }
+}
+
+#[tracing::instrument(level = "trace", skip_all)]
+fn schedule_timeout(task: ActiveTask, timer: &TimerHandle<TimerEntry>) {
+    match task.timeout {
+        TimeoutPolicy::Never => {}
+        TimeoutPolicy::FromTarget { timeout } => {
+            let task_unix = Duration::from_nanos(task.target.0);
+
+            let timeout_unix: Duration = match Duration::try_from(timeout) {
+                Ok(t) => t + task_unix,
+                Err(error) => {
+                    tracing::warn!(%error, "timeout out of range");
+                    return;
+                }
+            };
+
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time cannot be before unix epoch");
+
+            let timeout_delay = timeout_unix.saturating_sub(now);
+
+            timer.schedule(TimerEntry::TaskTimeout(task.id), timeout_delay);
         }
     }
 }

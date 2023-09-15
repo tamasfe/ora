@@ -19,6 +19,14 @@ pub trait SchedulerTaskStore {
     /// Return all tasks that should be scheduled.
     async fn pending_tasks(&self) -> Result<Vec<PendingTask>, Self::Error>;
 
+    /// Return active tasks that are not pending and are not
+    /// yet finished.
+    ///
+    /// The scheduler needs to know about these tasks
+    /// in order to schedule timeouts for all existing tasks,
+    /// not just newly added ones.
+    async fn active_tasks(&self) -> Result<Vec<ActiveTask>, Self::Error>;
+
     /// Update the task status as ready.
     async fn task_ready(&self, task_id: Uuid) -> Result<(), Self::Error>;
 
@@ -39,6 +47,30 @@ pub struct PendingTask {
     pub target: UnixNanos,
     /// The task's timeout policy.
     pub timeout: TimeoutPolicy,
+}
+
+/// A task that is not finished and not pending anymore.
+///
+/// It is used to keep track of timeouts for tasks
+/// that are already running when the scheduler starts.
+#[derive(Debug, Clone, Copy)]
+pub struct ActiveTask {
+    /// The task's ID.
+    pub id: Uuid,
+    /// The task's target timestamp.
+    pub target: UnixNanos,
+    /// The task's timeout policy.
+    pub timeout: TimeoutPolicy,
+}
+
+impl From<PendingTask> for ActiveTask {
+    fn from(value: PendingTask) -> Self {
+        Self {
+            id: value.id,
+            target: value.target,
+            timeout: value.timeout,
+        }
+    }
 }
 
 /// A scheduler store event.

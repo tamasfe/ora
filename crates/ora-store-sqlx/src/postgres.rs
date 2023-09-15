@@ -20,7 +20,7 @@ use ora_common::{
 };
 use ora_scheduler::store::{
     schedule::{ActiveSchedule, SchedulerScheduleStore, SchedulerScheduleStoreEvent},
-    task::{PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
+    task::{ActiveTask, PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
 };
 use ora_worker::store::{ReadyTask, WorkerStore, WorkerStoreEvent};
 use sea_query::{Alias, Condition, Expr, IntoCondition, Order, PostgresQueryBuilder, Query};
@@ -74,6 +74,7 @@ impl DbStore<Postgres> {
     ///
     /// Errors are returned if migrations fail to apply
     /// or in case any other database error occurs.
+    #[tracing::instrument(level = "debug", skip_all)]
     pub async fn new_with_options(db: PgPool, options: DbStoreOptions) -> eyre::Result<Self> {
         let (events, _) = tokio::sync::broadcast::channel(options.channel_capacity);
         let this = Self {
@@ -89,6 +90,7 @@ impl DbStore<Postgres> {
         Ok(this)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn migrate(&self) -> eyre::Result<()> {
         // We store the migrations table inside the schema as well,
         // so we need to make sure the schema exists even before migrations
@@ -108,6 +110,7 @@ impl DbStore<Postgres> {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn add_task_with(
         &self,
         mut task: TaskDefinition,
@@ -173,6 +176,7 @@ impl DbStore<Postgres> {
         Ok(task_id)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     fn update_worker_selectors(&self, selectors: &[WorkerSelector]) {
         let mut global_ws = self.worker_selectors.lock().unwrap();
         let mut selectors_changed = false;
@@ -215,10 +219,12 @@ fn task_definition_from_row(row: PgRow) -> Result<TaskDefinition, sqlx::Error> {
 
 #[async_trait]
 impl ClientOperations for DbStore<Postgres> {
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn add_task(&self, task: TaskDefinition) -> eyre::Result<Uuid> {
         self.add_task_with(task, None).await.map_err(Into::into)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task(&self, task_id: Uuid) -> eyre::Result<Arc<dyn TaskOperations>> {
         query(
             r#"--sql
@@ -237,6 +243,7 @@ impl ClientOperations for DbStore<Postgres> {
         }))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn tasks(&self, options: &Tasks) -> eyre::Result<Vec<Arc<dyn TaskOperations>>> {
         let mut q = Query::select();
         q.column(Task::Id)
@@ -266,6 +273,7 @@ impl ClientOperations for DbStore<Postgres> {
             .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_count(&self, options: &Tasks) -> eyre::Result<u64> {
         let (sql, values) = Query::select()
             .expr(Expr::col(Task::Id).count())
@@ -280,6 +288,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(res.0 as _)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_labels(&self) -> eyre::Result<Vec<String>> {
         let labels: Vec<String> = query(
             r#"--sql
@@ -293,6 +302,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(labels)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_kinds(&self) -> eyre::Result<Vec<String>> {
         let kinds: Vec<String> = query(
             r#"--sql
@@ -306,6 +316,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(kinds)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn add_schedule(&self, schedule: ScheduleDefinition) -> eyre::Result<Uuid> {
         let schedule_id = Uuid::new_v4();
 
@@ -342,6 +353,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(schedule_id)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn schedule(
         &self,
         schedule_id: Uuid,
@@ -363,6 +375,7 @@ impl ClientOperations for DbStore<Postgres> {
         }))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn schedules(
         &self,
         options: &Schedules,
@@ -393,6 +406,7 @@ impl ClientOperations for DbStore<Postgres> {
             .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn schedule_count(&self, options: &Schedules) -> eyre::Result<u64> {
         let (sql, values) = Query::select()
             .expr(Expr::col(Schedule::Id).count())
@@ -407,6 +421,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(res.0 as _)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn schedule_labels(&self) -> eyre::Result<Vec<String>> {
         let labels: Vec<String> = query(
             r#"--sql
@@ -420,6 +435,7 @@ impl ClientOperations for DbStore<Postgres> {
         Ok(labels)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn add_tasks(
         &self,
         tasks: &mut (dyn ExactSizeIterator<Item = TaskDefinition> + Send),
@@ -558,6 +574,7 @@ impl TaskOperations for PgTaskOperations {
         self.task_id
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn status(&self) -> eyre::Result<TaskStatus> {
         Ok(query(
             r#"--sql
@@ -573,6 +590,7 @@ impl TaskOperations for PgTaskOperations {
         .parse()?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn target(&self) -> eyre::Result<ora_common::UnixNanos> {
         Ok(query(
             r#"--sql
@@ -588,6 +606,7 @@ impl TaskOperations for PgTaskOperations {
         .into())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn definition(&self) -> eyre::Result<TaskDefinition> {
         let row = query(
             r#"--sql
@@ -612,6 +631,7 @@ impl TaskOperations for PgTaskOperations {
         task_definition_from_row(row).map_err(Into::into)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn result(&self) -> eyre::Result<Option<RawTaskResult>> {
         let row = query(
             r#"--sql
@@ -663,6 +683,7 @@ impl TaskOperations for PgTaskOperations {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn wait_result(&self) -> eyre::Result<RawTaskResult> {
         let mut events = self.events.subscribe();
         let mut fallback_interval = tokio::time::interval(std::time::Duration::from_secs(60 * 5));
@@ -689,6 +710,7 @@ impl TaskOperations for PgTaskOperations {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn schedule(&self) -> eyre::Result<Option<Arc<dyn ora_client::ScheduleOperations>>> {
         Ok(query(
             r#"--sql
@@ -710,6 +732,7 @@ impl TaskOperations for PgTaskOperations {
         }))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn added_at(&self) -> eyre::Result<ora_common::UnixNanos> {
         Ok(query(
             r#"--sql
@@ -725,6 +748,7 @@ impl TaskOperations for PgTaskOperations {
         .into())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn ready_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -740,6 +764,7 @@ impl TaskOperations for PgTaskOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn started_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -755,6 +780,7 @@ impl TaskOperations for PgTaskOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn succeeded_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -770,6 +796,7 @@ impl TaskOperations for PgTaskOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn failed_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -785,6 +812,7 @@ impl TaskOperations for PgTaskOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn cancelled_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -800,6 +828,7 @@ impl TaskOperations for PgTaskOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn cancel(&self) -> eyre::Result<()> {
         query(
             r#"--sql
@@ -818,6 +847,7 @@ impl TaskOperations for PgTaskOperations {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
         let row: (Option<Uuid>,) = query_as(
             r#"--sql
@@ -850,6 +880,7 @@ impl ScheduleOperations for PgScheduleOperations {
         self.schedule_id
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn definition(&self) -> eyre::Result<ScheduleDefinition> {
         let row = query(
             r#"--sql
@@ -879,6 +910,7 @@ impl ScheduleOperations for PgScheduleOperations {
         })
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn is_active(&self) -> eyre::Result<bool> {
         Ok(query(
             r#"--sql
@@ -893,6 +925,7 @@ impl ScheduleOperations for PgScheduleOperations {
         .try_get(0)?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn added_at(&self) -> eyre::Result<ora_common::UnixNanos> {
         Ok(query(
             r#"--sql
@@ -908,6 +941,7 @@ impl ScheduleOperations for PgScheduleOperations {
         .into())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn cancelled_at(&self) -> eyre::Result<Option<ora_common::UnixNanos>> {
         Ok(query(
             r#"--sql
@@ -923,6 +957,7 @@ impl ScheduleOperations for PgScheduleOperations {
         .map(Into::into))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn active_task(&self) -> eyre::Result<Option<Arc<dyn TaskOperations>>> {
         Ok(query(
             r#"--sql
@@ -943,6 +978,7 @@ impl ScheduleOperations for PgScheduleOperations {
         .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn cancel(&self) -> eyre::Result<()> {
         query(
             r#"--sql
@@ -976,6 +1012,7 @@ impl SchedulerTaskStore for DbStore<Postgres> {
     type Error = sqlx::Error;
     type Events = BoxStream<'static, Result<SchedulerTaskStoreEvent, Self::Error>>;
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn events(&self) -> Result<Self::Events, Self::Error> {
         let mut stream = self.events.subscribe();
 
@@ -1000,6 +1037,7 @@ impl SchedulerTaskStore for DbStore<Postgres> {
         })))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn pending_tasks(&self) -> Result<Vec<PendingTask>, Self::Error> {
         Ok(query(
             r#"--sql
@@ -1023,6 +1061,32 @@ impl SchedulerTaskStore for DbStore<Postgres> {
         .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn active_tasks(&self) -> Result<Vec<ActiveTask>, Self::Error> {
+        Ok(query(
+            r#"--sql
+            SELECT
+                "id",
+                "target",
+                "timeout_policy"
+            FROM "ora"."task"
+            WHERE
+                "status" = 'ready'
+                OR "status" = 'running'
+            "#,
+        )
+        .try_map(|row: PgRow| {
+            Ok(ActiveTask {
+                id: row.try_get("id")?,
+                target: row.try_get::<OffsetDateTime, _>("target")?.into(),
+                timeout: row.try_get::<Json<_>, _>("timeout_policy")?.0,
+            })
+        })
+        .fetch_all(&self.db)
+        .await?)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_ready(&self, task_id: Uuid) -> Result<(), Self::Error> {
         query(
             r#"--sql
@@ -1041,6 +1105,7 @@ impl SchedulerTaskStore for DbStore<Postgres> {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_timed_out(&self, task_id: Uuid) -> Result<(), Self::Error> {
         query(
             r#"--sql
@@ -1066,6 +1131,7 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
     type Error = sqlx::Error;
     type Events = BoxStream<'static, Result<SchedulerScheduleStoreEvent, Self::Error>>;
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn events(&self) -> Result<Self::Events, Self::Error> {
         let mut stream = self.events.subscribe();
         Ok(Box::pin(try_stream!({
@@ -1089,6 +1155,7 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
         })))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn pending_schedules(&self) -> Result<Vec<ActiveSchedule>, Self::Error> {
         Ok(query(
             r#"--sql
@@ -1126,6 +1193,7 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
         .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn pending_schedule_of_task(
         &self,
         task_id: Uuid,
@@ -1175,6 +1243,7 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
         .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_target(&self, task_id: Uuid) -> Result<ora_common::UnixNanos, Self::Error> {
         Ok(query(
             r#"--sql
@@ -1190,6 +1259,7 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
         .into())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn add_task(&self, schedule_id: Uuid, task: TaskDefinition) -> Result<(), Self::Error> {
         self.add_task_with(task, Some(schedule_id)).await?;
         Ok(())
@@ -1201,6 +1271,7 @@ impl WorkerStore for DbStore<Postgres> {
     type Error = sqlx::Error;
     type Events = BoxStream<'static, Result<WorkerStoreEvent, Self::Error>>;
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn events(&self, selectors: &[WorkerSelector]) -> Result<Self::Events, Self::Error> {
         let mut stream = self.events.subscribe();
 
@@ -1232,6 +1303,7 @@ impl WorkerStore for DbStore<Postgres> {
         })))
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn ready_tasks(
         &self,
         selectors: &[WorkerSelector],
@@ -1268,6 +1340,7 @@ impl WorkerStore for DbStore<Postgres> {
         .await?)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn select_task(&self, task_id: Uuid, worker_id: Uuid) -> Result<bool, Self::Error> {
         let mut tx = self.db.begin().await?;
 
@@ -1309,6 +1382,7 @@ impl WorkerStore for DbStore<Postgres> {
         Ok(should_select)
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_started(&self, task_id: Uuid) -> Result<(), Self::Error> {
         query(
             r#"--sql
@@ -1327,6 +1401,7 @@ impl WorkerStore for DbStore<Postgres> {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_succeeded(
         &self,
         task_id: Uuid,
@@ -1376,6 +1451,7 @@ impl WorkerStore for DbStore<Postgres> {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_failed(&self, task_id: Uuid, reason: String) -> Result<(), Self::Error> {
         query(
             r#"--sql
@@ -1397,6 +1473,7 @@ impl WorkerStore for DbStore<Postgres> {
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 fn filter_tasks(options: &Tasks) -> impl IntoCondition {
     Condition::all()
         .add_option(
@@ -1491,6 +1568,7 @@ fn filter_tasks(options: &Tasks) -> impl IntoCondition {
         )
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 fn filter_schedules(options: &Schedules) -> impl IntoCondition {
     Condition::all()
         .add_option(
