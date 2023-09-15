@@ -11,7 +11,7 @@ use ora_common::{
     timeout::TimeoutPolicy,
     UnixNanos,
 };
-use ora_worker::{RawWorker, TaskContext};
+use ora_worker::{RawHandler, TaskContext};
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod client;
@@ -78,9 +78,9 @@ pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
     }
 }
 
-/// A strongly-typed worker that can 
+/// A strongly-typed worker that can
 #[async_trait]
-pub trait Worker<T>
+pub trait Handler<T>
 where
     Self: Sized + Send + Sync + 'static,
     T: Task,
@@ -89,15 +89,15 @@ where
     async fn run(&self, ctx: TaskContext, task: T) -> eyre::Result<T::Output>;
 
     #[doc(hidden)]
-    fn raw_worker(self) -> Arc<dyn RawWorker + Send + Sync> {
-        self.raw_worker_with_selector(T::worker_selector())
+    fn raw_handler(self) -> Arc<dyn RawHandler + Send + Sync> {
+        self.raw_handler_with_selector(T::worker_selector())
     }
 
     #[doc(hidden)]
-    fn raw_worker_with_selector(
+    fn raw_handler_with_selector(
         self,
         selector: WorkerSelector,
-    ) -> Arc<dyn RawWorker + Send + Sync> {
+    ) -> Arc<dyn RawHandler + Send + Sync> {
         Arc::new(WorkerAdapter {
             selector,
             worker: self,
@@ -106,36 +106,36 @@ where
     }
 }
 
-/// A helper blanket trait for types that might implement [`Worker`]
+/// A helper blanket trait for types that might implement [`Handler`]
 /// for multiple [`Task`] types.
-pub trait IntoWorker {
-    /// Convert `self` into a [`RawWorker`] that can be registered
-    /// in worker pools.
-    fn worker<T>(self) -> Arc<dyn RawWorker + Send + Sync>
+pub trait IntoHandler {
+    /// Convert `self` into a [`RawHandler`] that can be registered
+    /// in workers.
+    fn handler<T>(self) -> Arc<dyn RawHandler + Send + Sync>
     where
-        Self: Worker<T>,
+        Self: Handler<T>,
         T: Task,
     {
-        <Self as Worker<T>>::raw_worker(self)
+        <Self as Handler<T>>::raw_handler(self)
     }
 
-    /// Convert `self` into a [`RawWorker`] that can be registered
-    /// in worker pools with the given selector.
-    fn worker_with_selector<T>(self, selector: WorkerSelector) -> Arc<dyn RawWorker + Send + Sync>
+    /// Convert `self` into a [`RawHandler`] that can be registered
+    /// in workers with the given selector.
+    fn handler_with_selector<T>(self, selector: WorkerSelector) -> Arc<dyn RawHandler + Send + Sync>
     where
-        Self: Worker<T>,
+        Self: Handler<T>,
         T: Task,
     {
-        <Self as Worker<T>>::raw_worker_with_selector(self, selector)
+        <Self as Handler<T>>::raw_handler_with_selector(self, selector)
     }
 }
 
-impl<W> IntoWorker for W where W: Sized + Send + Sync + 'static {}
+impl<W> IntoHandler for W where W: Sized + Send + Sync + 'static {}
 
 struct WorkerAdapter<W, T>
 where
     T: Task,
-    W: Worker<T>,
+    W: Handler<T>,
 {
     worker: W,
     selector: WorkerSelector,
@@ -143,10 +143,10 @@ where
 }
 
 #[async_trait]
-impl<W, T> RawWorker for WorkerAdapter<W, T>
+impl<W, T> RawHandler for WorkerAdapter<W, T>
 where
     T: Task,
-    W: Worker<T> + Send + Sync + 'static,
+    W: Handler<T> + Send + Sync + 'static,
 {
     fn selector(&self) -> &WorkerSelector {
         &self.selector

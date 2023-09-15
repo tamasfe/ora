@@ -3,3 +3,4 @@ Cargo.lock
 *.data
 *.data.old
 flamegraph.svg
+*.local*

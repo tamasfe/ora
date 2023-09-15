@@ -448,6 +448,11 @@ impl<T> TaskHandle<T> {
         self.ops.cancel().await
     }
 
+    /// Return the worker's ID that is associated with the task, if any.
+    pub async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
+        self.ops.worker_id().await
+    }
+
     /// Cast the handle to a different task type or `()`
     /// to erase the type.
     #[must_use]

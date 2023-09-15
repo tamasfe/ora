@@ -7,44 +7,44 @@ use std::{
 };
 
 use async_trait::async_trait;
-use ora_api::{client::TaskHandle, Task, Worker};
+use ora_api::{client::TaskHandle, Handler, Task};
 use ora_client::{RawTaskResult, ScheduleOperations, TaskOperations};
 use ora_common::{
     task::{TaskDefinition, TaskStatus, WorkerSelector},
     UnixNanos,
 };
-use ora_worker::RawWorker;
+use ora_worker::RawHandler;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-/// A worker pool that can be used to test worker implementations.
+/// A worker that can be used to test worker implementations.
 #[derive(Default)]
 #[must_use]
-pub struct TestWorkerPool {
-    workers: HashMap<WorkerSelector, Arc<dyn RawWorker + Send + Sync>>,
+pub struct TestWorker {
+    workers: HashMap<WorkerSelector, Arc<dyn RawHandler + Send + Sync>>,
 }
 
-impl std::fmt::Debug for TestWorkerPool {
+impl std::fmt::Debug for TestWorker {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TestWorkerPool")
+        f.debug_struct("TestWorker")
             .field("workers", &self.workers.keys().collect::<Vec<_>>())
             .finish()
     }
 }
 
-impl TestWorkerPool {
-    /// Create a new test worker pool.
+impl TestWorker {
+    /// Create a new test worker.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Add a worker to the test pool.
+    /// Add a handler to the test worker.
     ///
     /// # Panics
     ///
     /// Panics if a worker with a matching [`WorkerSelector`]
     /// already exists.
-    pub fn register_worker(&mut self, worker: Arc<dyn RawWorker + Send + Sync>) -> &mut Self {
+    pub fn register_worker(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
         let selector = worker.selector();
 
         assert!(
@@ -56,7 +56,7 @@ impl TestWorkerPool {
         self
     }
 
-    /// Spawn a task onto the worker pool, immediately run it with a
+    /// Spawn a task onto the worker, immediately run it with a
     /// registered and return a [`TaskHandle`] for it.
     ///
     /// It returns [`None`] if there are no suitable workers registered.
@@ -119,7 +119,7 @@ impl TestWorkerPool {
 ///
 /// This will simply provide an empty context to the worker and
 /// run the handler function.
-/// For more options, see [`TestWorkerPool`].
+/// For more options, see [`TestWorker`].
 ///
 /// # Errors
 ///
@@ -127,7 +127,7 @@ impl TestWorkerPool {
 pub async fn run_worker<T, W>(worker: &W, task: T) -> eyre::Result<T::Output>
 where
     T: Task,
-    W: Worker<T>,
+    W: Handler<T>,
 {
     worker
         .run(
@@ -246,18 +246,22 @@ impl TaskOperations for TestTaskOperations {
 
         Ok(())
     }
+
+    async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use ora_api::{IntoWorker, Task, Worker};
+    use ora_api::{Handler, IntoHandler, Task};
     use ora_worker::TaskContext;
     use serde::{Deserialize, Serialize};
     use tokio::test;
     use uuid::Uuid;
 
-    use crate::TestWorkerPool;
+    use crate::TestWorker;
 
     #[derive(Debug, Serialize, Deserialize)]
     struct TestTask;
@@ -273,10 +277,10 @@ mod tests {
         type Output = ();
     }
 
-    struct TestWorker;
+    struct TestHandler;
 
     #[async_trait]
-    impl Worker<TestTask> for TestWorker {
+    impl Handler<TestTask> for TestHandler {
         async fn run(
             &self,
             ctx: TaskContext,
@@ -287,7 +291,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl Worker<CancelOnlyTask> for TestWorker {
+    impl Handler<CancelOnlyTask> for TestHandler {
         async fn run(
             &self,
             ctx: TaskContext,
@@ -299,18 +303,18 @@ mod tests {
     }
 
     #[test]
-    async fn test_worker_pool_smoke() {
-        let mut pool = TestWorkerPool::new();
-        assert!(pool.spawn_task(TestTask.task()).is_none());
-        pool.register_worker(TestWorker.worker::<TestTask>());
+    async fn test_worker_smoke() {
+        let mut worker = TestWorker::new();
+        assert!(worker.spawn_task(TestTask.task()).is_none());
+        worker.register_worker(TestHandler.handler::<TestTask>());
 
-        let task = pool.spawn_task(TestTask.task()).unwrap();
+        let task = worker.spawn_task(TestTask.task()).unwrap();
         let output_task_id = task.clone().await.unwrap();
         assert_eq!(output_task_id, task.id());
 
-        pool.register_worker(TestWorker.worker::<CancelOnlyTask>());
+        worker.register_worker(TestHandler.handler::<CancelOnlyTask>());
 
-        let task = pool.spawn_task(CancelOnlyTask.task()).unwrap();
+        let task = worker.spawn_task(CancelOnlyTask.task()).unwrap();
         tokio::select! {
             _ = task.clone() => {
                 unreachable!()
@@ -325,9 +329,9 @@ mod tests {
 
     #[test]
     #[should_panic]
-    async fn test_duplicate_workers() {
-        let mut pool = TestWorkerPool::new();
-        pool.register_worker(TestWorker.worker::<TestTask>());
-        pool.register_worker(TestWorker.worker::<TestTask>());
+    async fn test_duplicate_handlers() {
+        let mut worker = TestWorker::new();
+        worker.register_worker(TestHandler.handler::<TestTask>());
+        worker.register_worker(TestHandler.handler::<TestTask>());
     }
 }

@@ -2,7 +2,7 @@
 use std::sync::Arc;
 
 use ora_scheduler::store::{schedule::SchedulerScheduleStoreEvent, task::SchedulerTaskStoreEvent};
-use ora_worker::store::WorkerPoolStoreEvent;
+use ora_worker::store::WorkerStoreEvent;
 use sea_query::Iden;
 use uuid::Uuid;
 
@@ -41,6 +41,9 @@ pub(crate) enum Task {
     OutputFormat,
     FailureReason,
     // endregion
+    // region: worker
+    WorkerId,
+    // endregion
 }
 
 /// Schedule table column identifiers.
@@ -70,7 +73,7 @@ pub(crate) enum Schedule {
 pub(crate) enum DbEvent {
     SchedulerScheduleStore(SchedulerScheduleStoreEvent),
     SchedulerTaskStore(SchedulerTaskStoreEvent),
-    WorkerPoolStore(WorkerPoolStoreEvent),
+    WorkerStore(WorkerStoreEvent),
     /// A task has succeeded, failed or was cancelled.
     TaskDone(Uuid),
 }

@@ -22,13 +22,13 @@ use ora_scheduler::store::{
     schedule::{ActiveSchedule, SchedulerScheduleStore, SchedulerScheduleStoreEvent},
     task::{PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
 };
-use ora_worker::store::{ReadyTask, WorkerPoolStore, WorkerPoolStoreEvent};
+use ora_worker::store::{ReadyTask, WorkerStore, WorkerStoreEvent};
 use sea_query::{Alias, Condition, Expr, IntoCondition, Order, PostgresQueryBuilder, Query};
 use sea_query_binder::SqlxValues;
 use serde_json::{value::RawValue, Value};
 use sqlx::{
     postgres::PgRow,
-    query, query_as_with, query_with,
+    query, query_as, query_as_with, query_with,
     types::{time::OffsetDateTime, Json},
     Executor, PgPool, Postgres, Row,
 };
@@ -817,6 +817,24 @@ impl TaskOperations for PgTaskOperations {
 
         Ok(())
     }
+
+    async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
+        let row: (Option<Uuid>,) = query_as(
+            r#"--sql
+            SELECT
+                "worker_id"
+            FROM
+                "ora"."task"
+            WHERE
+                "id" = $1
+            "#,
+        )
+        .bind(self.task_id)
+        .fetch_one(&self.db)
+        .await?;
+
+        Ok(row.0)
+    }
 }
 
 #[derive(Debug)]
@@ -1179,9 +1197,9 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
 }
 
 #[async_trait]
-impl WorkerPoolStore for DbStore<Postgres> {
+impl WorkerStore for DbStore<Postgres> {
     type Error = sqlx::Error;
-    type Events = BoxStream<'static, Result<WorkerPoolStoreEvent, Self::Error>>;
+    type Events = BoxStream<'static, Result<WorkerStoreEvent, Self::Error>>;
 
     async fn events(&self, selectors: &[WorkerSelector]) -> Result<Self::Events, Self::Error> {
         let mut stream = self.events.subscribe();
@@ -1193,8 +1211,8 @@ impl WorkerPoolStore for DbStore<Postgres> {
             loop {
                 match stream.recv().await {
                     Ok(event) => {
-                        if let DbEvent::WorkerPoolStore(event) = event {
-                            if let WorkerPoolStoreEvent::TaskReady(task) = &event {
+                        if let DbEvent::WorkerStore(event) = event {
+                            if let WorkerStoreEvent::TaskReady(task) = &event {
                                 if selectors.contains(&task.definition.worker_selector) {
                                     yield event;
                                 }
@@ -1248,6 +1266,47 @@ impl WorkerPoolStore for DbStore<Postgres> {
         })
         .fetch_all(&self.db)
         .await?)
+    }
+
+    async fn select_task(&self, task_id: Uuid, worker_id: Uuid) -> Result<bool, Self::Error> {
+        let mut tx = self.db.begin().await?;
+
+        query(
+            r#"--sql
+            SELECT
+                *
+            FROM
+                "ora"."task"
+            WHERE
+                "id" = $1
+            FOR UPDATE
+            "#,
+        )
+        .bind(task_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let res = query(
+            r#"--sql
+            UPDATE
+                "ora"."task"
+            SET
+                "worker_id" = $2
+            WHERE
+                "id" = $1
+                AND "worker_id" IS NULL
+            "#,
+        )
+        .bind(task_id)
+        .bind(worker_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        let should_select = res.rows_affected() > 0;
+
+        Ok(should_select)
     }
 
     async fn task_started(&self, task_id: Uuid) -> Result<(), Self::Error> {

@@ -1,14 +1,22 @@
 //! Ora E2E test suite.
 
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
+
 use async_trait::async_trait;
 use ora::{
-    client::Client, IntoWorker, MemoryStore, MemoryStoreOptions, NewTask, ScheduleDefinition,
-    SchedulePolicy, Scheduler, Task, TaskContext, Worker, WorkerPool,
+    client::Client, Handler, IntoHandler, MemoryStore, MemoryStoreOptions, NewTask,
+    ScheduleDefinition, SchedulePolicy, Scheduler, Task, TaskContext, Worker,
 };
 use ora_client::Tasks;
 use ora_common::task::TaskDefinition;
 use ora_store_sqlx::{DbStore, DbStoreOptions};
-use sqlx::PgPool;
+use sqlx::{
+    postgres::{PgConnectOptions, PgPoolOptions},
+    PgPool,
+};
 use tasks::{LatencyTestTask, ScheduleTestTask};
 use time::{Duration, OffsetDateTime};
 use tracing_subscriber::EnvFilter;
@@ -16,20 +24,37 @@ use uuid::Uuid;
 
 pub mod tasks;
 
-struct TestWorker;
+struct TestHandler {
+    /// A guard to check for handler race conditions.
+    executed_tasks: Arc<Mutex<HashSet<Uuid>>>,
+}
 
 #[async_trait]
-impl Worker<LatencyTestTask> for TestWorker {
-    async fn run(&self, _ctx: TaskContext, task: LatencyTestTask) -> eyre::Result<Duration> {
+impl Handler<LatencyTestTask> for TestHandler {
+    async fn run(&self, ctx: TaskContext, task: LatencyTestTask) -> eyre::Result<Duration> {
+        self.check_task_race(ctx.task_id());
         let now = OffsetDateTime::now_utc();
         Ok((now - task.target).abs())
     }
 }
 
 #[async_trait]
-impl Worker<ScheduleTestTask> for TestWorker {
-    async fn run(&self, _ctx: TaskContext, _task: ScheduleTestTask) -> eyre::Result<()> {
+impl Handler<ScheduleTestTask> for TestHandler {
+    async fn run(&self, ctx: TaskContext, _task: ScheduleTestTask) -> eyre::Result<()> {
+        self.check_task_race(ctx.task_id());
         Ok(())
+    }
+}
+
+impl TestHandler {
+    fn check_task_race(&self, task_id: Uuid) {
+        let mut executed_tasks_guard = self.executed_tasks.lock().unwrap();
+        assert!(
+            !executed_tasks_guard.contains(&task_id),
+            "the task was executed multiple times"
+        );
+
+        executed_tasks_guard.insert(task_id);
     }
 }
 
@@ -51,6 +76,7 @@ async fn main() {
 }
 
 async fn test_in_memory() {
+    const CONCURRENT_WORKERS: usize = 50;
     tracing::info!("testing in-memory store");
 
     let store = MemoryStore::new_with_options(MemoryStoreOptions {
@@ -64,14 +90,18 @@ async fn test_in_memory() {
         }
     });
 
-    let mut pool = WorkerPool::new(store.clone());
-    setup_worker_pool(&mut pool);
+    let mut worker_handles = Vec::with_capacity(CONCURRENT_WORKERS);
+    let task_ids: Arc<Mutex<HashSet<Uuid>>> = Default::default();
+    for _ in 0..CONCURRENT_WORKERS {
+        let mut worker = Worker::new(store.clone());
+        setup_worker(&mut worker, task_ids.clone());
 
-    let pool_handle = tokio::spawn(async move {
-        if let Err(error) = pool.run().await {
-            panic!("worker pool exited unexpectedly: {error}");
-        }
-    });
+        worker_handles.push(tokio::spawn(async move {
+            if let Err(error) = worker.run().await {
+                panic!("worker exited unexpectedly: {error}");
+            }
+        }));
+    }
 
     test_latency(
         &store,
@@ -87,14 +117,17 @@ async fn test_in_memory() {
         Duration::milliseconds(500),
         5,
         1000,
-        Duration::milliseconds(10),
+        Duration::milliseconds(50),
     )
     .await;
 
     test_schedule(&store, Duration::seconds(2)).await;
 
     scheduler_handle.abort();
-    pool_handle.abort();
+
+    for worker_handle in worker_handles {
+        worker_handle.abort();
+    }
 
     // Not measuring latency, does not matter.
     let target = OffsetDateTime::now_utc();
@@ -128,12 +161,12 @@ async fn test_in_memory() {
         }
     });
 
-    let mut pool = WorkerPool::new(store.clone());
-    setup_worker_pool(&mut pool);
+    let mut worker = Worker::new(store.clone());
+    setup_worker(&mut worker, Default::default());
 
-    let pool_handle = tokio::spawn(async move {
-        if let Err(error) = pool.run().await {
-            panic!("worker pool exited unexpectedly: {error}");
+    let worker_handle = tokio::spawn(async move {
+        if let Err(error) = worker.run().await {
+            panic!("worker exited unexpectedly: {error}");
         }
     });
 
@@ -142,14 +175,20 @@ async fn test_in_memory() {
     }
 
     scheduler_handle.abort();
-    pool_handle.abort();
+    worker_handle.abort();
 }
 
 async fn test_postgres() {
+    const CONCURRENT_WORKERS: usize = 30;
     tracing::info!("testing local postgres store");
-    let db = PgPool::connect("postgres://postgres:postgres@localhost/postgres")
-        .await
+
+    let options: PgConnectOptions = "postgres://postgres:postgres@localhost/postgres"
+        .parse()
         .unwrap();
+
+    let pool_options = PgPoolOptions::new().max_connections(50);
+
+    let db = pool_options.connect_with(options).await.unwrap();
 
     let store = DbStore::new_with_options(
         db,
@@ -168,28 +207,34 @@ async fn test_postgres() {
         }
     });
 
-    let mut pool = WorkerPool::new(store.clone());
-    setup_worker_pool(&mut pool);
+    let mut worker_handles = Vec::with_capacity(CONCURRENT_WORKERS);
+    let task_ids: Arc<Mutex<HashSet<Uuid>>> = Default::default();
+    for _ in 0..CONCURRENT_WORKERS {
+        let mut worker = Worker::new(store.clone());
+        setup_worker(&mut worker, task_ids.clone());
 
-    let pool_handle = tokio::spawn(async move {
-        if let Err(error) = pool.run().await {
-            panic!("worker pool exited unexpectedly: {error}");
-        }
-    });
+        worker_handles.push(tokio::spawn(async move {
+            if let Err(error) = worker.run().await {
+                panic!("worker exited unexpectedly: {error}");
+            }
+        }));
+    }
 
     test_latency(
         &store,
         Duration::milliseconds(500),
         5,
         50,
-        Duration::seconds(5),
+        Duration::seconds(20),
     )
     .await;
 
     test_schedule(&store, Duration::seconds(2)).await;
 
     scheduler_handle.abort();
-    pool_handle.abort();
+    for worker_handle in worker_handles {
+        worker_handle.abort();
+    }
 
     // Not measuring latency, does not matter.
     let target = OffsetDateTime::now_utc();
@@ -239,12 +284,12 @@ async fn test_postgres() {
         }
     });
 
-    let mut pool = WorkerPool::new(store.clone());
-    setup_worker_pool(&mut pool);
+    let mut worker = Worker::new(store.clone());
+    setup_worker(&mut worker, Default::default());
 
-    let pool_handle = tokio::spawn(async move {
-        if let Err(error) = pool.run().await {
-            panic!("worker pool exited unexpectedly: {error}");
+    let worker_handle = tokio::spawn(async move {
+        if let Err(error) = worker.run().await {
+            panic!("worker exited unexpectedly: {error}");
         }
     });
 
@@ -253,12 +298,22 @@ async fn test_postgres() {
     }
 
     scheduler_handle.abort();
-    pool_handle.abort();
+    worker_handle.abort();
 }
 
-fn setup_worker_pool<C>(pool: &mut WorkerPool<C>) {
-    pool.register_worker(TestWorker.worker::<LatencyTestTask>());
-    pool.register_worker(TestWorker.worker::<ScheduleTestTask>());
+fn setup_worker<C>(worker: &mut Worker<C>, executed_task_ids: Arc<Mutex<HashSet<Uuid>>>) {
+    worker.register_handler(
+        TestHandler {
+            executed_tasks: executed_task_ids.clone(),
+        }
+        .handler::<LatencyTestTask>(),
+    );
+    worker.register_handler(
+        TestHandler {
+            executed_tasks: executed_task_ids.clone(),
+        }
+        .handler::<ScheduleTestTask>(),
+    );
 }
 
 async fn test_latency(

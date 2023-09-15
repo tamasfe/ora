@@ -1,4 +1,4 @@
-//! Worker and worker pool implementations for Ora.
+//! Worker and worker implementations for Ora.
 
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::module_name_repetitions)]
@@ -8,7 +8,7 @@ use ora_common::task::{TaskDataFormat, TaskDefinition, WorkerSelector};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-pub mod pool;
+pub mod worker;
 pub mod store;
 
 /// A context that is passed to each worker task execution.
@@ -21,6 +21,7 @@ pub struct TaskContext {
 impl TaskContext {
     /// Return the task's ID.
     #[must_use]
+    #[inline]
     pub const fn task_id(&self) -> Uuid {
         self.task_id
     }
@@ -37,12 +38,12 @@ impl TaskContext {
     }
 }
 
-/// A worker that works with raw input and output
+/// A handler that works with raw input and output
 /// without any task type information attached.
 #[async_trait]
-pub trait RawWorker {
+pub trait RawHandler {
     /// Return the selector that should be used to
-    /// match tasks to this worker.
+    /// match tasks to this handler.
     fn selector(&self) -> &WorkerSelector;
 
     /// The data format of the task output.

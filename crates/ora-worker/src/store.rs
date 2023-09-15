@@ -1,18 +1,18 @@
-//! Backend store implementations required by worker pools.
+//! Backend store implementations required by workers.
 
 use async_trait::async_trait;
 use futures::Stream;
 use ora_common::task::{TaskDataFormat, TaskDefinition, WorkerSelector};
 use uuid::Uuid;
 
-/// A store
+/// A store interface for workers.
 #[async_trait]
-pub trait WorkerPoolStore: Send + Sync + Clone {
+pub trait WorkerStore: Send + Sync + Clone {
     /// An error type returned by operations.
     type Error: std::error::Error + Send + Sync + 'static;
 
     /// An event stream that can be used to watch for changes.
-    type Events: Stream<Item = Result<WorkerPoolStoreEvent, Self::Error>>;
+    type Events: Stream<Item = Result<WorkerStoreEvent, Self::Error>>;
 
     /// Subscribe for new events with the given worker selectors.
     async fn events(&self, selectors: &[WorkerSelector]) -> Result<Self::Events, Self::Error>;
@@ -22,6 +22,17 @@ pub trait WorkerPoolStore: Send + Sync + Clone {
         &self,
         selectors: &[WorkerSelector],
     ) -> Result<Vec<ReadyTask>, Self::Error>;
+
+    /// Select a task to run, if this function returns `false`, the
+    /// worker should drop the task instead of running it.
+    ///
+    /// The worker ID should identify the worker, but any other
+    /// unique value can be used.
+    ///
+    /// This function might return `false` for a variety of reasons,
+    /// the most common one being that an another worker has already started
+    /// the execution of the task.
+    async fn select_task(&self, task_id: Uuid, worker_id: Uuid) -> Result<bool, Self::Error>;
 
     /// Update the task status as started.
     async fn task_started(&self, task_id: Uuid) -> Result<(), Self::Error>;
@@ -49,7 +60,7 @@ pub struct ReadyTask {
 
 /// An event returned by the store.
 #[derive(Debug, Clone)]
-pub enum WorkerPoolStoreEvent {
+pub enum WorkerStoreEvent {
     /// A task is ready to be run.
     TaskReady(ReadyTask),
     /// A task was cancelled.

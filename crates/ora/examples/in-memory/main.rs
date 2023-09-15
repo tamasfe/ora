@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use ora::{IntoWorker, MemoryStore, Scheduler, Task, Worker, WorkerPool};
+use ora::{Handler, IntoHandler, MemoryStore, Scheduler, Task, Worker};
 use ora_api::client::Client;
 use ora_common::timeout::TimeoutPolicy;
 use ora_worker::TaskContext;
@@ -10,13 +10,13 @@ use time::{Duration, OffsetDateTime};
 use tracing_subscriber::EnvFilter;
 
 /// A task that echoes its input value and the elapsed
-/// seconds before the worker receiving the task.
+/// seconds until a handler receives the task.
 #[derive(Serialize, Deserialize)]
 struct ExampleTask {
-    /// The value that should be echoed back by the worker.
+    /// The value that should be echoed back by the handler.
     input: Value,
     /// We need to pass the task's target, as it is not
-    /// available in the worker function at the moment.
+    /// available in the handler function at the moment.
     target: OffsetDateTime,
 }
 
@@ -42,9 +42,9 @@ impl Task for ExampleTask {
 
 struct ExampleWorker;
 
-/// A worker implementation for the the example task type.
+/// A handler implementation for the the example task type.
 #[async_trait]
-impl Worker<ExampleTask> for ExampleWorker {
+impl Handler<ExampleTask> for ExampleWorker {
     async fn run(
         &self,
         ctx: TaskContext,
@@ -82,24 +82,24 @@ async fn main() -> eyre::Result<()> {
     // Spawn it onto a background task.
     let scheduler_handle = tokio::spawn(scheduler.run());
 
-    // Create a worker pool that is capable of executing our tasks.
+    // Create a worker that is capable of executing our tasks.
     //
-    // In this case the worker pool accesses the store directly and is
-    // unaware of other worker pools, two workers with the same type (worker selector)
+    // In this case the worker accesses the store directly and is
+    // unaware of other workers, two workers with the same type (worker selector)
     // will both receive the tasks and will race for completion.
-    let mut pool: WorkerPool<MemoryStore> = WorkerPool::new(store.clone());
+    let mut worker: Worker<MemoryStore> = Worker::new(store.clone());
 
-    // Register our worker onto the pool for our example task type.
+    // Register our handler onto the worker for our example task type.
     //
-    // Only one worker can be registered with a type (worker selector).
+    // Only one handler can be registered with a type (worker selector).
     //
-    // We also cannot add more workers after the worker pool has started.
+    // We also cannot add more handlers after the worker has started.
     //
     // Remove this line to watch our example task time out.
-    pool.register_worker(ExampleWorker.worker::<ExampleTask>());
+    worker.register_handler(ExampleWorker.handler::<ExampleTask>());
 
-    // Run the pool in the backround as well.
-    let pool_handle = tokio::spawn(pool.run());
+    // Run the worker in the backround as well.
+    let worker_handle = tokio::spawn(worker.run());
 
     // Schedule a task at 2 seconds from now.
     let target = OffsetDateTime::now_utc() + Duration::seconds(2);
@@ -126,7 +126,7 @@ async fn main() -> eyre::Result<()> {
 
     // Wait forever.
     tokio::select! {
-        res = pool_handle => {
+        res = worker_handle => {
             res.unwrap().unwrap();
         }
         res = scheduler_handle => {

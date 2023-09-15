@@ -52,7 +52,7 @@ where
 {
     options: DbStoreOptions,
     events: broadcast::Sender<DbEvent>,
-    /// Union of all wanted worker selectors from all worker pools.
+    /// Union of all wanted worker selectors from all workers.
     /// This is an optimization step to prevent retrieving irrelevant tasks.
     worker_selectors: Arc<Mutex<HashSet<WorkerSelector>>>,
     /// Used to track if the wanted worker selectors have changed.

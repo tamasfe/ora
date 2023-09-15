@@ -1,4 +1,4 @@
-//! Worker pool implementation.
+//! Worker implementation.
 
 use std::{
     collections::HashMap, iter::once, num::NonZeroUsize, pin::pin, sync::Arc, time::Duration,
@@ -10,24 +10,25 @@ use parking_lot::Mutex;
 use thiserror::Error;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
+use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
-    store::{ReadyTask, WorkerPoolStore, WorkerPoolStoreEvent},
-    RawWorker, TaskContext,
+    store::{ReadyTask, WorkerStore, WorkerStoreEvent},
+    RawHandler, TaskContext,
 };
 
-/// Options for a [`WorkerPool`].
+/// Options for a [`Worker`].
 #[derive(Debug)]
-pub struct WorkerPoolOptions {
+pub struct WorkerOptions {
     /// The amount of concurrent tasks that can be spawned.
-    concurrent_tasks: NonZeroUsize,
+    pub concurrent_tasks: NonZeroUsize,
     /// The timeout after which a task is forcibly cancelled
     /// after receiving a cancellation request.
-    cancellation_timeout: Duration,
+    pub cancellation_timeout: Duration,
 }
 
-impl Default for WorkerPoolOptions {
+impl Default for WorkerOptions {
     fn default() -> Self {
         // Rather conservative by default.
         Self {
@@ -37,67 +38,69 @@ impl Default for WorkerPoolOptions {
     }
 }
 
-/// A worker pool where workers can be registered
+/// A worker where workers can be registered
 /// and are executed whenever tasks are ready.
-pub struct WorkerPool<S> {
+pub struct Worker<S> {
     store: S,
-    workers: HashMap<WorkerSelector, Arc<dyn RawWorker + Send + Sync>>,
+    id: Uuid,
+    handlers: HashMap<WorkerSelector, Arc<dyn RawHandler + Send + Sync>>,
     semaphore: Arc<Semaphore>,
     running_tasks: Arc<Mutex<HashMap<Uuid, RunningTask>>>,
-    options: WorkerPoolOptions,
+    options: WorkerOptions,
 }
 
-impl<S: std::fmt::Debug> std::fmt::Debug for WorkerPool<S> {
+impl<S: std::fmt::Debug> std::fmt::Debug for Worker<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("WorkerPool")
+        f.debug_struct("Worker")
             .field("store", &self.store)
-            .field("workers", &self.workers.keys().collect::<Vec<_>>())
+            .field("handlers", &self.handlers.keys().collect::<Vec<_>>())
             .field("semaphore", &self.semaphore)
             .field("options", &self.options)
             .finish_non_exhaustive()
     }
 }
 
-impl<S> WorkerPool<S> {
-    /// Register a worker in the pool.
+impl<S> Worker<S> {
+    /// Register a handler for the worker.
     ///
     /// # Panics
     ///
-    /// Panics if a worker was already registered with a matching [`WorkerSelector`].
-    pub fn register_worker(&mut self, worker: Arc<dyn RawWorker + Send + Sync>) -> &mut Self {
+    /// Panics if a handler was already registered with a matching [`WorkerSelector`].
+    pub fn register_handler(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
         let selector = worker.selector();
 
         assert!(
-            !self.workers.contains_key(worker.selector()),
+            !self.handlers.contains_key(worker.selector()),
             "a worker is already registered with the given selector: {selector:?}"
         );
 
-        self.workers.insert(worker.selector().clone(), worker);
+        self.handlers.insert(worker.selector().clone(), worker);
         self
     }
 }
 
-impl<S> WorkerPool<S>
+impl<S> Worker<S>
 where
-    S: WorkerPoolStore + 'static,
+    S: WorkerStore + 'static,
 {
-    /// Create a new worker pool with the default options.
+    /// Create a new worker with the default options.
     pub fn new(store: S) -> Self {
-        Self::new_with_options(store, WorkerPoolOptions::default())
+        Self::new_with_options(store, WorkerOptions::default())
     }
 
-    /// Create a new worker pool.
-    pub fn new_with_options(store: S, options: WorkerPoolOptions) -> Self {
+    /// Create a new worker.
+    pub fn new_with_options(store: S, options: WorkerOptions) -> Self {
         Self {
             store,
-            workers: HashMap::new(),
+            id: Uuid::new_v4(),
+            handlers: HashMap::new(),
             semaphore: Arc::new(Semaphore::new(options.concurrent_tasks.get())),
             running_tasks: Arc::default(),
             options,
         }
     }
 
-    /// Run the worker pool indefinitely.
+    /// Run the worker indefinitely.
     ///
     /// # Errors
     ///
@@ -107,7 +110,7 @@ where
     ///
     /// Only panics due to bugs.
     pub async fn run(mut self) -> Result<(), Error> {
-        let selectors = self.workers.keys().cloned().collect::<Vec<_>>();
+        let selectors = self.handlers.keys().cloned().collect::<Vec<_>>();
 
         let (rt_errors_send, mut rt_errors_recv) = tokio::sync::mpsc::channel::<Error>(1);
 
@@ -131,10 +134,10 @@ where
                 event = events.try_next() => {
                     let event = event.map_err(store_error)?.ok_or(Error::UnexpectedEventStreamEnd)?;
                     match event {
-                        WorkerPoolStoreEvent::TaskReady(task) => {
+                        WorkerStoreEvent::TaskReady(task) => {
                             self.spawn_tasks(once(task), rt_errors_send.clone()).await?;
                         },
-                        WorkerPoolStoreEvent::TaskCancelled(task_id) => {
+                        WorkerStoreEvent::TaskCancelled(task_id) => {
                             if let Some(task) = self.running_tasks.lock().remove(&task_id) {
                                 task.context.cancellation.cancel();
                             }
@@ -145,7 +148,7 @@ where
         }
     }
 
-    #[inline]
+    #[tracing::instrument(skip_all)]
     async fn spawn_tasks(
         &mut self,
         tasks: impl Iterator<Item = ReadyTask>,
@@ -153,12 +156,23 @@ where
     ) -> Result<(), Error> {
         for task in tasks {
             let worker = self
-                .workers
+                .handlers
                 .get(&task.definition.worker_selector)
-                .ok_or(Error::WorkerNotFound)?
+                .ok_or(Error::HandlerNotFound)?
                 .clone();
 
             let permit = self.semaphore.clone().acquire_owned().await.unwrap();
+
+            let should_run = self
+                .store
+                .select_task(task.id, self.id)
+                .await
+                .map_err(store_error)?;
+
+            if !should_run {
+                tracing::debug!(task_id = %task.id, "dropping task");
+                continue;
+            }
 
             let context = TaskContext {
                 task_id: task.id,
@@ -175,6 +189,12 @@ where
             let cancellation_timeout = self.options.cancellation_timeout;
             let store = self.store.clone();
             let running_tasks = self.running_tasks.clone();
+
+            let task_span = tracing::info_span!(
+                "run_task",
+                task_id = %task.id,
+                kind = &*task.definition.worker_selector.kind,
+            );
 
             let rt_errors = rt_errors.clone();
             tokio::spawn(async move {
@@ -225,21 +245,21 @@ where
                 }
 
                 running_tasks.lock().remove(&task.id);
-            });
+            }.instrument(task_span));
         }
         Ok(())
     }
 }
 
-/// A worker pool error.
+/// A worker error.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// A specific worker was not found, but the
-    /// pool still received the task. This
+    /// A specific handler was not found, but the
+    /// still received the task. This
     /// is either a bug in the worker selector
     /// or the store.
-    #[error("received task but no matching worker was found")]
-    WorkerNotFound,
+    #[error("received task but no matching handler was found")]
+    HandlerNotFound,
     /// The store event stream ended unexpectedly.
     #[error("unexpected end of event stream")]
     UnexpectedEventStreamEnd,

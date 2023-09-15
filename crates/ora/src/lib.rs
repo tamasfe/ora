@@ -19,6 +19,6 @@ pub use ora_store_sqlx::{DbStore, DbStoreOptions};
 pub use ora_test as test;
 #[cfg(feature = "worker")]
 pub use ora_worker::{
-    pool::{Error as WorkerPoolError, WorkerPool, WorkerPoolOptions},
+    worker::{Error as WorkerError, Worker, WorkerOptions},
     TaskContext,
 };

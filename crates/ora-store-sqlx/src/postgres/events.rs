@@ -6,7 +6,7 @@ use ora_scheduler::store::{
     schedule::{ActiveSchedule, SchedulerScheduleStoreEvent},
     task::{PendingTask, SchedulerTaskStoreEvent},
 };
-use ora_worker::store::{ReadyTask, WorkerPoolStoreEvent};
+use ora_worker::store::{ReadyTask, WorkerStoreEvent};
 use sqlx::{
     postgres::{PgListener, PgNotification, PgRow},
     query,
@@ -265,8 +265,8 @@ async fn handle_notification(
                 ))
                 .ok();
             events
-                .send(DbEvent::WorkerPoolStore(
-                    WorkerPoolStoreEvent::TaskCancelled(id),
+                .send(DbEvent::WorkerStore(
+                    WorkerStoreEvent::TaskCancelled(id),
                 ))
                 .ok();
             events
@@ -305,7 +305,7 @@ async fn handle_notification(
             .bind(id)
             .bind(worker_selectors)
             .try_map(|row: PgRow| {
-                Ok(DbEvent::WorkerPoolStore(WorkerPoolStoreEvent::TaskReady(
+                Ok(DbEvent::WorkerStore(WorkerStoreEvent::TaskReady(
                     ReadyTask {
                         id: row.try_get("id")?,
                         definition: task_definition_from_row(row)?,
@@ -474,7 +474,7 @@ async fn poll_all_events(
         let id = row.try_get("id")?;
         Ok([
             DbEvent::SchedulerTaskStore(SchedulerTaskStoreEvent::TaskCancelled(id)),
-            DbEvent::WorkerPoolStore(WorkerPoolStoreEvent::TaskCancelled(id)),
+            DbEvent::WorkerStore(WorkerStoreEvent::TaskCancelled(id)),
         ])
     })
     .fetch_all(&mut *tx)
@@ -582,7 +582,7 @@ async fn poll_all_events(
     .bind(after)
     .bind(worker_selectors)
     .try_map(|row: PgRow| {
-        Ok(DbEvent::WorkerPoolStore(WorkerPoolStoreEvent::TaskReady(
+        Ok(DbEvent::WorkerStore(WorkerStoreEvent::TaskReady(
             ReadyTask {
                 id: row.try_get("id")?,
                 definition: task_definition_from_row(row)?,

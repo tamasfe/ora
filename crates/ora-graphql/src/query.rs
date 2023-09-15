@@ -212,6 +212,13 @@ impl Task {
             .map_err(async_graphql::Error::new_with_source)?
             .map(Into::into))
     }
+
+    async fn worker_id(&self) -> async_graphql::Result<Option<Uuid>> {
+        self.ops
+            .worker_id()
+            .await
+            .map_err(async_graphql::Error::new_with_source)
+    }
 }
 
 #[derive(Debug)]

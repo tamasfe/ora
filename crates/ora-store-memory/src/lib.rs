@@ -19,7 +19,7 @@ use ora_scheduler::store::{
     schedule::{ActiveSchedule, SchedulerScheduleStore, SchedulerScheduleStoreEvent},
     task::{PendingTask, SchedulerTaskStore, SchedulerTaskStoreEvent},
 };
-use ora_worker::store::{ReadyTask, WorkerPoolStore, WorkerPoolStoreEvent};
+use ora_worker::store::{ReadyTask, WorkerStore, WorkerStoreEvent};
 use parking_lot::Mutex;
 use thiserror::Error;
 use tokio::sync::broadcast::{self, error::RecvError};
@@ -49,7 +49,7 @@ pub struct MemoryStore {
     inner: Arc<Inner>,
     scheduler_task_events: broadcast::Sender<SchedulerTaskStoreEvent>,
     scheduler_schedule_events: broadcast::Sender<SchedulerScheduleStoreEvent>,
-    worker_pool_events: broadcast::Sender<WorkerPoolStoreEvent>,
+    worker_events: broadcast::Sender<WorkerStoreEvent>,
 }
 
 impl MemoryStore {
@@ -63,13 +63,13 @@ impl MemoryStore {
     pub fn new_with_options(options: MemoryStoreOptions) -> Self {
         let (scheduler_task_events, _) = broadcast::channel(options.channel_capacity);
         let (scheduler_schedule_events, _) = broadcast::channel(options.channel_capacity);
-        let (worker_pool_events, _) = broadcast::channel(options.channel_capacity);
+        let (worker_events, _) = broadcast::channel(options.channel_capacity);
 
         Self {
             inner: Arc::new(Inner::default()),
             scheduler_task_events,
             scheduler_schedule_events,
-            worker_pool_events,
+            worker_events,
         }
     }
 }
@@ -101,6 +101,7 @@ struct TaskState {
     succeeded_at: Option<UnixNanos>,
     failed_at: Option<UnixNanos>,
     cancelled_at: Option<UnixNanos>,
+    worker_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -131,8 +132,8 @@ impl MemoryStore {
                 .scheduler_task_events
                 .send(SchedulerTaskStoreEvent::TaskCancelled(task.id));
             let _ = self
-                .worker_pool_events
-                .send(WorkerPoolStoreEvent::TaskCancelled(task.id));
+                .worker_events
+                .send(WorkerStoreEvent::TaskCancelled(task.id));
         }
 
         Ok(())
@@ -239,8 +240,8 @@ impl SchedulerTaskStore for MemoryStore {
                 task.status = TaskStatus::Ready;
                 task.ready_at = Some(UnixNanos::now());
                 let _ = self
-                    .worker_pool_events
-                    .send(WorkerPoolStoreEvent::TaskReady(ReadyTask {
+                    .worker_events
+                    .send(WorkerStoreEvent::TaskReady(ReadyTask {
                         id: task_id,
                         definition: task.definition.clone(),
                     }));
@@ -259,8 +260,8 @@ impl SchedulerTaskStore for MemoryStore {
                 task.failure_reason = Some("task timeout reached".into());
                 task.failed_at = Some(UnixNanos::now());
                 let _ = self
-                    .worker_pool_events
-                    .send(WorkerPoolStoreEvent::TaskCancelled(task.id));
+                    .worker_events
+                    .send(WorkerStoreEvent::TaskCancelled(task.id));
                 self.task_finished(task)?;
             }
         } else {
@@ -388,6 +389,7 @@ impl SchedulerScheduleStore for MemoryStore {
                 succeeded_at: None,
                 failed_at: None,
                 cancelled_at: None,
+                worker_id: None,
             },
         );
 
@@ -413,20 +415,20 @@ impl SchedulerScheduleStore for MemoryStore {
 }
 
 #[async_trait]
-impl WorkerPoolStore for MemoryStore {
+impl WorkerStore for MemoryStore {
     type Error = Error;
 
-    type Events = BoxStream<'static, Result<WorkerPoolStoreEvent, Self::Error>>;
+    type Events = BoxStream<'static, Result<WorkerStoreEvent, Self::Error>>;
 
     async fn events(&self, selectors: &[WorkerSelector]) -> Result<Self::Events, Self::Error> {
-        let mut events = self.worker_pool_events.subscribe();
+        let mut events = self.worker_events.subscribe();
         let selectors = selectors.iter().cloned().collect::<HashSet<_>>();
         Ok(try_stream!({
             loop {
                 let res = events.recv().await;
                 match res {
                     Ok(event) => {
-                        if let WorkerPoolStoreEvent::TaskReady(task) = &event {
+                        if let WorkerStoreEvent::TaskReady(task) = &event {
                             if selectors.contains(&task.definition.worker_selector) {
                                 yield event;
                             }
@@ -475,6 +477,22 @@ impl WorkerPoolStore for MemoryStore {
                 }
             })
             .collect())
+    }
+
+    async fn select_task(&self, task_id: Uuid, worker_id: Uuid) -> Result<bool, Self::Error> {
+        let mut tasks = self.inner.tasks.lock();
+
+        if let Some(task) = tasks.get_mut(&task_id) {
+            if task.worker_id.is_some() {
+                return Ok(false);
+            }
+
+            task.worker_id = Some(worker_id);
+        } else {
+            return Err(Error::TaskNotFound(task_id));
+        }
+
+        Ok(true)
     }
 
     async fn task_started(&self, task_id: Uuid) -> Result<(), Self::Error> {

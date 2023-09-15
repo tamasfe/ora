@@ -131,6 +131,7 @@ pub trait TaskOperations: core::fmt::Debug + Send + Sync + 'static {
     async fn failed_at(&self) -> eyre::Result<Option<UnixNanos>>;
     async fn cancelled_at(&self) -> eyre::Result<Option<UnixNanos>>;
     async fn cancel(&self) -> eyre::Result<()>;
+    async fn worker_id(&self) -> eyre::Result<Option<Uuid>>;
 }
 
 #[async_trait]
@@ -189,6 +190,10 @@ impl TaskOperations for Arc<dyn TaskOperations> {
 
     async fn cancel(&self) -> eyre::Result<()> {
         (**self).cancel().await
+    }
+
+    async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
+        (**self).worker_id().await
     }
 }
 

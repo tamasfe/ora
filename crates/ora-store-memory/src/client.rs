@@ -43,6 +43,7 @@ impl ClientOperations for MemoryStore {
                 succeeded_at: None,
                 failed_at: None,
                 cancelled_at: None,
+                worker_id: None,
             },
         );
 
@@ -390,6 +391,17 @@ impl TaskOperations for MemoryStoreTaskOperations {
     async fn cancel(&self) -> eyre::Result<()> {
         self.store.cancel_task(self.task_id)?;
         Ok(())
+    }
+
+    async fn worker_id(&self) -> eyre::Result<Option<Uuid>> {
+        Ok(self
+            .store
+            .inner
+            .tasks
+            .lock()
+            .get(&self.task_id)
+            .unwrap()
+            .worker_id)
     }
 }
 
