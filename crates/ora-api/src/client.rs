@@ -225,7 +225,22 @@ where
     }
 
     async fn cancel_tasks(&self, options: &Tasks) -> eyre::Result<Vec<TaskHandle>> {
-        <Self as Client>::cancel_tasks(self, options).await
+        let ids = <Self as ClientOperations>::cancel_tasks(self, options).await?;
+        Ok(<Self as ClientOperations>::tasks_by_ids(self, ids)
+            .await?
+            .into_iter()
+            .map(|ops| {
+                let ops2 = ops.clone();
+                TaskHandle {
+                    id: ops.id(),
+                    out: async move { Arc::new(ops2.wait_result().await) }
+                        .boxed()
+                        .shared(),
+                    ops,
+                    task_type: PhantomData,
+                }
+            })
+            .collect())
     }
 
     async fn add_schedule(&self, schedule: ScheduleDefinition) -> eyre::Result<ScheduleHandle> {
@@ -268,7 +283,12 @@ where
     }
 
     async fn cancel_schedules(&self, options: &Schedules) -> eyre::Result<Vec<ScheduleHandle>> {
-        <Self as Client>::cancel_schedules(self, options).await
+        let ids = <Self as ClientOperations>::cancel_schedules(self, options).await?;
+        Ok(<Self as ClientOperations>::schedules_by_ids(self, ids)
+            .await?
+            .into_iter()
+            .map(|ops| ScheduleHandle { id: ops.id(), ops })
+            .collect())
     }
 }
 
