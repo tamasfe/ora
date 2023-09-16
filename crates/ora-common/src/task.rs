@@ -57,6 +57,7 @@ pub struct TaskDefinition<T = ()> {
     #[serde(default)]
     pub timeout: TimeoutPolicy,
     #[doc(hidden)]
+    #[serde(default, skip)]
     pub _task_type: PhantomData<T>,
 }
 
