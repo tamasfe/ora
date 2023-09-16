@@ -1577,7 +1577,7 @@ fn filter_schedules(options: &Schedules) -> impl IntoCondition {
                 .map(|active| Expr::col(Schedule::Active).eq(active)),
         )
         .add_option(options.kind.as_ref().map(|kind| {
-            Expr::cust_with_values(r#""new_task" -> 'worker_selector' ->> 'kind' = $1"#, [kind])
+            Expr::cust_with_values(r#"(jsonb_path_query_first("new_task", '$.*.*.worker_selector.kind') #>> '{}') = $1"#, [kind])
         }))
         .add_option(options.search.as_ref().map(|search| {
             let like = format!("%{search}%");
@@ -1631,3 +1631,4 @@ fn filter_schedules(options: &Schedules) -> impl IntoCondition {
                 .map(|cancelled_before| Expr::col(Schedule::CancelledAt).lt(cancelled_before)),
         )
 }
+
