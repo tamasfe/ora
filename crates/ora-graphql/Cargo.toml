@@ -17,7 +17,7 @@ async-graphql = { version = "6.0.0", default-features = false, features = [
 base64 = "0.21.2"
 eyre = "0.6.8"
 ora-client = { version = "^0.2.0", path = "../ora-client" }
-ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-common = { version = "^0.1.1", path = "../ora-common" }
 serde_json = "1.0.104"
 time = "0.3.23"
 uuid = "1.4.1"

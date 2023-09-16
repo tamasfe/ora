@@ -17,7 +17,7 @@ futures = "0.3.28"
 indexmap = "2.0.0"
 memmem = "0.1.1"
 ora-client = { version = "^0.2.0", path = "../ora-client" }
-ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-common = { version = "^0.1.1", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.0", path = "../ora-scheduler" }
 ora-worker = { version = "^0.2.1", path = "../ora-worker" }
 parking_lot = "0.12.1"

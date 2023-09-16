@@ -12,12 +12,12 @@ description = "A scheduler framework."
 async-trait = "0.1.71"
 eyre = "0.6.8"
 futures = "0.3.28"
-ora-api = { version = "^0.2.0", path = "../ora-api", optional = true }
+ora-api = { version = "^0.2.1", path = "../ora-api", optional = true }
 ora-client = { version = "^0.2.0", path = "../ora-client" }
-ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-common = { version = "^0.1.1", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.0", path = "../ora-scheduler", optional = true }
 ora-store-memory = { version = "^0.2.0", path = "../ora-store-memory", optional = true }
-ora-store-sqlx = { version = "^0.2.0", path = "../ora-store-sqlx", optional = true }
+ora-store-sqlx = { version = "^0.2.1", path = "../ora-store-sqlx", optional = true }
 ora-worker = { version = "^0.2.1", path = "../ora-worker", optional = true }
 ora-test = { version = "^0.2.0", path = "../ora-test", optional = true }
 pin-project-lite = "0.2.10"
