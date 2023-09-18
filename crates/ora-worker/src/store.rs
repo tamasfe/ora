@@ -47,6 +47,9 @@ pub trait WorkerStore: Send + Sync + Clone {
 
     /// Update the task status as failed with the given reason.
     async fn task_failed(&self, task_id: Uuid, reason: String) -> Result<(), Self::Error>;
+
+    /// The task was cancelled, possibly due to the worker shutting down.
+    async fn task_cancelled(&self, task_id: Uuid) -> Result<(), Self::Error>;
 }
 
 /// A task that is ready to be run by a worker.

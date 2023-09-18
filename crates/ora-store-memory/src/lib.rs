@@ -556,6 +556,10 @@ impl WorkerStore for MemoryStore {
         }
         Ok(())
     }
+
+    async fn task_cancelled(&self, task_id: Uuid) -> Result<(), Self::Error> {
+        self.cancel_task(task_id)
+    }
 }
 
 /// Memory store error type.

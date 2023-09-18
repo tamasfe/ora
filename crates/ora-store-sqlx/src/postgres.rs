@@ -1471,6 +1471,25 @@ impl WorkerStore for DbStore<Postgres> {
 
         Ok(())
     }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn task_cancelled(&self, task_id: Uuid) -> Result<(), Self::Error> {
+        query(
+            r#"--sql
+            UPDATE "ora"."task"
+            SET
+                "status" = 'cancelled',
+                "cancelled_at" = NOW()
+            WHERE "id" = $1 AND "active"
+            RETURNING pg_notify('ora_task_cancelled', "id"::TEXT) AS "notified";
+            "#,
+        )
+        .bind(task_id)
+        .execute(&self.db)
+        .await?;
+
+        Ok(())
+    }
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -1631,4 +1650,3 @@ fn filter_schedules(options: &Schedules) -> impl IntoCondition {
                 .map(|cancelled_before| Expr::col(Schedule::CancelledAt).lt(cancelled_before)),
         )
 }
-

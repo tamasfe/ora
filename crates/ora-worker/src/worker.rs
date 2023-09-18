@@ -1,14 +1,17 @@
 //! Worker implementation.
 
 use std::{
-    collections::HashMap, iter::once, num::NonZeroUsize, pin::pin, sync::Arc, time::Duration,
+    collections::HashMap, iter::once, mem, num::NonZeroUsize, pin::pin, sync::Arc, time::Duration,
 };
 
-use futures::TryStreamExt;
+use futures::{stream::FuturesUnordered, StreamExt, TryStreamExt};
 use ora_common::task::WorkerSelector;
 use parking_lot::Mutex;
 use thiserror::Error;
-use tokio::sync::Semaphore;
+use tokio::{
+    sync::{mpsc, oneshot, Semaphore},
+    task::JoinHandle,
+};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -47,6 +50,8 @@ pub struct Worker<S> {
     semaphore: Arc<Semaphore>,
     running_tasks: Arc<Mutex<HashMap<Uuid, RunningTask>>>,
     options: WorkerOptions,
+    shutdown_send: mpsc::Sender<oneshot::Sender<()>>,
+    shutdown_recv: mpsc::Receiver<oneshot::Sender<()>>,
 }
 
 impl<S: std::fmt::Debug> std::fmt::Debug for Worker<S> {
@@ -90,6 +95,7 @@ where
 
     /// Create a new worker.
     pub fn new_with_options(store: S, options: WorkerOptions) -> Self {
+        let (send, recv) = mpsc::channel(1);
         Self {
             store,
             id: Uuid::new_v4(),
@@ -97,6 +103,15 @@ where
             semaphore: Arc::new(Semaphore::new(options.concurrent_tasks.get())),
             running_tasks: Arc::default(),
             options,
+            shutdown_send: send,
+            shutdown_recv: recv,
+        }
+    }
+
+    /// Get a handle to this worker.
+    pub fn handle(&self) -> WorkerHandle {
+        WorkerHandle {
+            chan: self.shutdown_send.clone(),
         }
     }
 
@@ -110,11 +125,51 @@ where
     ///
     /// Only panics due to bugs.
     pub async fn run(mut self) -> Result<(), Error> {
+        macro_rules! wait_shutdown_all {
+            ($confirm:expr) => {
+                let running_tasks = mem::take(&mut *self.running_tasks.lock());
+
+                let mut tasks: FuturesUnordered<_> = running_tasks
+                    .into_iter()
+                    .map(|(task_id, task)| {
+                        let task = task;
+                        let store = self.store.clone();
+                        async move {
+                            tracing::warn!(%task_id, "cancelling task due to shutdown");
+                            if let Err(error) =
+                                store.task_cancelled(task_id).await.map_err(store_error)
+                            {
+                                tracing::error!(?error, "failed to cancel task");
+                            }
+
+                            task.context.cancellation.cancel();
+                            let _ = task.handle.await;
+                        }
+                    })
+                    .collect();
+
+                while tasks.next().await.is_some() {}
+
+                let _ = ($confirm).send(());
+                return Ok(());
+            };
+        }
+
         let selectors = self.handlers.keys().cloned().collect::<Vec<_>>();
 
-        let (rt_errors_send, mut rt_errors_recv) = tokio::sync::mpsc::channel::<Error>(1);
+        let (rt_errors_send, mut rt_errors_recv) = mpsc::channel::<Error>(1);
+
+        if let Ok(shutdown_confirm) = self.shutdown_recv.try_recv() {
+            let _ = shutdown_confirm.send(());
+            return Ok(());
+        }
 
         let mut events = pin!(self.store.events(&selectors).await.map_err(store_error)?);
+
+        if let Ok(shutdown_confirm) = self.shutdown_recv.try_recv() {
+            let _ = shutdown_confirm.send(());
+            return Ok(());
+        }
 
         self.spawn_tasks(
             self.store
@@ -126,10 +181,17 @@ where
         )
         .await?;
 
+        if let Ok(shutdown_confirm) = self.shutdown_recv.try_recv() {
+            wait_shutdown_all!(shutdown_confirm);
+        }
+
         loop {
             tokio::select! {
                 error = rt_errors_recv.recv() => {
                     return Err(error.unwrap());
+                }
+                Some(shutdown_confirm) = self.shutdown_recv.recv() => {
+                    wait_shutdown_all!(shutdown_confirm);
                 }
                 event = events.try_next() => {
                     let event = event.map_err(store_error)?.ok_or(Error::UnexpectedEventStreamEnd)?;
@@ -152,7 +214,7 @@ where
     async fn spawn_tasks(
         &mut self,
         tasks: impl Iterator<Item = ReadyTask>,
-        rt_errors: tokio::sync::mpsc::Sender<Error>,
+        rt_errors: mpsc::Sender<Error>,
     ) -> Result<(), Error> {
         for task in tasks {
             let worker = self
@@ -179,13 +241,6 @@ where
                 cancellation: CancellationToken::new(),
             };
 
-            self.running_tasks.lock().insert(
-                task.id,
-                RunningTask {
-                    context: context.clone(),
-                },
-            );
-
             let cancellation_timeout = self.options.cancellation_timeout;
             let store = self.store.clone();
             let running_tasks = self.running_tasks.clone();
@@ -196,12 +251,14 @@ where
                 kind = &*task.definition.worker_selector.kind,
             );
 
+            let ctx = context.clone();
             let rt_errors = rt_errors.clone();
-            tokio::spawn(async move {
+
+            let task_handle = tokio::spawn(async move {
                 let _permit = permit;
 
-                let cancellation = context.cancellation.clone();
-                let mut worker_fut = worker.run(context, task.definition);
+                let cancellation = ctx.cancellation.clone();
+                let mut worker_fut = worker.run(ctx, task.definition);
 
                 if let Err(error) = store.task_started(task.id).await {
                     let _ = rt_errors.send(store_error(error)).await;
@@ -246,8 +303,37 @@ where
 
                 running_tasks.lock().remove(&task.id);
             }.instrument(task_span));
+
+            self.running_tasks.lock().insert(
+                task.id,
+                RunningTask {
+                    context,
+                    handle: task_handle,
+                },
+            );
         }
         Ok(())
+    }
+}
+
+/// A handle to a worker that can be used for graceful shutdowns.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct WorkerHandle {
+    chan: mpsc::Sender<oneshot::Sender<()>>,
+}
+
+impl WorkerHandle {
+    /// Shutdown the worker by cancelling all tasks and waiting for them
+    /// to finish.
+    ///
+    /// If the worker does not exist anymore, this is effectively a no-op.
+    /// If the worker is not yet started, this will wait for the worker to start
+    /// and will shut it down immediately.
+    pub async fn shutdown(&self) {
+        let (send, recv) = oneshot::channel();
+        let _ = self.chan.send(send).await;
+        let _ = recv.await;
     }
 }
 
@@ -270,6 +356,7 @@ pub enum Error {
 
 struct RunningTask {
     context: TaskContext,
+    handle: JoinHandle<()>,
 }
 
 fn store_error<E: std::error::Error + Send + Sync + 'static>(error: E) -> Error {
