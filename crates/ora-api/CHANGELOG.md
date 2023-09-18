@@ -57,9 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Handle concurrent workers ([`933860b`](https://github.com/tamasfe/ora/commit/933860bc82503d990938ad1925846eb0eecb0ee5))
 </details>
 
-<csr-unknown>
-renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
-
 ## v0.1.0 (2023-08-11)
 
 <csr-id-987061ed68939e994d097fb6c353921cbc353416/>

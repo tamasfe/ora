@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### New Features
+
+ - <csr-id-b2787bc3048e109582d34711874a42a28a7fff86/> batch cancel tasks and schedules
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release over the course of 2 calendar days.
+ - 3 days passed between releases.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Batch cancel tasks and schedules ([`b2787bc`](https://github.com/tamasfe/ora/commit/b2787bc3048e109582d34711874a42a28a7fff86))
+    - Release ora-common v0.1.1, ora-api v0.2.1, ora-store-sqlx v0.2.1 ([`5a2e17a`](https://github.com/tamasfe/ora/commit/5a2e17a80948cbebb219861a9a0faed84b50b4e3))
+</details>
+
 ## v0.2.0 (2023-09-15)
 
 ### New Features
@@ -16,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 5 commits contributed to the release.
+ - 6 commits contributed to the release.
  - 34 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -28,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-graphql v0.2.0 ([`b03300e`](https://github.com/tamasfe/ora/commit/b03300e610ccf80601eca3931ab14c17af411e3f))
     - Release ora v0.2.0, ora-graphql v0.2.0 ([`8c044b0`](https://github.com/tamasfe/ora/commit/8c044b042544ea875fe5e992bfea211f7f4c30a2))
     - Release ora-store-sqlx v0.2.0, ora-test v0.2.0, ora v0.2.0, ora-graphql v0.2.0 ([`bc6f359`](https://github.com/tamasfe/ora/commit/bc6f359b246ce237690c05018afa07147731ee71))
     - Release ora-worker v0.2.1, ora-api v0.2.0, ora-store-memory v0.2.0, ora-store-sqlx v0.2.0, ora-test v0.2.0, ora v0.2.0, ora-graphql v0.2.0 ([`9c0812a`](https://github.com/tamasfe/ora/commit/9c0812a8005f496718406710c902c9de3346badc))

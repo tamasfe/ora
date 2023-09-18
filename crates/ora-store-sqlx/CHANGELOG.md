@@ -5,17 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v0.2.1 (2023-09-16)
+## Unreleased
 
-### Bug Fixes
+### New Features
 
- - <csr-id-a1d9cbd8bc638f2fcb00fb03d11a4a0f50a03f05/> schedule worker selector query
+ - <csr-id-f425761ec5f5cfa47490435edb39f4ceb1679972/> support graceful shutdown
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
  - 1 commit contributed to the release.
+ - 2 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -26,6 +27,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Support graceful shutdown ([`f425761`](https://github.com/tamasfe/ora/commit/f425761ec5f5cfa47490435edb39f4ceb1679972))
+</details>
+
+## v0.2.1 (2023-09-16)
+
+### Bug Fixes
+
+ - <csr-id-a1d9cbd8bc638f2fcb00fb03d11a4a0f50a03f05/> schedule worker selector query
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release ora-common v0.1.1, ora-api v0.2.1, ora-store-sqlx v0.2.1 ([`5a2e17a`](https://github.com/tamasfe/ora/commit/5a2e17a80948cbebb219861a9a0faed84b50b4e3))
     - Schedule worker selector query ([`a1d9cbd`](https://github.com/tamasfe/ora/commit/a1d9cbd8bc638f2fcb00fb03d11a4a0f50a03f05))
 </details>
 
