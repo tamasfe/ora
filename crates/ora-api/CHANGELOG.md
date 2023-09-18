@@ -5,17 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v0.2.1 (2023-09-16)
+## v0.3.0 (2023-09-18)
 
-### Bug Fixes
+### Chore
 
- - <csr-id-216611a96d5cd133006dc90ac0635baa50551057/> infinite recursion when batch-cancelling
+ - <csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/> changelog
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
  - 1 commit contributed to the release.
+ - 2 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -26,6 +27,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))
+</details>
+
+## v0.2.1 (2023-09-16)
+
+### Bug Fixes
+
+ - <csr-id-216611a96d5cd133006dc90ac0635baa50551057/> infinite recursion when batch-cancelling
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Release ora-common v0.1.1, ora-api v0.2.1, ora-store-sqlx v0.2.1 ([`5a2e17a`](https://github.com/tamasfe/ora/commit/5a2e17a80948cbebb219861a9a0faed84b50b4e3))
     - Infinite recursion when batch-cancelling ([`216611a`](https://github.com/tamasfe/ora/commit/216611a96d5cd133006dc90ac0635baa50551057))
 </details>
 

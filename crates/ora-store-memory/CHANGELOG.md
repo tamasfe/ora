@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 0.3.0 (2023-09-18)
+
+### Chore
+
+ - <csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/> changelog
 
 ### New Features
 
@@ -15,9 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 2 commits contributed to the release over the course of 2 calendar days.
+ - 3 commits contributed to the release over the course of 2 calendar days.
  - 3 days passed between releases.
- - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))
     - Support graceful shutdown ([`f425761`](https://github.com/tamasfe/ora/commit/f425761ec5f5cfa47490435edb39f4ceb1679972))
     - Release ora-common v0.1.1, ora-api v0.2.1, ora-store-sqlx v0.2.1 ([`5a2e17a`](https://github.com/tamasfe/ora/commit/5a2e17a80948cbebb219861a9a0faed84b50b4e3))
 </details>
@@ -64,9 +69,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Better handling of timeouts ([`88b4121`](https://github.com/tamasfe/ora/commit/88b412116e59c8becf08414f2dd7f22e22fc6400))
     - Handle concurrent workers ([`933860b`](https://github.com/tamasfe/ora/commit/933860bc82503d990938ad1925846eb0eecb0ee5))
 </details>
-
-<csr-unknown>
-renamed Worker -> Handlerrenamed WorkerPool -> Workertimeout delays are properly calculated for past deadlines<csr-unknown/>
 
 ## v0.1.0 (2023-08-11)
 
