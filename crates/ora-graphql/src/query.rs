@@ -417,7 +417,7 @@ impl From<GqlTaskListOptions> for Tasks {
 
 #[derive(Debug, Default, InputObject)]
 #[graphql(name = "ScheduleListOptions")]
-struct GqlScheduleListOptions {
+pub(crate) struct GqlScheduleListOptions {
     /// Only include active or inactive schedules.
     #[graphql(default)]
     active: Option<bool>,

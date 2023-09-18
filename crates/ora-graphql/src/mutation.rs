@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{GqlScheduleDefinition, GqlTaskDefinition},
-    query::{Schedule, Task},
+    query::{GqlScheduleListOptions, GqlTaskListOptions, Schedule, Task},
 };
 
 #[derive(Debug)]
@@ -50,6 +50,26 @@ impl Mutation {
         })
     }
 
+    async fn cancel_tasks(&self, options: GqlTaskListOptions) -> async_graphql::Result<Vec<Task>> {
+        let ids = self
+            .client
+            .cancel_tasks(&options.into())
+            .await
+            .map_err(async_graphql::Error::new_with_source)?;
+
+        Ok(self
+            .client
+            .tasks_by_ids(ids)
+            .await
+            .map_err(async_graphql::Error::new_with_source)?
+            .into_iter()
+            .map(|ops| Task {
+                client: self.client.clone(),
+                ops,
+            })
+            .collect())
+    }
+
     async fn add_schedule(
         &self,
         schedule: GqlScheduleDefinition,
@@ -86,5 +106,28 @@ impl Mutation {
             client: self.client.clone(),
             ops: schedule,
         })
+    }
+
+    async fn cancel_schedules(
+        &self,
+        options: GqlScheduleListOptions,
+    ) -> async_graphql::Result<Vec<Schedule>> {
+        let ids = self
+            .client
+            .cancel_schedules(&options.into())
+            .await
+            .map_err(async_graphql::Error::new_with_source)?;
+
+        Ok(self
+            .client
+            .schedules_by_ids(ids)
+            .await
+            .map_err(async_graphql::Error::new_with_source)?
+            .into_iter()
+            .map(|ops| Schedule {
+                client: self.client.clone(),
+                ops,
+            })
+            .collect())
     }
 }
