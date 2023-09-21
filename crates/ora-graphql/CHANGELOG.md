@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.3.0 (2023-09-18)
+## 0.3.1 (2023-09-21)
 
 ### Chore
 
@@ -13,15 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Features
 
+ - <csr-id-de0c4c558d3537449fb453d6072cd11700465868/> add JSON convenience
  - <csr-id-b2787bc3048e109582d34711874a42a28a7fff86/> batch cancel tasks and schedules
 
 ### Commit Statistics
 
 <csr-read-only-do-not-edit/>
 
- - 3 commits contributed to the release over the course of 2 calendar days.
- - 3 days passed between releases.
- - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 5 commits contributed to the release over the course of 5 calendar days.
+ - 6 days passed between releases.
+ - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
 ### Commit Details
@@ -31,10 +32,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Add JSON convenience ([`de0c4c5`](https://github.com/tamasfe/ora/commit/de0c4c558d3537449fb453d6072cd11700465868))
+    - Release ora-worker v0.3.0, ora-api v0.3.0, ora-store-memory v0.3.0, ora-store-sqlx v0.3.0, ora-test v0.3.0, ora v0.3.0, ora-graphql v0.3.0, safety bump 5 crates ([`387ea7f`](https://github.com/tamasfe/ora/commit/387ea7fc0da2bdd9894415228f5e60e2f9716478))
     - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))
     - Batch cancel tasks and schedules ([`b2787bc`](https://github.com/tamasfe/ora/commit/b2787bc3048e109582d34711874a42a28a7fff86))
     - Release ora-common v0.1.1, ora-api v0.2.1, ora-store-sqlx v0.2.1 ([`5a2e17a`](https://github.com/tamasfe/ora/commit/5a2e17a80948cbebb219861a9a0faed84b50b4e3))
 </details>
+
+## 0.3.0 (2023-09-18)
+
+<csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/>
+
+### Chore
+
+ - <csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/> changelog
+
+### New Features
+
+ - <csr-id-b2787bc3048e109582d34711874a42a28a7fff86/> batch cancel tasks and schedules
 
 ## v0.2.0 (2023-09-15)
 
