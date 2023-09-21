@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
-use async_graphql::Object;
+use async_graphql::{OneofObject, InputObject, Object};
+use base64::Engine;
 use ora_client::ClientOperations;
+use serde_json::Value;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    common::{GqlScheduleDefinition, GqlTaskDefinition},
+    common::{
+        GqlScheduleDefinition, GqlTaskDefinition, GqlTimeoutPolicy, GqlWorkerSelector, Label, GqlTaskDataFormat,
+    },
     query::{GqlScheduleListOptions, GqlTaskListOptions, Schedule, Task},
 };
 
@@ -16,7 +21,9 @@ pub struct Mutation {
 
 #[Object]
 impl Mutation {
-    async fn add_task(&self, task: GqlTaskDefinition) -> async_graphql::Result<Task> {
+    async fn add_task(&self, task: AddTaskInput) -> async_graphql::Result<Task> {
+        let task = task.into_task_definition();
+
         let task_id = self
             .client
             .add_task(task.into())
@@ -130,4 +137,43 @@ impl Mutation {
             })
             .collect())
     }
+}
+
+#[derive(OneofObject)]
+enum AddTaskInput {
+    Task(GqlTaskDefinition),
+    JsonTask(InputJsonTaskDefinition),
+}
+
+impl AddTaskInput {
+    fn into_task_definition(self) -> GqlTaskDefinition {
+        match self {
+            AddTaskInput::Task(task) => task,
+            AddTaskInput::JsonTask(task) => GqlTaskDefinition {
+                target: task.target,
+                worker_selector: task.worker_selector,
+                data_base64: base64::prelude::BASE64_STANDARD.encode(task.data.to_string()),
+                data_format: GqlTaskDataFormat::Json,
+                labels: task.labels,
+                timeout: task.timeout,
+            },
+        }
+    }
+}
+
+#[derive(InputObject)]
+struct InputJsonTaskDefinition {
+    /// The target time of the task execution.
+    target: OffsetDateTime,
+    /// The worker selector of the task.
+    worker_selector: GqlWorkerSelector,
+    /// The input data.
+    #[graphql(default)]
+    data: Value,
+    /// Arbitrary task labels.
+    #[graphql(default)]
+    labels: Vec<Label>,
+    /// An optional timeout policy.
+    #[graphql(default)]
+    timeout: GqlTimeoutPolicy,
 }

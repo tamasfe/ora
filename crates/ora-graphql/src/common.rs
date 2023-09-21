@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use async_graphql::{Enum, InputObject, OneofObject, SimpleObject, Union};
+use async_graphql::{ComplexObject, Enum, InputObject, OneofObject, SimpleObject, Union};
 use base64::Engine;
 use ora_client::RawTaskResult;
 use ora_common::{
@@ -55,7 +55,7 @@ impl From<TaskStatus> for GqlTaskStatus {
 }
 
 #[derive(Debug, InputObject, SimpleObject)]
-#[graphql(input_name = "InputTaskDefinition", name = "TaskDefinition")]
+#[graphql(complex, input_name = "InputTaskDefinition", name = "TaskDefinition")]
 pub(crate) struct GqlTaskDefinition {
     /// The target time of the task execution.
     pub(crate) target: OffsetDateTime,
@@ -72,6 +72,20 @@ pub(crate) struct GqlTaskDefinition {
     /// An optional timeout policy.
     #[graphql(default)]
     pub(crate) timeout: GqlTimeoutPolicy,
+}
+
+#[ComplexObject]
+impl GqlTaskDefinition {
+    /// The data in JSON format, only available if the data format is JSON.
+    async fn data_json(&self) -> Option<Value> {
+        match self.data_format {
+            GqlTaskDataFormat::Json => base64::prelude::BASE64_STANDARD
+                .decode(&self.data_base64)
+                .ok()
+                .and_then(|data| serde_json::from_slice(&data).ok()),
+            _ => None,
+        }
+    }
 }
 
 impl From<GqlTaskDefinition> for TaskDefinition {
