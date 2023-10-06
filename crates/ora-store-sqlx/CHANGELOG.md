@@ -5,7 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.1 (2023-10-06)
+
+### New Features
+
+ - <csr-id-79308e2708ed34ac7f05eb62e43eca0197c25398/> better schedule cancellation
+   Schedules and their tasks are cancelled in order and separate transactions
+   to make sure the scheduler is aware of the cancelled
+   schedule and doesn't spawn a new task.
+   The separate transaction also helps with cancellation
+   of new tasks that were spawned during the operation.
+
+### Bug Fixes
+
+ - <csr-id-ee05b5d999e5d0c047c62dfe4553ba6584153481/> fixed schedule cancellation
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 2 commits contributed to the release.
+ - 18 days passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Better schedule cancellation ([`79308e2`](https://github.com/tamasfe/ora/commit/79308e2708ed34ac7f05eb62e43eca0197c25398))
+    - Fixed schedule cancellation ([`ee05b5d`](https://github.com/tamasfe/ora/commit/ee05b5d999e5d0c047c62dfe4553ba6584153481))
+</details>
+
 ## 0.3.0 (2023-09-18)
+
+<csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/>
 
 ### Chore
 
@@ -19,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 2 commits contributed to the release.
+ - 3 commits contributed to the release.
  - 2 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -31,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-worker v0.3.0, ora-api v0.3.0, ora-store-memory v0.3.0, ora-store-sqlx v0.3.0, ora-test v0.3.0, ora v0.3.0, ora-graphql v0.3.0, safety bump 5 crates ([`387ea7f`](https://github.com/tamasfe/ora/commit/387ea7fc0da2bdd9894415228f5e60e2f9716478))
     - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))
     - Support graceful shutdown ([`f425761`](https://github.com/tamasfe/ora/commit/f425761ec5f5cfa47490435edb39f4ceb1679972))
 </details>
