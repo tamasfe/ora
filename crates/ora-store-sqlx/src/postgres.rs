@@ -30,7 +30,7 @@ use sqlx::{
     postgres::PgRow,
     query, query_as, query_as_with, query_with,
     types::{time::OffsetDateTime, Json},
-    Executor, PgPool, Postgres, Row,
+    Connection, Executor, PgPool, Postgres, Row,
 };
 use tokio::sync::broadcast::{self, error::RecvError};
 use uuid::Uuid;
@@ -980,6 +980,12 @@ impl ScheduleOperations for PgScheduleOperations {
 
     #[tracing::instrument(level = "debug", skip_all)]
     async fn cancel(&self) -> eyre::Result<()> {
+        // We execute the two queries in separate transactions
+        // to account for the case where the schedule is cancelled
+        // while a task is being added.
+        let mut conn = self.db.acquire().await?;
+        let mut tx = conn.begin().await?;
+
         query(
             r#"--sql
             WITH cancel_schedule AS (
@@ -988,7 +994,21 @@ impl ScheduleOperations for PgScheduleOperations {
                     "cancelled_at" = NOW()
                 WHERE "id" = $1 AND "active"
                 RETURNING pg_notify('ora_schedule_cancelled', "id"::TEXT) AS "notified"
-            ), cancel_tasks AS (
+            )
+            SELECT 1
+            "#,
+        )
+        .bind(self.schedule_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        let mut tx = conn.begin().await?;
+
+        query(
+            r#"--sql
+            WITH cancel_tasks AS (
                 UPDATE "ora"."task"
                 SET
                     "status" = 'cancelled',
@@ -1000,8 +1020,10 @@ impl ScheduleOperations for PgScheduleOperations {
             "#,
         )
         .bind(self.schedule_id)
-        .execute(&self.db)
+        .execute(&mut *tx)
         .await?;
+
+        tx.commit().await?;
 
         Ok(())
     }
