@@ -225,7 +225,8 @@ where
     }
 
     async fn cancel_tasks(&self, options: &Tasks) -> eyre::Result<Vec<TaskHandle>> {
-        let ids = <Self as ClientOperations>::cancel_tasks(self, options).await?;
+        let options = options.clone().active(true).limit(u64::MAX);
+        let ids = <Self as ClientOperations>::cancel_tasks(self, &options).await?;
         Ok(<Self as ClientOperations>::tasks_by_ids(self, ids)
             .await?
             .into_iter()
@@ -283,7 +284,8 @@ where
     }
 
     async fn cancel_schedules(&self, options: &Schedules) -> eyre::Result<Vec<ScheduleHandle>> {
-        let ids = <Self as ClientOperations>::cancel_schedules(self, options).await?;
+        let options = options.clone().active(true).limit(u64::MAX);
+        let ids = <Self as ClientOperations>::cancel_schedules(self, &options).await?;
         Ok(<Self as ClientOperations>::schedules_by_ids(self, ids)
             .await?
             .into_iter()
