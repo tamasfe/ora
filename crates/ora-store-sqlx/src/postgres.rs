@@ -1214,7 +1214,9 @@ impl SchedulerScheduleStore for DbStore<Postgres> {
                 ON
                     "ora"."task"."schedule_id" = "ora"."schedule"."id"
                 WHERE
-                    "ora"."task"."id" = $1 AND NOT EXISTS (
+                    "ora"."task"."id" = $1
+                    AND "ora"."schedule"."active"
+                    AND NOT EXISTS (
                         SELECT
                             1
                         FROM
