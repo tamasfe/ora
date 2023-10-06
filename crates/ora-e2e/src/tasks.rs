@@ -17,3 +17,10 @@ pub struct ScheduleTestTask;
 impl Task for ScheduleTestTask {
     type Output = ();
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct ScheduleCancellationTestTask;
+
+impl Task for ScheduleCancellationTestTask {
+    type Output = ();
+}
