@@ -326,6 +326,12 @@ impl Schedules {
         }
     }
 
+    /// Set the maximum amount of schedules that are retrieved.
+    pub fn limit(mut self, limit: u64) -> Self {
+        self.limit = limit;
+        self
+    }
+
     /// Incldue active or inactive schedules only.
     pub fn active(mut self, active: bool) -> Self {
         self.active = Some(active);
@@ -471,7 +477,7 @@ impl Tasks {
         }
     }
 
-    /// Set the maximum amount of tasks that is retrieved.
+    /// Set the maximum amount of tasks that are retrieved.
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = limit;
         self
