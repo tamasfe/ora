@@ -1,7 +1,7 @@
 //! SQLx-based backend for ora that persists all operations in a supported SQL database.
 
 #![warn(clippy::pedantic, missing_docs)]
-#![allow(clippy::too_many_lines)]
+#![allow(clippy::too_many_lines, clippy::needless_raw_string_hashes)]
 
 use std::{
     collections::HashSet,

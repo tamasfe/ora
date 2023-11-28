@@ -1,15 +1,15 @@
 //! Worker and worker implementations for Ora.
 
 #![warn(clippy::pedantic, missing_docs)]
-#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_name_repetitions, clippy::ignored_unit_patterns)]
 
 use async_trait::async_trait;
 use ora_common::task::{TaskDataFormat, TaskDefinition, WorkerSelector};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-pub mod worker;
 pub mod store;
+pub mod worker;
 
 /// A context that is passed to each worker task execution.
 #[derive(Debug, Clone)]

@@ -398,14 +398,6 @@ async fn handle_notification(
         }
     }
 
-    query(
-        r#"--sql
-        
-        "#,
-    )
-    .execute(db)
-    .await?;
-
     Ok(())
 }
 

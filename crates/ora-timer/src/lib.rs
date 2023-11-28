@@ -2,7 +2,7 @@
 //! used by the Ora scheduler.
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(clippy::pedantic, missing_docs)]
-#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_name_repetitions, clippy::ignored_unit_patterns)]
 
 extern crate alloc;
 

@@ -1,5 +1,6 @@
 //! Test utilities for Ora.
 #![warn(clippy::pedantic, missing_docs)]
+#![allow(clippy::ignored_unit_patterns)]
 
 use std::{
     collections::HashMap,
@@ -42,9 +43,9 @@ impl TestWorker {
     ///
     /// # Panics
     ///
-    /// Panics if a worker with a matching [`WorkerSelector`]
+    /// Panics if a handler with a matching [`WorkerSelector`]
     /// already exists.
-    pub fn register_worker(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
+    pub fn register_handler(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
         let selector = worker.selector();
 
         assert!(
@@ -306,13 +307,13 @@ mod tests {
     async fn test_worker_smoke() {
         let mut worker = TestWorker::new();
         assert!(worker.spawn_task(TestTask.task()).is_none());
-        worker.register_worker(TestHandler.handler::<TestTask>());
+        worker.register_handler(TestHandler.handler::<TestTask>());
 
         let task = worker.spawn_task(TestTask.task()).unwrap();
         let output_task_id = task.clone().await.unwrap();
         assert_eq!(output_task_id, task.id());
 
-        worker.register_worker(TestHandler.handler::<CancelOnlyTask>());
+        worker.register_handler(TestHandler.handler::<CancelOnlyTask>());
 
         let task = worker.spawn_task(CancelOnlyTask.task()).unwrap();
         tokio::select! {
@@ -328,10 +329,10 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic = "handler registered multipl times."]
     async fn test_duplicate_handlers() {
         let mut worker = TestWorker::new();
-        worker.register_worker(TestHandler.handler::<TestTask>());
-        worker.register_worker(TestHandler.handler::<TestTask>());
+        worker.register_handler(TestHandler.handler::<TestTask>());
+        worker.register_handler(TestHandler.handler::<TestTask>());
     }
 }
