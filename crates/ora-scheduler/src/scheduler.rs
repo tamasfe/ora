@@ -23,6 +23,7 @@ use crate::store::{
 /// It also manages spawning new tasks of schedules if needed.
 pub struct Scheduler<S> {
     store: S,
+    default_timeout: Option<TimeoutPolicy>,
 }
 
 impl<S> Scheduler<S>
@@ -30,8 +31,26 @@ where
     S: SchedulerTaskStore + SchedulerScheduleStore,
 {
     /// Create a new scheduler with the given backing store.
+    #[must_use]
     pub fn new(store: S) -> Self {
-        Self { store }
+        Self {
+            store,
+            default_timeout: None,
+        }
+    }
+
+    /// Set the default timeout policy for all tasks
+    /// that do not have a timeout policy set.
+    ///
+    /// This is useful as a safety measure to prevent
+    /// tasks from running indefinitely or getting
+    /// stuck in a running state by unclean shutdowns of workers.
+    ///
+    /// By default, no timeout is set.
+    #[must_use]
+    pub fn with_default_timeout(mut self, timeout: Option<TimeoutPolicy>) -> Self {
+        self.default_timeout = timeout;
+        self
     }
 
     /// Run the scheduler indefinitely or until a store error occurs.
@@ -58,20 +77,17 @@ where
                 SchedulerTaskStoreEvent::TaskAdded(task),
                 &timer_handle,
                 &mut scheduled_tasks,
+                self.default_timeout,
             );
         }
 
         // Schedule timeouts for existing tasks,
         // this is done once at the beginning so no deduplication
         // is done.
-        let active_tasks = self
-            .store
-            .active_tasks()
-            .await
-            .map_err(store_error)?;
+        let active_tasks = self.store.active_tasks().await.map_err(store_error)?;
 
         for task in active_tasks {
-            schedule_timeout(task, &timer_handle);
+            schedule_timeout(task, &timer_handle, self.default_timeout);
         }
 
         loop {
@@ -84,7 +100,12 @@ where
                         Ok(event) => {
                             match event {
                                 Some(event) => {
-                                    handle_event(event, &timer_handle, &mut scheduled_tasks);
+                                    handle_event(
+                                        event,
+                                        &timer_handle,
+                                        &mut scheduled_tasks,
+                                        self.default_timeout,
+                                    );
                                 }
                                 None => {
                                     return Err(Error::UnexpectedEventStreamEnd);
@@ -125,6 +146,7 @@ fn handle_event(
     event: SchedulerTaskStoreEvent,
     timer: &TimerHandle<TimerEntry>,
     scheduled_tasks: &mut AHashMap<Uuid, ScheduledTask>,
+    default_timeout: Option<TimeoutPolicy>,
 ) {
     match event {
         SchedulerTaskStoreEvent::TaskAdded(task) => {
@@ -143,7 +165,7 @@ fn handle_event(
             tracing::trace!(task_id = %task.id, "task scheduled");
             scheduled_tasks.insert(task.id, ScheduledTask::default());
             timer.schedule(TimerEntry::TaskReady(task.id), task_delay);
-            schedule_timeout(task.into(), timer);
+            schedule_timeout(task.into(), timer, default_timeout);
         }
         SchedulerTaskStoreEvent::TaskCancelled(task_id) => {
             if let Some(task) = scheduled_tasks.get_mut(&task_id) {
@@ -160,8 +182,20 @@ fn handle_event(
 }
 
 #[tracing::instrument(level = "trace", skip_all)]
-fn schedule_timeout(task: ActiveTask, timer: &TimerHandle<TimerEntry>) {
-    match task.timeout {
+fn schedule_timeout(
+    task: ActiveTask,
+    timer: &TimerHandle<TimerEntry>,
+    default_timeout: Option<TimeoutPolicy>,
+) {
+    let mut timeout = task.timeout;
+
+    if let Some(default_timeout) = default_timeout {
+        if matches!(timeout, TimeoutPolicy::Never) {
+            timeout = default_timeout;
+        }
+    }
+
+    match timeout {
         TimeoutPolicy::Never => {}
         TimeoutPolicy::FromTarget { timeout } => {
             let task_unix = Duration::from_nanos(task.target.0);
