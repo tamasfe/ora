@@ -1,6 +1,7 @@
 [package]
 name = "ora-macros"
 version= "0.1.0"
+description = "Part of the Ora scheduler framework."
 publish.workspace = true
 license.workspace = true
 edition.workspace = true
