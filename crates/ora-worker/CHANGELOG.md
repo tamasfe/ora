@@ -5,7 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.0 (2023-11-29)
+
+### Chore
+
+ - <csr-id-83cfe826e8b543bdeead54c0f9500706fbb72a7b/> versions
+ - <csr-id-b39e3114c54d3ab9383d0401255c1f8fa8671d43/> cleanup
+
+### New Features
+
+ - <csr-id-d6279daf534d793811232a2b8e765e8cd520bff2/> task api enhancements and worker registry
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 3 commits contributed to the release over the course of 1 calendar day.
+ - 72 days passed between releases.
+ - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Versions ([`83cfe82`](https://github.com/tamasfe/ora/commit/83cfe826e8b543bdeead54c0f9500706fbb72a7b))
+    - Task api enhancements and worker registry ([`d6279da`](https://github.com/tamasfe/ora/commit/d6279daf534d793811232a2b8e765e8cd520bff2))
+    - Cleanup ([`b39e311`](https://github.com/tamasfe/ora/commit/b39e3114c54d3ab9383d0401255c1f8fa8671d43))
+</details>
+
 ## 0.3.0 (2023-09-18)
+
+<csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/>
 
 ### Chore
 
@@ -19,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 2 commits contributed to the release.
+ - 3 commits contributed to the release.
  - 3 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -31,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-worker v0.3.0, ora-api v0.3.0, ora-store-memory v0.3.0, ora-store-sqlx v0.3.0, ora-test v0.3.0, ora v0.3.0, ora-graphql v0.3.0, safety bump 5 crates ([`387ea7f`](https://github.com/tamasfe/ora/commit/387ea7fc0da2bdd9894415228f5e60e2f9716478))
     - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))
     - Support graceful shutdown ([`f425761`](https://github.com/tamasfe/ora/commit/f425761ec5f5cfa47490435edb39f4ceb1679972))
 </details>
@@ -68,9 +103,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Handle concurrent workers ([`933860b`](https://github.com/tamasfe/ora/commit/933860bc82503d990938ad1925846eb0eecb0ee5))
 </details>
 
-<csr-unknown>
-renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
-
 ## v0.2.0 (2023-09-15)
 
 ### New Features
@@ -80,7 +112,9 @@ renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
 
 <csr-unknown>
 <csr-unknown>
+<csr-unknown>
 renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
+<csr-unknown/>
 <csr-unknown/>
 
 ## v0.1.0 (2023-08-11)

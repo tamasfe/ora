@@ -1,6 +1,6 @@
 [package]
 name = "ora-scheduler"
-version= "0.2.0"
+version= "0.2.1"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
@@ -12,8 +12,8 @@ description = "Part of the Ora scheduler framework."
 ahash = "0.8.3"
 async-trait = "0.1.71"
 futures = "0.3.28"
-ora-common = { version = "^0.1.0", path = "../ora-common" }
-ora-timer = { version = "^0.1.0", path = "../ora-timer" }
+ora-common = { version = "^0.1.2", path = "../ora-common" }
+ora-timer = { version = "^0.1.1", path = "../ora-timer" }
 ora-util = { version = "^0.1.0", path = "../ora-util" }
 thiserror = "1.0.43"
 tokio = { version = "1.29.1", features = ["macros"] }

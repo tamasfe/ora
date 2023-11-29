@@ -12,7 +12,7 @@ description = "Part of the Ora scheduler framework."
 async-trait = "0.1.71"
 eyre = "0.6.8"
 futures = "0.3.28"
-ora-common = { version = "^0.1.0", path = "../ora-common" }
+ora-common = { version = "^0.1.2", path = "../ora-common" }
 parking_lot = "0.12.1"
 thiserror = "1.0.43"
 tokio = { version = "1.29.1", features = ["sync", "time", "rt", "macros"] }
