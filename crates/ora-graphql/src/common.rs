@@ -1,15 +1,17 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use async_graphql::{ComplexObject, Enum, InputObject, OneofObject, SimpleObject, Union};
 use base64::Engine;
 use ora_client::RawTaskResult;
 use ora_common::{
     schedule::{MissedTasksPolicy, NewTask, ScheduleDefinition, SchedulePolicy},
-    task::{TaskDataFormat, TaskDefinition, TaskStatus, WorkerSelector},
+    task::{TaskDataFormat, TaskDefinition, TaskMetadata, TaskStatus, WorkerSelector},
     timeout::TimeoutPolicy,
 };
+use ora_worker::registry::{SupportedTask, WorkerInfo};
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Enum)]
 #[graphql(name = "TaskStatus")]
@@ -473,4 +475,88 @@ pub(crate) struct TaskResultFailure {
 #[derive(Debug, SimpleObject)]
 pub(crate) struct TaskResultCancellation {
     pub(crate) cancellation_reason: Option<String>,
+}
+
+#[derive(Debug, SimpleObject)]
+pub(crate) struct Worker {
+    pub id: Uuid,
+    pub registered: OffsetDateTime,
+    pub last_seen: OffsetDateTime,
+    /// The name of the worker.
+    pub name: Option<String>,
+    /// Additional worker description.
+    pub description: Option<String>,
+    /// The version of the worker.
+    pub version: Option<String>,
+    /// Supported tasks.
+    pub supported_tasks: Vec<WorkerSupportedTask>,
+    /// Arbitrary fields.
+    pub other_metadata: BTreeMap<String, Value>,
+}
+
+impl From<WorkerInfo> for Worker {
+    fn from(value: WorkerInfo) -> Self {
+        Worker {
+            id: value.id,
+            last_seen: value.last_seen,
+            registered: value.registered,
+            name: value.metadata.name,
+            description: value.metadata.description,
+            version: value.metadata.version,
+            supported_tasks: value
+                .metadata
+                .supported_tasks
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            other_metadata: value.metadata.other,
+        }
+    }
+}
+
+#[derive(Debug, SimpleObject)]
+pub(crate) struct WorkerSupportedTask {
+    /// The worker selector of the task that will
+    /// be matched to this worker.
+    pub worker_selector: GqlWorkerSelector,
+    /// The data format of the task input and output.
+    pub default_data_format: GqlTaskDataFormat,
+    /// The default timeout policy.
+    pub default_timeout: GqlTimeoutPolicy,
+    /// Additional task metadata.
+    pub metadata: WorkerSupportedTaskMetadata,
+}
+
+impl From<SupportedTask> for WorkerSupportedTask {
+    fn from(value: SupportedTask) -> Self {
+        WorkerSupportedTask {
+            worker_selector: value.worker_selector.into(),
+            default_data_format: value.default_data_format.into(),
+            default_timeout: value.default_timeout.into(),
+            metadata: value.metadata.into(),
+        }
+    }
+}
+
+#[derive(Debug, SimpleObject)]
+pub(crate) struct WorkerSupportedTaskMetadata {
+    /// Task description.
+    pub description: Option<String>,
+    /// Task input JSON schema.
+    pub input_schema: Option<Value>,
+    /// Task output JSON schema.
+    pub output_schema: Option<Value>,
+    /// Arbitrary fields.
+    pub other: BTreeMap<String, Value>,
+}
+
+impl From<TaskMetadata> for WorkerSupportedTaskMetadata {
+    fn from(value: TaskMetadata) -> Self {
+        WorkerSupportedTaskMetadata {
+            description: value.description,
+            input_schema: value.input_schema,
+            output_schema: value.output_schema,
+            other: value.other,
+        }
+    }
 }

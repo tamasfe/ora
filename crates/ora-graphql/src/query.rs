@@ -5,18 +5,23 @@ use ora_client::{
     ClientOperations, LabelMatch, LabelValueMatch, ScheduleListOrder, ScheduleOperations,
     Schedules, TaskListOrder, TaskOperations, Tasks,
 };
+use ora_worker::registry::WorkerRegistry;
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::common::{GqlScheduleDefinition, GqlTaskDefinition, GqlTaskResult, GqlTaskStatus};
+use crate::common::{GqlScheduleDefinition, GqlTaskDefinition, GqlTaskResult, GqlTaskStatus, Worker};
 
-pub struct Query {
+pub struct Query<W: WorkerRegistry> {
     pub(crate) client: Arc<dyn ClientOperations>,
+    pub(crate) worker_registry: W,
 }
 
 #[Object]
-impl Query {
+impl<W> Query<W>
+where
+    W: WorkerRegistry + Send + Sync + 'static,
+{
     async fn task_count(&self, options: Option<GqlTaskListOptions>) -> async_graphql::Result<u64> {
         let options = options.map(Tasks::from).unwrap_or_default();
         self.client
@@ -106,6 +111,17 @@ impl Query {
             .schedule_count(&options)
             .await
             .map_err(async_graphql::Error::new_with_source)
+    }
+
+    async fn workers(&self) -> async_graphql::Result<Vec<Worker>> {
+        Ok(self
+            .worker_registry
+            .workers()
+            .await
+            .map_err(async_graphql::Error::new_with_source)?
+            .into_iter()
+            .map(Into::into)
+            .collect())
     }
 }
 

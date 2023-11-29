@@ -20,18 +20,22 @@ ora-store-memory = { version = "^0.3.0", path = "../ora-store-memory", optional 
 ora-store-sqlx = { version = "^0.3.1", path = "../ora-store-sqlx", optional = true }
 ora-worker = { version = "^0.3.0", path = "../ora-worker", optional = true }
 ora-test = { version = "^0.3.0", path = "../ora-test", optional = true }
+ora-macros = { version = "0.1.0", path = "../ora-macros", optional = true }
 pin-project-lite = "0.2.10"
 rmp-serde = "1.1.1"
 serde = "1.0.171"
 serde_json = "1.0.101"
 time = "0.3.23"
 uuid = "1.4.0"
+schemars = { version = "0.8.16", optional = true }
 
 [features]
-default = ["api", "scheduler", "worker"]
+default = ["api", "scheduler", "worker", "worker-registry", "macros"]
+macros = ["dep:ora-macros", "dep:schemars"]
 scheduler = ["dep:ora-scheduler"]
 api = ["dep:ora-api"]
 worker = ["dep:ora-worker"]
+worker-registry = ["dep:ora-worker"]
 store-memory = ["dep:ora-store-memory"]
 store-sqlx-postgres = ["dep:ora-store-sqlx", "ora-store-sqlx/postgres"]
 test = ["dep:ora-test"]

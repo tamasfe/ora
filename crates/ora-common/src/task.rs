@@ -2,7 +2,7 @@
 
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fmt::Display,
     marker::PhantomData,
     str::FromStr,
@@ -235,6 +235,20 @@ impl TaskStatus {
             TaskStatus::Succeeded | TaskStatus::Failed | TaskStatus::Cancelled
         )
     }
+}
+
+/// Extra metadata about a task or task type.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct TaskMetadata {
+    /// Task description.
+    pub description: Option<String>,
+    /// Task input JSON schema.
+    pub input_schema: Option<Value>,
+    /// Task output JSON schema.
+    pub output_schema: Option<Value>,
+    /// Arbitrary fields.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, Value>,
 }
 
 /// The format of the task input or output data.

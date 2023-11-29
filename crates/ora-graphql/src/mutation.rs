@@ -99,10 +99,10 @@ impl Mutation {
         })
     }
 
-    async fn cancel_schedule(&self, id: Uuid) -> async_graphql::Result<Schedule> {
+    async fn cancel_schedule(&self, schedule_id: Uuid) -> async_graphql::Result<Schedule> {
         let schedule = self
             .client
-            .schedule(id)
+            .schedule(schedule_id)
             .await
             .map_err(async_graphql::Error::new_with_source)?;
         schedule

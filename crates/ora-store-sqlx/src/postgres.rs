@@ -43,6 +43,7 @@ use crate::{
 
 mod events;
 mod migrations;
+mod worker_registry;
 
 impl DbStore<Postgres> {
     /// Create a new store backed by the given pool.

@@ -7,7 +7,7 @@ pub use eyre;
 pub use ora_api::{client::Client, *};
 pub use ora_common::{
     schedule::*,
-    task::{TaskDataFormat, TaskDefinition, TaskStatus},
+    task::{TaskDataFormat, TaskDefinition, TaskMetadata, TaskStatus, WorkerSelector},
     timeout::TimeoutPolicy,
 };
 #[cfg(feature = "scheduler")]
@@ -23,3 +23,19 @@ pub use ora_worker::{
     worker::{Error as WorkerError, Worker, WorkerOptions},
     TaskContext,
 };
+
+#[cfg(feature = "macros")]
+pub use ora_macros::Task;
+
+#[cfg(feature = "macros")]
+#[doc(hidden)]
+pub mod __private {
+    #[doc(hidden)]
+    pub use schemars;
+    #[doc(hidden)]
+    pub use serde;
+    #[doc(hidden)]
+    pub use serde_json;
+    #[doc(hidden)]
+    pub use time;
+}

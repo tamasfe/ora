@@ -19,3 +19,15 @@ tokio = { version = "1.29.1", features = ["sync", "time", "rt", "macros"] }
 tokio-util = "0.7.8"
 tracing = "0.1.37"
 uuid = { version = "1.4.0", features = ["v4"] }
+
+
+serde = { version = "1.0.193", optional = true }
+serde_json = { version = "1.0.108", optional = true }
+time = { version = "0.3.30", features = [
+    "serde",
+    "serde-well-known",
+], optional = true }
+
+[features]
+default = ["registry"]
+registry = ["dep:time", "dep:serde", "dep:serde_json"]

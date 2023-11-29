@@ -18,6 +18,7 @@ base64 = "0.21.2"
 eyre = "0.6.8"
 ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.1", path = "../ora-common" }
+ora-worker = { version = "0.3.0", path = "../ora-worker", features = ["registry"] }
 serde_json = "1.0.104"
 time = "0.3.23"
 uuid = "1.4.1"

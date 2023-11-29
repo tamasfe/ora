@@ -5,11 +5,15 @@
 
 use async_trait::async_trait;
 use ora_common::task::{TaskDataFormat, TaskDefinition, WorkerSelector};
+use registry::SupportedTask;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 pub mod store;
 pub mod worker;
+
+#[cfg(feature = "registry")]
+pub mod registry;
 
 /// A context that is passed to each worker task execution.
 #[derive(Debug, Clone)]
@@ -39,7 +43,7 @@ impl TaskContext {
 }
 
 /// A handler that works with raw input and output
-/// without any task type information attached.
+/// without task type attached.
 #[async_trait]
 pub trait RawHandler {
     /// Return the selector that should be used to
@@ -48,6 +52,10 @@ pub trait RawHandler {
 
     /// The data format of the task output.
     fn output_format(&self) -> TaskDataFormat;
+
+    /// Optional information about the supported task
+    /// expected by this handler.
+    fn supported_task(&self) -> Option<SupportedTask>;
 
     /// Execute a task.
     async fn run(&self, context: TaskContext, task: TaskDefinition) -> eyre::Result<Vec<u8>>;

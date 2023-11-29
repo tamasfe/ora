@@ -157,7 +157,7 @@ async fn run_graphql_server(store: MemoryStore) {
         response::Html(GraphiQLSource::build().endpoint("/").finish())
     }
 
-    let schema = create_schema(store);
+    let schema: OraSchema = create_schema(store, Default::default());
 
     let app = Router::new()
         .route("/", get(graphiql).post(graphql_handler))

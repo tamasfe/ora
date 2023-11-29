@@ -2,19 +2,20 @@
 #![warn(clippy::pedantic, missing_docs)]
 #![allow(clippy::module_name_repetitions)]
 
-use std::{any::type_name, collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use eyre::Context;
 use ora_common::{
-    task::{TaskDataFormat, TaskDefinition, WorkerSelector},
+    task::{TaskDataFormat, TaskDefinition, TaskMetadata, WorkerSelector},
     timeout::TimeoutPolicy,
     UnixNanos,
 };
-use ora_worker::{RawHandler, TaskContext};
+use ora_worker::{registry::SupportedTask, RawHandler, TaskContext};
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod client;
+pub mod defaults;
 
 /// A strongly-typed serializable task type.
 pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
@@ -25,13 +26,7 @@ pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// defaults to the type's name without the module path
     /// and any generics.
     fn worker_selector() -> WorkerSelector {
-        let name = type_name::<Self>();
-        let name = name.split_once('<').map_or(name, |n| n.0);
-        let name = name.split("::").last().unwrap_or(name);
-
-        WorkerSelector {
-            kind: std::borrow::Cow::Borrowed(name),
-        }
+        defaults::task_worker_selector::<Self>()
     }
 
     /// Input and output data format to be used for serialization.
@@ -39,7 +34,7 @@ pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// Defaults to [`TaskDataFormat::Json`].
     #[must_use]
     fn format() -> TaskDataFormat {
-        TaskDataFormat::Json
+        defaults::task_data_format::<Self>()
     }
 
     /// Return the default timeout policy.
@@ -47,7 +42,13 @@ pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// Defaults to no timeout.
     #[must_use]
     fn timeout() -> TimeoutPolicy {
-        TimeoutPolicy::Never
+        defaults::task_timeout::<Self>()
+    }
+
+    /// Return additional metadata about the task.
+    #[must_use]
+    fn metadata() -> TaskMetadata {
+        defaults::task_metadata::<Self>()
     }
 
     /// Create a task definition that contains the worker
@@ -75,6 +76,43 @@ pub trait Task: Serialize + DeserializeOwned + Send + Sync + 'static {
             timeout: Self::timeout(),
             _task_type: PhantomData,
         }
+    }
+}
+
+/// Additional trait that allows for setting
+/// task defaults when deriving [`Task`].
+pub trait DeriveTaskExtra: Task {
+    /// The worker selector of the given type,
+    /// defaults to the type's name without the module path
+    /// and any generics.
+    ///
+    /// Default or inferred value are passed as argument.
+    fn worker_selector(inferred: WorkerSelector) -> WorkerSelector {
+        inferred
+    }
+
+    /// Input and output data format to be used for serialization.
+    ///
+    /// Default or inferred value are passed as argument.
+    #[must_use]
+    fn format(inferred: TaskDataFormat) -> TaskDataFormat {
+        inferred
+    }
+
+    /// Return the default timeout policy.
+    ///
+    /// Default or inferred value are passed as argument.
+    #[must_use]
+    fn timeout(inferred: TimeoutPolicy) -> TimeoutPolicy {
+        inferred
+    }
+
+    /// Return additional metadata about the task.
+    ///
+    /// Default or inferred value are passed as argument.
+    #[must_use]
+    fn metadata(inferred: TaskMetadata) -> TaskMetadata {
+        inferred
     }
 }
 
@@ -154,6 +192,15 @@ where
 
     fn output_format(&self) -> TaskDataFormat {
         T::format()
+    }
+
+    fn supported_task(&self) -> Option<SupportedTask> {
+        Some(SupportedTask {
+            worker_selector: self.selector.clone(),
+            default_data_format: T::format(),
+            default_timeout: T::timeout(),
+            metadata: T::metadata(),
+        })
     }
 
     async fn run(&self, context: TaskContext, task: TaskDefinition) -> eyre::Result<Vec<u8>> {

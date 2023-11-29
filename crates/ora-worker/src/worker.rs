@@ -17,12 +17,13 @@ use tracing::Instrument;
 use uuid::Uuid;
 
 use crate::{
+    registry::{noop::NoopWorkerRegistry, HeartbeatData, WorkerMetadata, WorkerRegistry},
     store::{ReadyTask, WorkerStore, WorkerStoreEvent},
     RawHandler, TaskContext,
 };
 
 /// Options for a [`Worker`].
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WorkerOptions {
     /// The amount of concurrent tasks that can be spawned.
     pub concurrent_tasks: NonZeroUsize,
@@ -43,8 +44,10 @@ impl Default for WorkerOptions {
 
 /// A worker where workers can be registered
 /// and are executed whenever tasks are ready.
-pub struct Worker<S> {
+pub struct Worker<S, R = NoopWorkerRegistry> {
     store: S,
+    registry: R,
+    metadata: WorkerMetadata,
     id: Uuid,
     handlers: HashMap<WorkerSelector, Arc<dyn RawHandler + Send + Sync>>,
     semaphore: Arc<Semaphore>,
@@ -65,25 +68,6 @@ impl<S: std::fmt::Debug> std::fmt::Debug for Worker<S> {
     }
 }
 
-impl<S> Worker<S> {
-    /// Register a handler for the worker.
-    ///
-    /// # Panics
-    ///
-    /// Panics if a handler was already registered with a matching [`WorkerSelector`].
-    pub fn register_handler(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
-        let selector = worker.selector();
-
-        assert!(
-            !self.handlers.contains_key(worker.selector()),
-            "a worker is already registered with the given selector: {selector:?}"
-        );
-
-        self.handlers.insert(worker.selector().clone(), worker);
-        self
-    }
-}
-
 impl<S> Worker<S>
 where
     S: WorkerStore + 'static,
@@ -98,6 +82,8 @@ where
         let (send, recv) = mpsc::channel(1);
         Self {
             store,
+            registry: NoopWorkerRegistry,
+            metadata: WorkerMetadata::default(),
             id: Uuid::new_v4(),
             handlers: HashMap::new(),
             semaphore: Arc::new(Semaphore::new(options.concurrent_tasks.get())),
@@ -107,6 +93,66 @@ where
             shutdown_recv: recv,
         }
     }
+}
+
+impl<S, R> Worker<S, R> {
+    /// Register a handler for the worker.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a handler was already registered with a matching [`WorkerSelector`].
+    pub fn register_handler(&mut self, worker: Arc<dyn RawHandler + Send + Sync>) -> &mut Self {
+        let selector = worker.selector();
+
+        assert!(
+            !self.handlers.contains_key(worker.selector()),
+            "a worker is already registered with the given selector: {selector:?}"
+        );
+
+        if let Some(task) = worker.supported_task() {
+            self.metadata.supported_tasks.push(task);
+        }
+
+        self.handlers.insert(worker.selector().clone(), worker);
+        self
+    }
+
+    /// Set the registry for this worker.
+    pub fn with_registry<R2>(self, registry: R2) -> Worker<S, R2> {
+        Worker {
+            store: self.store,
+            registry,
+            metadata: self.metadata,
+            id: self.id,
+            handlers: self.handlers,
+            semaphore: self.semaphore,
+            running_tasks: self.running_tasks,
+            options: self.options,
+            shutdown_send: self.shutdown_send,
+            shutdown_recv: self.shutdown_recv,
+        }
+    }
+
+    /// Set the name of this worker.
+    #[must_use]
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.metadata.name = Some(name.into());
+        self
+    }
+
+    /// Set the description of this worker.
+    #[must_use]
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.metadata.description = Some(description.into());
+        self
+    }
+
+    /// Set the version of this worker.
+    #[must_use]
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.metadata.version = Some(version.into());
+        self
+    }
 
     /// Get a handle to this worker.
     pub fn handle(&self) -> WorkerHandle {
@@ -114,7 +160,13 @@ where
             chan: self.shutdown_send.clone(),
         }
     }
+}
 
+impl<S, R> Worker<S, R>
+where
+    S: WorkerStore + 'static,
+    R: WorkerRegistry,
+{
     /// Run the worker indefinitely.
     ///
     /// # Errors
@@ -124,7 +176,14 @@ where
     /// # Panics
     ///
     /// Only panics due to bugs.
+    #[tracing::instrument(skip_all)]
+    #[allow(clippy::too_many_lines)]
     pub async fn run(mut self) -> Result<(), Error> {
+        /// The timeout for registry operations,
+        /// these are optional and should not block
+        /// the worker for long periods.
+        const REGISTRY_TIMEOUT: Duration = Duration::from_secs(5);
+
         macro_rules! wait_shutdown_all {
             ($confirm:expr) => {
                 let running_tasks = mem::take(&mut *self.running_tasks.lock());
@@ -185,10 +244,14 @@ where
             wait_shutdown_all!(shutdown_confirm);
         }
 
-        loop {
+        let mut heartbeat_interval =
+            tokio::time::interval(self.registry.heartbeat_interval().try_into().unwrap());
+        heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        let res = loop {
             tokio::select! {
                 error = rt_errors_recv.recv() => {
-                    return Err(error.unwrap());
+                    break Err(error.unwrap());
                 }
                 Some(shutdown_confirm) = self.shutdown_recv.recv() => {
                     wait_shutdown_all!(shutdown_confirm);
@@ -206,8 +269,50 @@ where
                         }
                     }
                 }
+                _ = heartbeat_interval.tick() => {
+                    if self.registry.enabled() {
+                        match tokio::time::timeout(
+                            REGISTRY_TIMEOUT,
+                            async {
+                                let res = self.registry.heartbeat(self.id, &HeartbeatData {}).await?;
+
+                                if res.should_register {
+                                    self.registry.register_worker(self.id, &self.metadata).await?;
+                                }
+
+                                Result::<(), R::Error>::Ok(())
+                            },
+                        )
+                        .await
+                        {
+                            Ok(Ok(())) => {}
+                            Ok(Err(error)) => {
+                                let err = Error::Registry(Box::new(error));
+                                tracing::warn!(?err, "heartbeat failed");
+                            }
+                            Err(_) => {
+                                tracing::warn!("timed out while sending registry heartbeat");
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        if self.registry.enabled() {
+            match tokio::time::timeout(REGISTRY_TIMEOUT, self.registry.unregister_worker(self.id)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    let err = Error::Registry(Box::new(error));
+                    tracing::warn!(?err, "unregister failed");
+                }
+                Err(_) => {
+                    tracing::warn!("timed out while sending unregister");
+                }
             }
         }
+
+        res
     }
 
     #[tracing::instrument(skip_all)]
@@ -352,6 +457,9 @@ pub enum Error {
     /// A store error.
     #[error("store error: {0:?}")]
     Store(Box<dyn std::error::Error + Send + Sync>),
+    /// A registry error.
+    #[error("registry error: {0:?}")]
+    Registry(Box<dyn std::error::Error + Send + Sync>),
 }
 
 struct RunningTask {

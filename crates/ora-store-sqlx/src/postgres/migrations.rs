@@ -15,6 +15,14 @@ pub mod _2_worker_ids_migrate {}
 #[allow(clippy::all, clippy::pedantic)]
 /// Created at 20230915131205.
 pub mod _2_worker_ids_revert {}
+#[allow(dead_code)]
+#[allow(clippy::all, clippy::pedantic)]
+/// Created at 20231129200626.
+pub mod _3_worker_registry_migrate {}
+#[allow(dead_code)]
+#[allow(clippy::all, clippy::pedantic)]
+/// Created at 20231129200626.
+pub mod _3_worker_registry_revert {}
 /// All the migrations.
 pub fn migrations() -> impl IntoIterator<Item = Migration<sqlx::Postgres>> {
     [
@@ -71,6 +79,35 @@ pub fn migrations() -> impl IntoIterator<Item = Migration<sqlx::Postgres>> {
                     .execute(
                         include_str!(
                             "/home/tamasfe/work/opensauce/ora/master/crates/ora-store-sqlx/migrations/postgres/20230915131205_worker_ids.revert.sql"
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            })),
+        sqlx_migrate::Migration::new(
+                "worker_registry",
+                |ctx| std::boxed::Box::pin(async move {
+                    use sqlx::Executor;
+                    let ctx: &mut sqlx_migrate::prelude::MigrationContext<
+                        sqlx::Postgres,
+                    > = ctx;
+                    ctx.tx()
+                        .execute(
+                            include_str!(
+                                "/home/tamasfe/work/opensauce/ora/master/crates/ora-store-sqlx/migrations/postgres/20231129200626_worker_registry.migrate.sql"
+                            ),
+                        )
+                        .await?;
+                    Ok(())
+                }),
+            )
+            .reversible(|ctx| std::boxed::Box::pin(async move {
+                use sqlx::Executor;
+                let ctx: &mut sqlx_migrate::prelude::MigrationContext<sqlx::Postgres> = ctx;
+                ctx.tx()
+                    .execute(
+                        include_str!(
+                            "/home/tamasfe/work/opensauce/ora/master/crates/ora-store-sqlx/migrations/postgres/20231129200626_worker_registry.revert.sql"
                         ),
                     )
                     .await?;

@@ -1,9 +1,10 @@
 use async_graphql::async_trait::async_trait;
 use ora_client::ClientOperations;
 use ora_graphql::create_schema;
+use ora_worker::registry::noop::NoopWorkerRegistry;
 
 fn main() {
-    println!("{}", create_schema(DummyClient).sdl());
+    println!("{}", create_schema(DummyClient, NoopWorkerRegistry).sdl());
 }
 
 #[derive(Debug)]
