@@ -5,7 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.1 (2023-11-30)
+
+### Chore
+
+ - <csr-id-83cfe826e8b543bdeead54c0f9500706fbb72a7b/> versions
+
+### New Features
+
+ - <csr-id-d6279daf534d793811232a2b8e765e8cd520bff2/> task api enhancements and worker registry
+
+### Bug Fixes
+
+ - <csr-id-2c6d98603fc2fd58de707a1176fcbdb5dc6c6df1/> remove generics from schema
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 5 commits contributed to the release over the course of 54 calendar days.
+ - 69 days passed between releases.
+ - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Remove generics from schema ([`2c6d986`](https://github.com/tamasfe/ora/commit/2c6d98603fc2fd58de707a1176fcbdb5dc6c6df1))
+    - Release ora-common v0.1.2, ora-worker v0.4.0, ora-api v0.3.2, ora-macros v0.1.0, ora-timer v0.1.1, ora-scheduler v0.2.1, ora-store-memory v0.3.1, ora-store-sqlx v0.3.2, ora-test v0.3.1, ora v0.4.0 ([`20021a7`](https://github.com/tamasfe/ora/commit/20021a756ac91b3b4503d8f449cb2f000a31e40e))
+    - Versions ([`83cfe82`](https://github.com/tamasfe/ora/commit/83cfe826e8b543bdeead54c0f9500706fbb72a7b))
+    - Task api enhancements and worker registry ([`d6279da`](https://github.com/tamasfe/ora/commit/d6279daf534d793811232a2b8e765e8cd520bff2))
+    - Release ora-client v0.2.1, ora-api v0.3.1, ora-store-sqlx v0.3.1, ora v0.3.1 ([`65c0b4f`](https://github.com/tamasfe/ora/commit/65c0b4f771df465e27ae27555fd8aa7c0f4b5126))
+</details>
+
 ## 0.3.1 (2023-09-21)
+
+<csr-id-fabc6d25ea8ef8706e44e8794b80af3943518942/>
 
 ### Chore
 
@@ -20,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 5 commits contributed to the release over the course of 5 calendar days.
+ - 6 commits contributed to the release over the course of 5 calendar days.
  - 6 days passed between releases.
  - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -32,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-graphql v0.3.1 ([`dbec850`](https://github.com/tamasfe/ora/commit/dbec850f7e1b6ab634fe103b7b098395ecacffe2))
     - Add JSON convenience ([`de0c4c5`](https://github.com/tamasfe/ora/commit/de0c4c558d3537449fb453d6072cd11700465868))
     - Release ora-worker v0.3.0, ora-api v0.3.0, ora-store-memory v0.3.0, ora-store-sqlx v0.3.0, ora-test v0.3.0, ora v0.3.0, ora-graphql v0.3.0, safety bump 5 crates ([`387ea7f`](https://github.com/tamasfe/ora/commit/387ea7fc0da2bdd9894415228f5e60e2f9716478))
     - Changelog ([`fabc6d2`](https://github.com/tamasfe/ora/commit/fabc6d25ea8ef8706e44e8794b80af3943518942))

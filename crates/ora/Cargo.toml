@@ -45,7 +45,7 @@ async-graphql = "6.0.0"
 async-graphql-axum = "6.0.0"
 async-trait = "0.1.71"
 axum = "0.6.19"
-ora-graphql = { version = "^0.4.0", path = "../ora-graphql" }
+ora-graphql = { version = "^0.4.1", path = "../ora-graphql" }
 serde = { version = "1.0.171", features = ["derive"] }
 tokio = { version = "1.29.1", features = ["rt", "rt-multi-thread", "macros"] }
 tracing = "0.1.37"

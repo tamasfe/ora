@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.4.1 (2023-11-30)
+
+### Chore
+
+ - <csr-id-83cfe826e8b543bdeead54c0f9500706fbb72a7b/> versions
+ - <csr-id-0b05a7df3c8ca442ba6070416a4ff5b1fcdd4393/> ora version
+
+### New Features
+
+ - <csr-id-d6279daf534d793811232a2b8e765e8cd520bff2/> task api enhancements and worker registry
+
+### Bug Fixes
+
+ - <csr-id-2c6d98603fc2fd58de707a1176fcbdb5dc6c6df1/> remove generics from schema
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 6 commits contributed to the release.
+ - 54 days passed between releases.
+ - 4 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Remove generics from schema ([`2c6d986`](https://github.com/tamasfe/ora/commit/2c6d98603fc2fd58de707a1176fcbdb5dc6c6df1))
+    - Release ora-macros v0.1.0, ora-timer v0.1.1, ora-scheduler v0.2.1, ora-store-memory v0.3.1, ora-store-sqlx v0.3.2, ora-test v0.3.1, ora v0.4.0 ([`6298b95`](https://github.com/tamasfe/ora/commit/6298b9553fae408543e9c028d32631bc5dc8641f))
+    - Release ora-common v0.1.2, ora-worker v0.4.0, ora-api v0.3.2, ora-macros v0.1.0, ora-timer v0.1.1, ora-scheduler v0.2.1, ora-store-memory v0.3.1, ora-store-sqlx v0.3.2, ora-test v0.3.1, ora v0.4.0 ([`20021a7`](https://github.com/tamasfe/ora/commit/20021a756ac91b3b4503d8f449cb2f000a31e40e))
+    - Versions ([`83cfe82`](https://github.com/tamasfe/ora/commit/83cfe826e8b543bdeead54c0f9500706fbb72a7b))
+    - Ora version ([`0b05a7d`](https://github.com/tamasfe/ora/commit/0b05a7df3c8ca442ba6070416a4ff5b1fcdd4393))
+    - Task api enhancements and worker registry ([`d6279da`](https://github.com/tamasfe/ora/commit/d6279daf534d793811232a2b8e765e8cd520bff2))
+</details>
+
 ## 0.4.0 (2023-11-29)
 
 <csr-id-83cfe826e8b543bdeead54c0f9500706fbb72a7b/>
@@ -18,28 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Features
 
  - <csr-id-d6279daf534d793811232a2b8e765e8cd520bff2/> task api enhancements and worker registry
-
-### Commit Statistics
-
-<csr-read-only-do-not-edit/>
-
- - 4 commits contributed to the release.
- - 54 days passed between releases.
- - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
- - 0 issues like '(#ID)' were seen in commit messages
-
-### Commit Details
-
-<csr-read-only-do-not-edit/>
-
-<details><summary>view details</summary>
-
- * **Uncategorized**
-    - Release ora-common v0.1.2, ora-worker v0.4.0, ora-api v0.3.2, ora-macros v0.1.0, ora-timer v0.1.1, ora-scheduler v0.2.1, ora-store-memory v0.3.1, ora-store-sqlx v0.3.2, ora-test v0.3.1, ora v0.4.0 ([`20021a7`](https://github.com/tamasfe/ora/commit/20021a756ac91b3b4503d8f449cb2f000a31e40e))
-    - Versions ([`83cfe82`](https://github.com/tamasfe/ora/commit/83cfe826e8b543bdeead54c0f9500706fbb72a7b))
-    - Ora version ([`0b05a7d`](https://github.com/tamasfe/ora/commit/0b05a7df3c8ca442ba6070416a4ff5b1fcdd4393))
-    - Task api enhancements and worker registry ([`d6279da`](https://github.com/tamasfe/ora/commit/d6279daf534d793811232a2b8e765e8cd520bff2))
-</details>
 
 ## 0.3.1 (2023-10-06)
 
