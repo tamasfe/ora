@@ -5,23 +5,22 @@ use ora_client::{
     ClientOperations, LabelMatch, LabelValueMatch, ScheduleListOrder, ScheduleOperations,
     Schedules, TaskListOrder, TaskOperations, Tasks,
 };
-use ora_worker::registry::WorkerRegistry;
 use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::common::{GqlScheduleDefinition, GqlTaskDefinition, GqlTaskResult, GqlTaskStatus, Worker};
+use crate::common::{
+    GqlScheduleDefinition, GqlTaskDefinition, GqlTaskResult, GqlTaskStatus, GqlWorkerRegistry,
+    Worker,
+};
 
-pub struct Query<W: WorkerRegistry> {
+pub struct Query {
     pub(crate) client: Arc<dyn ClientOperations>,
-    pub(crate) worker_registry: W,
+    pub(crate) worker_registry: Arc<dyn GqlWorkerRegistry>,
 }
 
 #[Object]
-impl<W> Query<W>
-where
-    W: WorkerRegistry + Send + Sync + 'static,
-{
+impl Query {
     async fn task_count(&self, options: Option<GqlTaskListOptions>) -> async_graphql::Result<u64> {
         let options = options.map(Tasks::from).unwrap_or_default();
         self.client
@@ -39,6 +38,7 @@ where
         Ok(Task {
             client: self.client.clone(),
             ops,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -54,6 +54,7 @@ where
             .map(|ops| Task {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             })
             .collect())
     }
@@ -81,6 +82,7 @@ where
         Ok(Schedule {
             client: self.client.clone(),
             ops,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -98,6 +100,7 @@ where
             .map(|ops| Schedule {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             })
             .collect())
     }
@@ -117,18 +120,17 @@ where
         Ok(self
             .worker_registry
             .workers()
-            .await
-            .map_err(async_graphql::Error::new_with_source)?
+            .await?
             .into_iter()
             .map(Into::into)
             .collect())
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct Task {
     pub(crate) client: Arc<dyn ClientOperations>,
     pub(crate) ops: Arc<dyn TaskOperations>,
+    pub(crate) worker_registry: Arc<dyn GqlWorkerRegistry>,
 }
 
 #[Object]
@@ -169,6 +171,7 @@ impl Task {
             .map(|ops| Schedule {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             }))
     }
     async fn added_at(&self) -> async_graphql::Result<OffsetDateTime> {
@@ -235,12 +238,32 @@ impl Task {
             .await
             .map_err(async_graphql::Error::new_with_source)
     }
+
+    async fn worker(&self) -> async_graphql::Result<Option<Worker>> {
+        let worker_id = self
+            .ops
+            .worker_id()
+            .await
+            .map_err(async_graphql::Error::new_with_source)?;
+
+        let Some(worker_id) = worker_id else {
+            return Ok(None);
+        };
+
+        Ok(self
+            .worker_registry
+            .workers()
+            .await?
+            .into_iter()
+            .find(|w| w.id == worker_id)
+            .map(Into::into))
+    }
 }
 
-#[derive(Debug)]
 pub(crate) struct Schedule {
     pub(crate) client: Arc<dyn ClientOperations>,
     pub(crate) ops: Arc<dyn ScheduleOperations>,
+    pub(crate) worker_registry: Arc<dyn GqlWorkerRegistry>,
 }
 
 #[Object]
@@ -292,6 +315,7 @@ impl Schedule {
         Ok(ops.map(|ops| Task {
             client: self.client.clone(),
             ops,
+            worker_registry: self.worker_registry.clone(),
         }))
     }
 
@@ -307,6 +331,7 @@ impl Schedule {
             .map(|ops| Task {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             })
             .collect())
     }

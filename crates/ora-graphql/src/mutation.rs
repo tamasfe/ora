@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use async_graphql::{OneofObject, InputObject, Object};
+use async_graphql::{InputObject, Object, OneofObject};
 use base64::Engine;
 use ora_client::ClientOperations;
 use serde_json::Value;
@@ -9,14 +9,15 @@ use uuid::Uuid;
 
 use crate::{
     common::{
-        GqlScheduleDefinition, GqlTaskDefinition, GqlTimeoutPolicy, GqlWorkerSelector, Label, GqlTaskDataFormat,
+        GqlScheduleDefinition, GqlTaskDataFormat, GqlTaskDefinition, GqlTimeoutPolicy,
+        GqlWorkerSelector, Label, GqlWorkerRegistry,
     },
     query::{GqlScheduleListOptions, GqlTaskListOptions, Schedule, Task},
 };
 
-#[derive(Debug)]
 pub struct Mutation {
     pub(crate) client: Arc<dyn ClientOperations>,
+    pub(crate) worker_registry: Arc<dyn GqlWorkerRegistry>,
 }
 
 #[Object]
@@ -39,6 +40,7 @@ impl Mutation {
         Ok(Task {
             client: self.client.clone(),
             ops,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -54,6 +56,7 @@ impl Mutation {
         Ok(Task {
             client: self.client.clone(),
             ops: task,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -73,6 +76,7 @@ impl Mutation {
             .map(|ops| Task {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             })
             .collect())
     }
@@ -96,6 +100,7 @@ impl Mutation {
         Ok(Schedule {
             client: self.client.clone(),
             ops,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -112,6 +117,7 @@ impl Mutation {
         Ok(Schedule {
             client: self.client.clone(),
             ops: schedule,
+            worker_registry: self.worker_registry.clone(),
         })
     }
 
@@ -134,6 +140,7 @@ impl Mutation {
             .map(|ops| Schedule {
                 client: self.client.clone(),
                 ops,
+                worker_registry: self.worker_registry.clone(),
             })
             .collect())
     }

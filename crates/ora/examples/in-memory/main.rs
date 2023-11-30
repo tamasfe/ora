@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use ora::{Handler, IntoHandler, MemoryStore, Scheduler, Task, Worker};
 use ora_api::client::Client;
 use ora_common::timeout::TimeoutPolicy;
-use ora_worker::TaskContext;
+use ora_worker::{TaskContext, registry::noop::NoopWorkerRegistry};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;
@@ -157,7 +157,7 @@ async fn run_graphql_server(store: MemoryStore) {
         response::Html(GraphiQLSource::build().endpoint("/").finish())
     }
 
-    let schema: OraSchema = create_schema(store, Default::default());
+    let schema: OraSchema = create_schema(store, NoopWorkerRegistry);
 
     let app = Router::new()
         .route("/", get(graphiql).post(graphql_handler))

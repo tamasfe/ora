@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashMap};
 
-use async_graphql::{ComplexObject, Enum, InputObject, OneofObject, SimpleObject, Union};
+use async_graphql::{
+    async_trait::async_trait, ComplexObject, Enum, InputObject, OneofObject, SimpleObject, Union,
+};
 use base64::Engine;
 use ora_client::RawTaskResult;
 use ora_common::{
@@ -8,7 +10,7 @@ use ora_common::{
     task::{TaskDataFormat, TaskDefinition, TaskMetadata, TaskStatus, WorkerSelector},
     timeout::TimeoutPolicy,
 };
-use ora_worker::registry::{SupportedTask, WorkerInfo};
+use ora_worker::registry::{SupportedTask, WorkerInfo, WorkerRegistry};
 use serde_json::Value;
 use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
@@ -558,5 +560,29 @@ impl From<TaskMetadata> for WorkerSupportedTaskMetadata {
             output_schema: value.output_schema,
             other: value.other,
         }
+    }
+}
+
+/// A wrapper trait for worker registries to be
+/// used in a GraphQL context.
+#[async_trait]
+pub trait GqlWorkerRegistry: Send + Sync + 'static {
+    async fn workers(&self) -> async_graphql::Result<Vec<WorkerInfo>>;
+    fn enabled(&self) -> bool;
+}
+
+#[async_trait]
+impl<T> GqlWorkerRegistry for T
+where
+    T: WorkerRegistry + Send + Sync + 'static,
+{
+    async fn workers(&self) -> async_graphql::Result<Vec<WorkerInfo>> {
+        <Self as WorkerRegistry>::workers(self)
+            .await
+            .map_err(async_graphql::Error::new_with_source)
+    }
+
+    fn enabled(&self) -> bool {
+        <Self as WorkerRegistry>::enabled(self)
     }
 }
