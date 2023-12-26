@@ -16,7 +16,7 @@ futures = "0.3.28"
 ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.1", path = "../ora-scheduler" }
-ora-worker = { version = "^0.4.0", path = "../ora-worker" }
+ora-worker = { version = "^0.4.1", path = "../ora-worker" }
 sea-query = { version = "0.30.0", default-features = false, features = [
   "with-uuid",
   "with-time",

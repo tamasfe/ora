@@ -14,7 +14,7 @@ eyre = "0.6.8"
 futures = "0.3.28"
 ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }
-ora-worker = { version = "^0.4.0", path = "../ora-worker" }
+ora-worker = { version = "^0.4.1", path = "../ora-worker" }
 pin-project-lite = "0.2.10"
 rmp-serde = "1.1.1"
 serde = "1.0.171"
