@@ -160,6 +160,24 @@ impl<S, R> Worker<S, R> {
             chan: self.shutdown_send.clone(),
         }
     }
+
+    /// Get the worker selectors for the handlers
+    /// registered with this worker.
+    pub fn handlers(&self) -> impl Iterator<Item = &WorkerSelector> {
+        self.handlers.keys()
+    }
+
+    /// Return the count of handlers registered.
+    #[must_use]
+    pub fn handler_count(&self) -> usize {
+        self.handlers.len()
+    }
+
+    /// Get the metadata for this worker.
+    #[must_use]
+    pub fn metadata(&self) -> &WorkerMetadata {
+        &self.metadata
+    }
 }
 
 impl<S, R> Worker<S, R>
