@@ -12,7 +12,7 @@ description = "A scheduler framework."
 async-trait = "0.1.71"
 eyre = "0.6.8"
 futures = "0.3.28"
-ora-api = { version = "^0.3.2", path = "../ora-api", optional = true }
+ora-api = { version = "^0.3.3", path = "../ora-api", optional = true }
 ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.1", path = "../ora-scheduler", optional = true }
