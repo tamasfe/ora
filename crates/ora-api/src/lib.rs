@@ -144,6 +144,18 @@ where
     }
 }
 
+#[async_trait]
+impl<F, T, Fut> Handler<T> for F
+where
+    F: Fn(TaskContext, T) -> Fut + Send + Sync + 'static,
+    T: Task,
+    Fut: std::future::Future<Output = eyre::Result<T::Output>> + Send + 'static,
+{
+    async fn run(&self, ctx: TaskContext, task: T) -> eyre::Result<T::Output> {
+        (self)(ctx, task).await
+    }
+}
+
 /// A helper blanket trait for types that might implement [`Handler`]
 /// for multiple [`Task`] types.
 pub trait IntoHandler {
