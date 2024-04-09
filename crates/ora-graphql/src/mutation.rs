@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     common::{
         GqlScheduleDefinition, GqlTaskDataFormat, GqlTaskDefinition, GqlTimeoutPolicy,
-        GqlWorkerSelector, Label, GqlWorkerRegistry,
+        GqlWorkerRegistry, GqlWorkerSelector, Label,
     },
     query::{GqlScheduleListOptions, GqlTaskListOptions, Schedule, Task},
 };

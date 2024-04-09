@@ -10,6 +10,8 @@ pub use ora_common::{
     task::{TaskDataFormat, TaskDefinition, TaskMetadata, TaskStatus, WorkerSelector},
     timeout::TimeoutPolicy,
 };
+#[cfg(feature = "macros")]
+pub use ora_macros::Task;
 #[cfg(feature = "scheduler")]
 pub use ora_scheduler::scheduler::{Error as SchedulerError, Scheduler};
 #[cfg(feature = "store-memory")]
@@ -23,9 +25,6 @@ pub use ora_worker::{
     worker::{Error as WorkerError, Worker, WorkerOptions},
     TaskContext,
 };
-
-#[cfg(feature = "macros")]
-pub use ora_macros::Task;
 
 #[cfg(feature = "macros")]
 #[doc(hidden)]

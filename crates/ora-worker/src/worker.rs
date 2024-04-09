@@ -288,21 +288,21 @@ where
                     }
                 }
                 _ = heartbeat_interval.tick() => {
+                    let heartbeat_fut = tokio::time::timeout(
+                        REGISTRY_TIMEOUT,
+                        async {
+                            let res = self.registry.heartbeat(self.id, &HeartbeatData {}).await?;
+
+                            if res.should_register {
+                                self.registry.register_worker(self.id, &self.metadata).await?;
+                            }
+
+                            Result::<(), R::Error>::Ok(())
+                        },
+                    );
+
                     if self.registry.enabled() {
-                        match tokio::time::timeout(
-                            REGISTRY_TIMEOUT,
-                            async {
-                                let res = self.registry.heartbeat(self.id, &HeartbeatData {}).await?;
-
-                                if res.should_register {
-                                    self.registry.register_worker(self.id, &self.metadata).await?;
-                                }
-
-                                Result::<(), R::Error>::Ok(())
-                            },
-                        )
-                        .await
-                        {
+                        match heartbeat_fut.await {
                             Ok(Ok(())) => {}
                             Ok(Err(error)) => {
                                 let err = Error::Registry(Box::new(error));
@@ -318,7 +318,9 @@ where
         };
 
         if self.registry.enabled() {
-            match tokio::time::timeout(REGISTRY_TIMEOUT, self.registry.unregister_worker(self.id)).await {
+            match tokio::time::timeout(REGISTRY_TIMEOUT, self.registry.unregister_worker(self.id))
+                .await
+            {
                 Ok(Ok(())) => {}
                 Ok(Err(error)) => {
                     let err = Error::Registry(Box::new(error));

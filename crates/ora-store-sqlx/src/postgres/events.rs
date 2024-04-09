@@ -265,9 +265,7 @@ async fn handle_notification(
                 ))
                 .ok();
             events
-                .send(DbEvent::WorkerStore(
-                    WorkerStoreEvent::TaskCancelled(id),
-                ))
+                .send(DbEvent::WorkerStore(WorkerStoreEvent::TaskCancelled(id)))
                 .ok();
             events
                 .send(DbEvent::SchedulerScheduleStore(

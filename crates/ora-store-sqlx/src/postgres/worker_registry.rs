@@ -64,7 +64,10 @@ impl DbStore<Postgres> {
         .await?;
 
         if options.fail_inactive_worker_tasks {
-            let worker_ids = worker_id_rows.into_iter().map(|(id,)| id).collect::<Vec<_>>();
+            let worker_ids = worker_id_rows
+                .into_iter()
+                .map(|(id,)| id)
+                .collect::<Vec<_>>();
 
             query(
                 r#"--sql

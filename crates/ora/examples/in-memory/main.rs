@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use ora::{Handler, IntoHandler, MemoryStore, Scheduler, Task, Worker};
 use ora_api::client::Client;
 use ora_common::timeout::TimeoutPolicy;
-use ora_worker::{TaskContext, registry::noop::NoopWorkerRegistry};
+use ora_worker::{registry::noop::NoopWorkerRegistry, TaskContext};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::Value;

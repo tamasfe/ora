@@ -53,7 +53,14 @@ fn next_from(schedule: &ScheduleDefinition, time: UnixNanos) -> Option<UnixNanos
 
             c.after(&chrono::Utc.timestamp_nanos(time.0 as _))
                 .next()
-                .and_then(|t| Some(UnixNanos(t.timestamp_nanos().try_into().ok()?)))
+                .and_then(|t| {
+                    Some(UnixNanos(
+                        t.timestamp_nanos_opt()
+                            .unwrap_or_default()
+                            .try_into()
+                            .ok()?,
+                    ))
+                })
         }
     }
 }
