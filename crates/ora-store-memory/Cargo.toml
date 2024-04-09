@@ -19,7 +19,7 @@ memmem = "0.1.1"
 ora-client = { version = "^0.2.0", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.1", path = "../ora-scheduler" }
-ora-worker = { version = "^0.4.1", path = "../ora-worker" }
+ora-worker = { version = "^0.4.2", path = "../ora-worker" }
 parking_lot = "0.12.1"
 thiserror = "1.0.43"
 tokio = { version = "1.29.1", features = ["sync"] }

@@ -5,7 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.4.1 (2024-04-09)
+## 0.4.2 (2024-04-09)
+
+### Chore
+
+ - <csr-id-0f7f9591b2aa50ee2b48e15538da3d3f55e05c51/> version bump
+ - <csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/> lints and fmt
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 4 commits contributed to the release.
+ - 104 days passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Version bump ([`0f7f959`](https://github.com/tamasfe/ora/commit/0f7f9591b2aa50ee2b48e15538da3d3f55e05c51))
+    - Release ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0 ([`e69ed76`](https://github.com/tamasfe/ora/commit/e69ed7697e482d1235416d52e42bafa60d9f140c))
+    - Release ora-timer v0.1.2, ora-util v0.1.1, ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0, safety bump ora v0.5.0 ([`8ce026e`](https://github.com/tamasfe/ora/commit/8ce026ec3b761fd37d85a7bc373aa932d86771ea))
+    - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
+</details>
+
+## 0.4.1 (2023-12-26)
 
 <csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/>
 
@@ -22,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <csr-read-only-do-not-edit/>
 
  - 2 commits contributed to the release.
- - 104 days passed between releases.
+ - 26 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
 
@@ -33,8 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
-    - Release ora-timer v0.1.2, ora-util v0.1.1, ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0, safety bump ora v0.5.0 ([`8ce026e`](https://github.com/tamasfe/ora/commit/8ce026ec3b761fd37d85a7bc373aa932d86771ea))
-    - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
+    - Release ora-worker v0.4.1 ([`35a4c53`](https://github.com/tamasfe/ora/commit/35a4c53c854af0502b830c5cd9bb48a4f511ac8d))
+    - Expose worker fields ([`8bc24b7`](https://github.com/tamasfe/ora/commit/8bc24b75c68dfb905d514973904175f0958d2aa9))
 </details>
 
 ## 0.4.0 (2023-11-29)
@@ -152,7 +181,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <csr-unknown>
 <csr-unknown>
 <csr-unknown>
+<csr-unknown>
 renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
+<csr-unknown/>
 <csr-unknown/>
 <csr-unknown/>
 <csr-unknown/>

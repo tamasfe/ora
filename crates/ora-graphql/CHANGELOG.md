@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 4 commits contributed to the release over the course of 104 calendar days.
+ - 5 commits contributed to the release over the course of 104 calendar days.
  - 131 days passed between releases.
  - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0 ([`e69ed76`](https://github.com/tamasfe/ora/commit/e69ed7697e482d1235416d52e42bafa60d9f140c))
     - Release ora-timer v0.1.2, ora-util v0.1.1, ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0, safety bump ora v0.5.0 ([`8ce026e`](https://github.com/tamasfe/ora/commit/8ce026ec3b761fd37d85a7bc373aa932d86771ea))
     - Update ([`69034fa`](https://github.com/tamasfe/ora/commit/69034fa2aa7285b366acfc59296b8c9db7b88cff))
     - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
