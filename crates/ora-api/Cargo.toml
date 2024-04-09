@@ -1,6 +1,6 @@
 [package]
 name = "ora-api"
-version= "0.3.3"
+version= "0.3.4"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
