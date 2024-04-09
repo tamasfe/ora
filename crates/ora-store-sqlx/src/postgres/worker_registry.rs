@@ -8,6 +8,7 @@ use ora_worker::registry::{
 use serde_json::Value;
 use sqlx::{query, query_as, types::Json, FromRow, Postgres};
 use time::OffsetDateTime;
+use uuid::Uuid;
 
 use super::DbStore;
 
@@ -15,9 +16,14 @@ use super::DbStore;
 #[derive(Debug, Clone)]
 pub struct WorkerRegistryMaintenanceOptions {
     /// Mark workers as inactive after this duration.
+    ///
+    /// Inactive workers are considered to be offline and they are
+    /// not expected to reappear.
     pub worker_inactive_after: time::Duration,
-    /// Remove inactive workers after this duration.
+    /// Remove inactive workers after this duration from the registry.
     pub remove_inactive_workers_after: time::Duration,
+    /// Fail running tasks of a worker once it is marked as inactive.
+    pub fail_inactive_worker_tasks: bool,
 }
 
 impl Default for WorkerRegistryMaintenanceOptions {
@@ -25,23 +31,24 @@ impl Default for WorkerRegistryMaintenanceOptions {
         Self {
             worker_inactive_after: time::Duration::minutes(5),
             remove_inactive_workers_after: time::Duration::minutes(60),
+            fail_inactive_worker_tasks: true,
         }
     }
 }
 
 impl DbStore<Postgres> {
     /// Perform maintenance on the worker registry.
-    /// 
+    ///
     /// This will mark workers as inactive and remove inactive workers.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// This will return an error if the database operation fails.
     pub async fn worker_registry_maintenance(
         &self,
         options: &WorkerRegistryMaintenanceOptions,
     ) -> Result<(), sqlx::Error> {
-        query(
+        let worker_id_rows: Vec<(Uuid,)> = query_as(
             r#"--sql
             UPDATE "ora"."worker"
             SET
@@ -49,11 +56,31 @@ impl DbStore<Postgres> {
             WHERE 
                 "active" = TRUE
                 AND "last_seen" < NOW() - $1::INTERVAL
+            RETURNING "id"
             "#,
         )
         .bind(options.worker_inactive_after)
-        .execute(&self.db)
+        .fetch_all(&self.db)
         .await?;
+
+        if options.fail_inactive_worker_tasks {
+            let worker_ids = worker_id_rows.into_iter().map(|(id,)| id).collect::<Vec<_>>();
+
+            query(
+                r#"--sql
+                UPDATE "ora"."task"
+                SET
+                    "status" = 'failed',
+                    "failure_reason" = 'worker has became inactive',
+                    "failed_at" = NOW()
+                WHERE "worker_id" = ANY($1) AND "active"
+                RETURNING pg_notify('ora_task_failed', "id"::TEXT) AS "notified";
+                "#,
+            )
+            .bind(worker_ids)
+            .execute(&self.db)
+            .await?;
+        }
 
         query(
             r#"--sql
