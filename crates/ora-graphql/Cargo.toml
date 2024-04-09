@@ -9,12 +9,12 @@ description = "Part of the Ora scheduler framework."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-graphql = { version = "6.0.0", default-features = false, features = [
+async-graphql = { version = "7.0.3", default-features = false, features = [
   "tracing",
   "time",
   "uuid",
 ] }
-base64 = "0.21.2"
+base64 = "0.22.0"
 eyre = "0.6.8"
 ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }

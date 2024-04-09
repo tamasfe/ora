@@ -145,7 +145,7 @@ async fn run_graphql_server(store: MemoryStore) {
         extract::Extension,
         response::{self, IntoResponse},
         routing::get,
-        Router, Server,
+        Router,
     };
     use ora_graphql::{create_schema, OraSchema};
 
@@ -168,8 +168,8 @@ async fn run_graphql_server(store: MemoryStore) {
         "running graphql interface"
     );
 
-    Server::bind(&"127.0.0.1:8080".parse().unwrap())
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080")
         .await
         .unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
