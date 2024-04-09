@@ -1,6 +1,6 @@
 [package]
 name = "ora"
-version= "0.4.1"
+version= "0.5.0"
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
@@ -17,7 +17,7 @@ ora-client = { version = "^0.2.1", path = "../ora-client" }
 ora-common = { version = "^0.1.2", path = "../ora-common" }
 ora-scheduler = { version = "^0.2.1", path = "../ora-scheduler", optional = true }
 ora-store-memory = { version = "^0.3.1", path = "../ora-store-memory", optional = true }
-ora-store-sqlx = { version = "^0.3.2", path = "../ora-store-sqlx", optional = true }
+ora-store-sqlx = { version = "^0.4.0", path = "../ora-store-sqlx", optional = true }
 ora-worker = { version = "^0.4.1", path = "../ora-worker", optional = true }
 ora-test = { version = "^0.3.1", path = "../ora-test", optional = true }
 ora-macros = { version = "^0.1.0", path = "../ora-macros", optional = true }
@@ -45,7 +45,7 @@ async-graphql = "7.0.3"
 async-graphql-axum = "7.0.3"
 async-trait = "0.1.71"
 axum = "0.7.5"
-ora-graphql = { version = "^0.4.1", path = "../ora-graphql" }
+ora-graphql = { version = "^0.5.0", path = "../ora-graphql" }
 serde = { version = "1.0.171", features = ["derive"] }
 tokio = { version = "1.29.1", features = ["rt", "rt-multi-thread", "macros"] }
 tracing = "0.1.37"

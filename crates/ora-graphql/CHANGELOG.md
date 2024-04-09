@@ -5,7 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.5.0 (2024-04-09)
+
+### Chore
+
+ - <csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/> lints and fmt
+
+### Other
+
+ - <csr-id-69034fa2aa7285b366acfc59296b8c9db7b88cff/> update
+
+### Commit Statistics
+
+<csr-read-only-do-not-edit/>
+
+ - 3 commits contributed to the release over the course of 104 calendar days.
+ - 131 days passed between releases.
+ - 2 commits were understood as [conventional](https://www.conventionalcommits.org).
+ - 0 issues like '(#ID)' were seen in commit messages
+
+### Commit Details
+
+<csr-read-only-do-not-edit/>
+
+<details><summary>view details</summary>
+
+ * **Uncategorized**
+    - Update ([`69034fa`](https://github.com/tamasfe/ora/commit/69034fa2aa7285b366acfc59296b8c9db7b88cff))
+    - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
+    - Release ora-worker v0.4.1 ([`35a4c53`](https://github.com/tamasfe/ora/commit/35a4c53c854af0502b830c5cd9bb48a4f511ac8d))
+</details>
+
 ## 0.4.1 (2023-11-30)
+
+<csr-id-83cfe826e8b543bdeead54c0f9500706fbb72a7b/>
 
 ### Chore
 
@@ -23,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 5 commits contributed to the release over the course of 54 calendar days.
+ - 6 commits contributed to the release over the course of 54 calendar days.
  - 69 days passed between releases.
  - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -35,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-graphql v0.4.1, ora v0.4.1 ([`a8315b4`](https://github.com/tamasfe/ora/commit/a8315b453a49f033cb3c1f1314864660df040b9a))
     - Remove generics from schema ([`2c6d986`](https://github.com/tamasfe/ora/commit/2c6d98603fc2fd58de707a1176fcbdb5dc6c6df1))
     - Release ora-common v0.1.2, ora-worker v0.4.0, ora-api v0.3.2, ora-macros v0.1.0, ora-timer v0.1.1, ora-scheduler v0.2.1, ora-store-memory v0.3.1, ora-store-sqlx v0.3.2, ora-test v0.3.1, ora v0.4.0 ([`20021a7`](https://github.com/tamasfe/ora/commit/20021a756ac91b3b4503d8f449cb2f000a31e40e))
     - Versions ([`83cfe82`](https://github.com/tamasfe/ora/commit/83cfe826e8b543bdeead54c0f9500706fbb72a7b))
