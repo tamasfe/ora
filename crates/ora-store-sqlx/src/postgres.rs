@@ -32,6 +32,7 @@ use sqlx::{
     types::{time::OffsetDateTime, Json},
     Connection, Executor, PgPool, Postgres, Row,
 };
+use tap::TapFallible;
 use tokio::sync::broadcast::{self, error::RecvError};
 use uuid::Uuid;
 
@@ -156,9 +157,16 @@ impl DbStore<Postgres> {
                     TaskDataFormat::Unknown | TaskDataFormat::MessagePack => {
                         Option::<Value>::None.into()
                     }
-                    TaskDataFormat::Json => {
-                        Some(serde_json::from_slice::<Value>(&task.data).unwrap()).into()
-                    }
+                    TaskDataFormat::Json => Some(
+                        serde_json::from_slice::<Value>(&task.data)
+                            .tap_err(|error| {
+                                tracing::error!(
+                                %error,
+                                "invalid task JSON data");
+                            })
+                            .unwrap_or_default(),
+                    )
+                    .into(),
                 },
                 // Task::DataFormat
                 task.data_format.as_str().into(),
@@ -1448,7 +1456,13 @@ impl WorkerStore for DbStore<Postgres> {
                     "#,
                 )
                 .bind(task_id)
-                .bind(serde_json::from_slice::<Value>(&output).unwrap())
+                .bind(
+                    serde_json::from_slice::<Value>(&output)
+                        .tap_err(|error| {
+                            tracing::error!(error = ?error, "failed to parse task output JSON");
+                        })
+                        .unwrap_or_default(),
+                )
                 .bind(output_format.as_str())
                 .execute(&self.db)
                 .await?;

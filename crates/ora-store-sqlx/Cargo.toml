@@ -37,6 +37,7 @@ sqlx = { version = "0.7.1", features = [
   "json",
 ], default-features = false }
 sqlx-migrate = { version = "0.7.0" }
+tap = "1.0.1"
 time = "0.3.23"
 tokio = { version = "1.29.1", features = ["time", "rt", "sync", "macros"] }
 tracing = "0.1.37"
