@@ -16,7 +16,7 @@ tracing = "0.1.37"
 [dev-dependencies]
 criterion = "0.5.1"
 futures = "0.3.28"
-thread-priority = "0.13.1"
+thread-priority = "0.16.0"
 time = "0.3.23"
 tokio = { version = "1.29.1", features = ["rt-multi-thread", "macros", "sync"] }
 tracing-subscriber = "0.3.17"
