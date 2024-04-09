@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.4.0 (2024-04-09)
 
+<csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/>
+
 ### Chore
 
  - <csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/> lints and fmt
@@ -20,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 4 commits contributed to the release over the course of 104 calendar days.
+ - 5 commits contributed to the release over the course of 104 calendar days.
  - 131 days passed between releases.
  - 3 commits were understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -32,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-timer v0.1.2, ora-util v0.1.1, ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0, safety bump ora v0.5.0 ([`8ce026e`](https://github.com/tamasfe/ora/commit/8ce026ec3b761fd37d85a7bc373aa932d86771ea))
     - Do not panic on invalid JSON ([`e43b1a6`](https://github.com/tamasfe/ora/commit/e43b1a6d8c0eb6be0e1b15273bb129723c6c6b02))
     - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
     - Fail tasks of inactive workers ([`2cc5958`](https://github.com/tamasfe/ora/commit/2cc5958cb9bf2d7bcb9646effe2a2ef89a1520e3))

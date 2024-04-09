@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 0.4.1 (2024-04-09)
 
+<csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/>
+
 ### Chore
 
  - <csr-id-4ec05d470e7d49102328c54ece287d10e6cb1400/> lints and fmt
@@ -19,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <csr-read-only-do-not-edit/>
 
- - 1 commit contributed to the release.
+ - 2 commits contributed to the release.
  - 104 days passed between releases.
  - 1 commit was understood as [conventional](https://www.conventionalcommits.org).
  - 0 issues like '(#ID)' were seen in commit messages
@@ -31,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <details><summary>view details</summary>
 
  * **Uncategorized**
+    - Release ora-timer v0.1.2, ora-util v0.1.1, ora-worker v0.4.1, ora-store-sqlx v0.4.0, ora-graphql v0.5.0, safety bump ora v0.5.0 ([`8ce026e`](https://github.com/tamasfe/ora/commit/8ce026ec3b761fd37d85a7bc373aa932d86771ea))
     - Lints and fmt ([`4ec05d4`](https://github.com/tamasfe/ora/commit/4ec05d470e7d49102328c54ece287d10e6cb1400))
 </details>
 
@@ -148,7 +151,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <csr-unknown>
 <csr-unknown>
 <csr-unknown>
+<csr-unknown>
 renamed Worker -> Handlerrenamed WorkerPool -> Worker<csr-unknown/>
+<csr-unknown/>
 <csr-unknown/>
 <csr-unknown/>
 <csr-unknown/>
