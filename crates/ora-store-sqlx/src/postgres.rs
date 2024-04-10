@@ -7,6 +7,11 @@ use std::{
     sync::{atomic::Ordering, Arc},
 };
 
+use super::DbStore;
+use crate::{
+    models::{DbEvent, Ora, Schedule, Task},
+    DbStoreOptions,
+};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -36,13 +41,8 @@ use tap::TapFallible;
 use tokio::sync::broadcast::{self, error::RecvError};
 use uuid::Uuid;
 
-use super::DbStore;
-use crate::{
-    models::{DbEvent, Ora, Schedule, Task},
-    DbStoreOptions,
-};
-
 mod events;
+mod maintenance;
 mod migrations;
 mod worker_registry;
 

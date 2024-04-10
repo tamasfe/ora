@@ -4,7 +4,8 @@
 #![allow(
     clippy::too_many_lines,
     clippy::needless_raw_string_hashes,
-    clippy::enum_variant_names
+    clippy::enum_variant_names,
+    clippy::module_name_repetitions
 )]
 
 use std::{
