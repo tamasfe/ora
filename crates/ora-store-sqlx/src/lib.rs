@@ -21,7 +21,7 @@ use tokio::sync::broadcast;
 
 pub(crate) mod models;
 #[cfg(feature = "postgres")]
-pub(crate) mod postgres;
+pub mod postgres;
 
 /// Store options.
 #[derive(Debug, Clone)]

@@ -42,9 +42,14 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use uuid::Uuid;
 
 mod events;
-mod maintenance;
+pub mod maintenance;
 mod migrations;
 mod worker_registry;
+
+pub use maintenance::{
+    MaintenanceOptions, ScheduleMaintenanceOptions, TaskMaintenanceOptions,
+    WorkerRegistryMaintenanceOptions,
+};
 
 impl DbStore<Postgres> {
     /// Create a new store backed by the given pool.
