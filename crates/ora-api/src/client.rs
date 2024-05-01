@@ -61,6 +61,9 @@ pub trait Client: core::fmt::Debug + Send + Sync + 'static {
     /// Count current tasks.
     async fn task_count(&self, options: &Tasks) -> eyre::Result<u64>;
 
+    /// Check whether any tasks exist that match the given options.
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool>;
+
     /// Cancel all matching tasks and return handles to tasks
     /// that were cancelled.
     ///
@@ -89,6 +92,9 @@ pub trait Client: core::fmt::Debug + Send + Sync + 'static {
 
     /// Count current schedules.
     async fn schedule_count(&self, options: &Schedules) -> eyre::Result<u64>;
+
+    /// Check whether any schedules exist that match the given options.
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool>;
 
     /// Cancel all matching schedules and return handles to schedules
     /// that were cancelled.
@@ -128,6 +134,9 @@ pub trait ClientObj {
     /// Count current tasks.
     async fn task_count(&self, options: &Tasks) -> eyre::Result<u64>;
 
+    /// Check whether any tasks exist that match the given options.
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool>;
+
     /// Add a new schedule.
     async fn add_schedule(&self, schedule: ScheduleDefinition) -> eyre::Result<ScheduleHandle>;
 
@@ -148,6 +157,9 @@ pub trait ClientObj {
 
     /// Count current schedules.
     async fn schedule_count(&self, options: &Schedules) -> eyre::Result<u64>;
+
+    /// Check whether any schedules exist that match the given options.
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool>;
 
     /// Cancel all matching schedules and return handles to schedules
     /// that were cancelled.
@@ -224,6 +236,10 @@ where
         <Self as ClientOperations>::task_count(self, options).await
     }
 
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool> {
+        <Self as ClientOperations>::tasks_exist(self, options).await
+    }
+
     async fn cancel_tasks(&self, options: &Tasks) -> eyre::Result<Vec<TaskHandle>> {
         let options = options.clone().active(true).limit(u64::MAX);
         let ids = <Self as ClientOperations>::cancel_tasks(self, &options).await?;
@@ -283,6 +299,10 @@ where
         <Self as ClientOperations>::schedule_count(self, options).await
     }
 
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool> {
+        <Self as ClientOperations>::schedules_exist(self, options).await
+    }
+
     async fn cancel_schedules(&self, options: &Schedules) -> eyre::Result<Vec<ScheduleHandle>> {
         let options = options.clone().active(true).limit(u64::MAX);
         let ids = <Self as ClientOperations>::cancel_schedules(self, &options).await?;
@@ -326,6 +346,10 @@ where
         <Self as Client>::task_count(self, options).await
     }
 
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool> {
+        <Self as Client>::tasks_exist(self, options).await
+    }
+
     async fn add_schedule(&self, schedule: ScheduleDefinition) -> eyre::Result<ScheduleHandle> {
         <Self as Client>::add_schedule(self, schedule).await
     }
@@ -347,6 +371,10 @@ where
 
     async fn schedule_count(&self, options: &Schedules) -> eyre::Result<u64> {
         <Self as Client>::schedule_count(self, options).await
+    }
+
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool> {
+        <Self as Client>::schedules_exist(self, options).await
     }
 
     async fn cancel_schedules(&self, options: &Schedules) -> eyre::Result<Vec<ScheduleHandle>> {

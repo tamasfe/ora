@@ -26,6 +26,10 @@ pub trait ClientOperations: core::fmt::Debug + Send + Sync + 'static {
     async fn task(&self, task_id: Uuid) -> eyre::Result<Arc<dyn TaskOperations>>;
     async fn tasks(&self, options: &Tasks) -> eyre::Result<Vec<Arc<dyn TaskOperations>>>;
     async fn task_count(&self, options: &Tasks) -> eyre::Result<u64>;
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool> {
+        Ok(self.task_count(options).await? > 0)
+    }
+
     async fn task_labels(&self) -> eyre::Result<Vec<String>>;
     async fn task_kinds(&self) -> eyre::Result<Vec<String>>;
 
@@ -36,6 +40,10 @@ pub trait ClientOperations: core::fmt::Debug + Send + Sync + 'static {
         options: &Schedules,
     ) -> eyre::Result<Vec<Arc<dyn ScheduleOperations>>>;
     async fn schedule_count(&self, options: &Schedules) -> eyre::Result<u64>;
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool> {
+        Ok(self.schedule_count(options).await? > 0)
+    }
+
     async fn schedule_labels(&self) -> eyre::Result<Vec<String>>;
 
     async fn add_tasks(

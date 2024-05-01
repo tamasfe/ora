@@ -303,6 +303,31 @@ impl ClientOperations for DbStore<Postgres> {
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
+    async fn tasks_exist(&self, options: &Tasks) -> eyre::Result<bool> {
+        let mut options = options.clone();
+        options.offset = 0;
+        options.limit = 1;
+
+        let (inner_sql, values) = Query::select()
+            .expr(Expr::value(1))
+            .from((Ora, Task::Table))
+            .cond_where(filter_tasks(&options))
+            .build(PostgresQueryBuilder);
+
+        let sql = format!(
+            r#"--sql
+            SELECT EXISTS ({inner_sql}) AS "exists"
+            "#,
+        );
+
+        let res: (bool,) = query_as_with(&sql, SqlxValues(values))
+            .fetch_one(&self.db)
+            .await?;
+
+        Ok(res.0)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
     async fn task_labels(&self) -> eyre::Result<Vec<String>> {
         let labels: Vec<String> = query(
             r#"--sql
@@ -433,6 +458,31 @@ impl ClientOperations for DbStore<Postgres> {
             .await?;
 
         Ok(res.0 as _)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    async fn schedules_exist(&self, options: &Schedules) -> eyre::Result<bool> {
+        let mut options = options.clone();
+        options.offset = 0;
+        options.limit = 1;
+
+        let (inner_sql, values) = Query::select()
+            .expr(Expr::value(1))
+            .from((Ora, Schedule::Table))
+            .cond_where(filter_schedules(&options))
+            .build(PostgresQueryBuilder);
+
+        let sql = format!(
+            r#"--sql
+            SELECT EXISTS ({inner_sql}) AS "exists"
+            "#,
+        );
+
+        let res: (bool,) = query_as_with(&sql, SqlxValues(values))
+            .fetch_one(&self.db)
+            .await?;
+
+        Ok(res.0)
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
