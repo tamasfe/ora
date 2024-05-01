@@ -23,6 +23,10 @@ pub mod _3_worker_registry_migrate {}
 #[allow(clippy::all, clippy::pedantic)]
 /// Created at 20231129200626.
 pub mod _3_worker_registry_revert {}
+#[allow(dead_code)]
+#[allow(clippy::all, clippy::pedantic)]
+/// Created at 20240501200626.
+pub mod _4_label_indexes_migrate {}
 /// All the migrations.
 pub fn migrations() -> impl IntoIterator<Item = Migration<sqlx::Postgres>> {
     [
@@ -113,5 +117,20 @@ pub fn migrations() -> impl IntoIterator<Item = Migration<sqlx::Postgres>> {
                     .await?;
                 Ok(())
             })),
+        sqlx_migrate::Migration::new(
+            "label_indexes",
+            |ctx| std::boxed::Box::pin(async move {
+                use sqlx::Executor;
+                let ctx: &mut sqlx_migrate::prelude::MigrationContext<sqlx::Postgres> = ctx;
+                ctx.tx()
+                    .execute(
+                        include_str!(
+                            "/home/tamasfe/work/opensauce/ora/master/crates/ora-store-sqlx/migrations/postgres/20240501200626_label_indexes.migrate.sql"
+                        ),
+                    )
+                    .await?;
+                Ok(())
+            }),
+        ),
     ]
 }

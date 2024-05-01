@@ -1550,12 +1550,12 @@ fn filter_tasks(options: &Tasks) -> impl IntoCondition {
                 .schedule_id
                 .map(|schedule_id| Expr::col(Task::ScheduleId).eq(schedule_id)),
         )
-        .add_option(
-            options
-                .kind
-                .as_ref()
-                .map(|kind| Expr::cust_with_values(r#""worker_selector" ->> 'kind' = $1"#, [kind])),
-        )
+        .add_option(options.kind.as_ref().map(|kind| {
+            Expr::cust_with_values(
+                r#""worker_selector" @> build_jsonb_object('kind', $1)"#,
+                [kind],
+            )
+        }))
         .add_option(options.search.as_ref().map(|search| {
             let like = format!("%{search}%");
 
@@ -1584,7 +1584,7 @@ fn filter_tasks(options: &Tasks) -> impl IntoCondition {
                     ora_client::LabelValueMatch::Value(label_value) => {
                         label_cond =
                             label_cond.add(Expr::cust_with_values::<_, sea_query::Value, _>(
-                                r#""labels" -> $1 = $2"#,
+                                r#""labels" @> jsonb_build_object($1, $2)"#,
                                 [(label.label.as_str()).into(), label_value.clone().into()],
                             ));
                     }
@@ -1664,7 +1664,7 @@ fn filter_schedules(options: &Schedules) -> impl IntoCondition {
                     ora_client::LabelValueMatch::Value(label_value) => {
                         label_cond =
                             label_cond.add(Expr::cust_with_values::<_, sea_query::Value, _>(
-                                r#""labels" -> $1 = $2"#,
+                                r#""labels" @> jsonb_build_object($1, $2)"#,
                                 [(label.label.as_str()).into(), label_value.clone().into()],
                             ));
                     }
