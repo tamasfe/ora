@@ -1602,7 +1602,7 @@ fn filter_tasks(options: &Tasks) -> impl IntoCondition {
         )
         .add_option(options.kind.as_ref().map(|kind| {
             Expr::cust_with_values(
-                r#""worker_selector" @> build_jsonb_object('kind', $1)"#,
+                r#""worker_selector" @> jsonb_build_object('kind', $1)"#,
                 [kind],
             )
         }))
