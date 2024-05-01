@@ -100,6 +100,11 @@ impl DbStore<Postgres> {
                 WHERE
                     NOT "active"
                     AND "updated" < NOW() - $1::INTERVAL
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM "ora"."task"
+                        WHERE "schedule_id" = "ora"."schedule"."id"
+                    )
                 "#,
             )
             .bind(remove_after)
