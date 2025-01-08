@@ -35,7 +35,7 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
         CREATE TABLE IF NOT EXISTS ora_execution (
             id BLOB PRIMARY KEY NOT NULL,
             job_id BLOB NOT NULL,
-            executor_id TEXT,
+            executor_id BLOB,
             created_at_unix_ns INTEGER NOT NULL,
             ready_at_unix_ns INTEGER,
             assigned_at_unix_ns INTEGER,
