@@ -581,6 +581,58 @@ impl MemoryStorage {
                 });
             }
         }
+
+        if let Some(created_after) = filters.created_after {
+            job_ids.retain(|job_id| {
+                let created_at = self
+                    .schedulable_jobs
+                    .read()
+                    .get(job_id)
+                    .map(|job| job.created_at)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+
+                created_at >= created_after
+            });
+        }
+
+        if let Some(created_before) = filters.created_before {
+            job_ids.retain(|job_id| {
+                let created_at = self
+                    .schedulable_jobs
+                    .read()
+                    .get(job_id)
+                    .map(|job| job.created_at)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+
+                created_at < created_before
+            });
+        }
+
+        if let Some(target_execution_after) = filters.target_execution_time_after {
+            job_ids.retain(|job_id| {
+                let target_execution_time = self
+                    .schedulable_jobs
+                    .read()
+                    .get(job_id)
+                    .map(|job| job.target_execution_time)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+
+                target_execution_time >= target_execution_after
+            });
+        }
+
+        if let Some(target_execution_before) = filters.target_execution_time_before {
+            job_ids.retain(|job_id| {
+                let target_execution_time = self
+                    .schedulable_jobs
+                    .read()
+                    .get(job_id)
+                    .map(|job| job.target_execution_time)
+                    .unwrap_or(SystemTime::UNIX_EPOCH);
+
+                target_execution_time < target_execution_before
+            });
+        }
     }
 
     fn sort_job_query_candidates(&self, job_ids: &mut [Uuid], order: JobQueryOrder) {

@@ -350,6 +350,18 @@ impl FromSql for JobRetryPolicy {
 
 pub(crate) struct SqlSystemTime(pub SystemTime);
 
+impl SqlSystemTime {
+    pub(crate) fn as_i64(&self) -> eyre::Result<i64> {
+        i64::try_from(
+            self.0
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        )
+        .map_err(Into::into)
+    }
+}
+
 impl From<SystemTime> for SqlSystemTime {
     fn from(value: SystemTime) -> Self {
         Self(value)

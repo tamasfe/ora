@@ -1,6 +1,11 @@
 //! Query filters for schedules.
 
-use ora_proto::server::v1::{self, ScheduleQueryOrder};
+use std::time::SystemTime;
+
+use ora_proto::{
+    common::v1::TimeRange,
+    server::v1::{self, ScheduleQueryOrder},
+};
 use uuid::Uuid;
 
 use crate::IndexSet;
@@ -28,6 +33,14 @@ pub struct ScheduleFilter {
     ///
     /// If not provided, all schedules are included.
     pub active: Option<bool>,
+    /// Only include schedules created after the provided time.
+    ///
+    /// The time is inclusive.
+    pub created_after: Option<SystemTime>,
+    /// Only include schedules created before the provided time.
+    ///
+    /// The time is exclusive.
+    pub created_before: Option<SystemTime>,
 }
 
 impl ScheduleFilter {
@@ -101,6 +114,22 @@ impl ScheduleFilter {
         });
         self
     }
+
+    /// Filter by schedules created after the provided time.
+    ///
+    /// The time is inclusive.
+    pub fn created_after(mut self, time: SystemTime) -> Self {
+        self.created_after = Some(time);
+        self
+    }
+
+    /// Filter by schedules created before the provided time.
+    ///
+    /// The time is exclusive.
+    pub fn created_before(mut self, time: SystemTime) -> Self {
+        self.created_before = Some(time);
+        self
+    }
 }
 
 impl From<ScheduleFilter> for v1::ScheduleQueryFilter {
@@ -124,6 +153,10 @@ impl From<ScheduleFilter> for v1::ScheduleQueryFilter {
                 .collect(),
             labels: filter.labels.into_iter().map(Into::into).collect(),
             active: filter.active,
+            created_at: Some(TimeRange {
+                start: filter.created_after.map(Into::into),
+                end: filter.created_before.map(Into::into),
+            }),
         }
     }
 }

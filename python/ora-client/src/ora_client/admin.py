@@ -290,6 +290,10 @@ class AdminClient:
         order: Literal[
             "created_asc", "created_desc", "target_asc", "target_desc"
         ] = "created_asc",
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        target_execution_after: datetime | None = None,
+        target_execution_before: datetime | None = None,
         buffer_size: int = 100,
     ) -> AsyncGenerator[JobHandle, None]:
         """
@@ -327,6 +331,18 @@ class AdminClient:
 
         if active is not None:
             filter.active = active
+
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
+        if target_execution_after is not None:
+            filter.target_execution_time.start = target_execution_after
+
+        if target_execution_before is not None:
+            filter.target_execution_time.end = target_execution_before
 
         match order:
             case "created_asc":
@@ -371,6 +387,10 @@ class AdminClient:
         status: list["JobExecutionStatus"] | None = None,
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        target_execution_after: datetime | None = None,
+        target_execution_before: datetime | None = None,
     ) -> int:
         """
         Count jobs based on the given filters.
@@ -407,6 +427,18 @@ class AdminClient:
         if active is not None:
             filter.active = active
 
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
+        if target_execution_after is not None:
+            filter.target_execution_time.start = target_execution_after
+
+        if target_execution_before is not None:
+            filter.target_execution_time.end = target_execution_before
+
         res = await self._client.count_jobs(
             CountJobsRequest(
                 filter=filter,
@@ -424,6 +456,10 @@ class AdminClient:
         status: list["JobExecutionStatus"] | None = None,
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        target_execution_after: datetime | None = None,
+        target_execution_before: datetime | None = None,
     ) -> bool:
         """
         Check if jobs exist based on the given filters.
@@ -438,6 +474,10 @@ class AdminClient:
                 status=status,
                 labels=labels,
                 active=active,
+                created_after=created_after,
+                created_before=created_before,
+                target_execution_after=target_execution_after,
+                target_execution_before=target_execution_before,
             )
             > 0
         )
@@ -451,6 +491,10 @@ class AdminClient:
         status: list["JobExecutionStatus"] | None = None,
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        target_execution_after: datetime | None = None,
+        target_execution_before: datetime | None = None,
     ):
         """
         Cancel jobs based on the given filters.
@@ -485,6 +529,18 @@ class AdminClient:
 
         if active is not None:
             filter.active = active
+
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
+        if target_execution_after is not None:
+            filter.target_execution_time.start = target_execution_after
+
+        if target_execution_before is not None:
+            filter.target_execution_time.end = target_execution_before
 
         await self._client.cancel_jobs(
             CancelJobsRequest(
@@ -611,6 +667,8 @@ class AdminClient:
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
         job_type_ids: list[str] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
     ) -> AsyncGenerator[ScheduleHandle, None]:
         """
         Retrieve schedules based on the given filters.
@@ -641,6 +699,12 @@ class AdminClient:
         if job_type_ids is not None:
             filter.job_type_ids = job_type_ids
 
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
         cursor = None
 
         while True:
@@ -670,6 +734,8 @@ class AdminClient:
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
         job_type_ids: list[str] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
     ):
         """
         Cancel schedules based on the given filters.
@@ -698,6 +764,12 @@ class AdminClient:
         if job_type_ids is not None:
             filter.job_type_ids = job_type_ids
 
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
         await self._client.cancel_schedules(
             CancelSchedulesRequest(
                 filter=filter,
@@ -710,6 +782,8 @@ class AdminClient:
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
         job_type_ids: list[str] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
     ) -> int:
         """
         Count schedules based on the given filters.
@@ -739,6 +813,12 @@ class AdminClient:
         if job_type_ids is not None:
             filter.job_type_ids = job_type_ids
 
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
         res = await self._client.count_schedules(
             CountSchedulesRequest(
                 filter=filter,
@@ -753,6 +833,8 @@ class AdminClient:
         labels: dict[str, str | Literal[True]] | None = None,
         active: bool | None = None,
         job_type_ids: list[str] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
     ) -> bool:
         """
         Check if schedules exist based on the given filters.
@@ -764,6 +846,8 @@ class AdminClient:
                 labels=labels,
                 active=active,
                 job_type_ids=job_type_ids,
+                created_after=created_after,
+                created_before=created_before,
             )
             > 0
         )
@@ -776,6 +860,10 @@ class AdminClient:
         schedule_ids: list[str] | None = None,
         status: list["JobExecutionStatus"] | None = None,
         labels: dict[str, str | Literal[True]] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
+        target_execution_after: datetime | None = None,
+        target_execution_before: datetime | None = None,
     ) -> None:
         """
         Remove inactive jobs.
@@ -808,6 +896,18 @@ class AdminClient:
                 else:
                     filter.labels.append(JobLabelFilter(key=key, equals=value))
 
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
+
+        if target_execution_after is not None:
+            filter.target_execution_time.start = target_execution_after
+
+        if target_execution_before is not None:
+            filter.target_execution_time.end = target_execution_before
+
         await self._client.delete_inactive_jobs(
             DeleteInactiveJobsRequest(
                 filter=filter,
@@ -819,6 +919,8 @@ class AdminClient:
         schedule_ids: list[str] | None = None,
         labels: dict[str, str | Literal[True]] | None = None,
         job_type_ids: list[str] | None = None,
+        created_after: datetime | None = None,
+        created_before: datetime | None = None,
     ) -> None:
         """
         Remove inactive schedules.
@@ -843,6 +945,12 @@ class AdminClient:
 
         if job_type_ids is not None:
             filter.job_type_ids = job_type_ids
+
+        if created_after is not None:
+            filter.created_at.start = created_after
+
+        if created_before is not None:
+            filter.created_at.end = created_before
 
         await self._client.delete_inactive_schedules(
             DeleteInactiveSchedulesRequest(

@@ -20,7 +20,7 @@ pub(super) fn count_schedules(
         .expr(Expr::cust("COUNT(*)"))
         .from(I("ora_schedule"));
 
-    filter_schedules_query(&mut select_query, filters, None);
+    filter_schedules_query(&mut select_query, filters, None)?;
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
 
@@ -38,7 +38,7 @@ pub(super) fn schedule_ids(
 ) -> eyre::Result<Vec<Uuid>> {
     let mut select_query = Query::select();
     select_query.column(I("id")).from(I("ora_schedule"));
-    filter_schedules_query(&mut select_query, filters, None);
+    filter_schedules_query(&mut select_query, filters, None)?;
     select_query.order_by(I("id"), sea_query::Order::Asc);
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
@@ -67,7 +67,7 @@ pub(super) fn delete_schedules(
         let mut select_query = Query::select();
         select_query.column(I("id")).from(I("ora_schedule"));
 
-        filter_schedules_query(&mut select_query, filters, None);
+        filter_schedules_query(&mut select_query, filters, None)?;
 
         let (query, values) = Query::insert()
             .into_table((I("temp"), I("query_schedules")))
@@ -154,7 +154,7 @@ pub(super) fn query_schedule_details(
         let mut select_query = Query::select();
         select_query.column(I("id")).from(I("ora_schedule"));
 
-        filter_schedules_query(&mut select_query, filters.clone(), last_schedule_id);
+        filter_schedules_query(&mut select_query, filters.clone(), last_schedule_id)?;
         order_schedules_query(&mut select_query, order);
 
         let (query, values) = Query::insert()
@@ -304,13 +304,15 @@ fn filter_schedules_query(
     query: &mut SelectStatement,
     filters: ScheduleQueryFilters,
     after_id: Option<Uuid>,
-) {
+) -> eyre::Result<()> {
     let ScheduleQueryFilters {
         job_ids,
         job_type_ids,
         schedule_ids,
         labels,
         active,
+        created_after,
+        created_before,
     } = filters;
 
     if let Some(after_id) = after_id {
@@ -432,6 +434,20 @@ fn filter_schedules_query(
 
         query.and_where(active_expr);
     }
+
+    if let Some(created_after) = created_after {
+        query.and_where(
+            Expr::col(I("created_at_unix_ns")).gte(SqlSystemTime(created_after).as_i64()?),
+        );
+    }
+
+    if let Some(created_before) = created_before {
+        query.and_where(
+            Expr::col(I("created_at_unix_ns")).lt(SqlSystemTime(created_before).as_i64()?),
+        );
+    }
+
+    Ok(())
 }
 
 fn order_schedules_query(query: &mut SelectStatement, order: ScheduleQueryOrder) {

@@ -108,7 +108,9 @@ pub struct ExportedJob {
     pub retry_policy: ::core::option::Option<super::super::common::v1::JobRetryPolicy>,
     /// The timeout policy of the job.
     #[prost(message, optional, tag = "7")]
-    pub timeout_policy: ::core::option::Option<super::super::common::v1::JobTimeoutPolicy>,
+    pub timeout_policy: ::core::option::Option<
+        super::super::common::v1::JobTimeoutPolicy,
+    >,
     /// The labels of the job.
     #[prost(message, repeated, tag = "8")]
     pub labels: ::prost::alloc::vec::Vec<super::super::common::v1::JobLabel>,
@@ -211,12 +213,14 @@ pub struct ExportedSchedule {
     pub cancelled_at: ::core::option::Option<::prost_types::Timestamp>,
     /// The scheduling policy of the schedule.
     #[prost(message, optional, tag = "7")]
-    pub job_timing_policy:
-        ::core::option::Option<super::super::common::v1::ScheduleJobTimingPolicy>,
+    pub job_timing_policy: ::core::option::Option<
+        super::super::common::v1::ScheduleJobTimingPolicy,
+    >,
     /// The new job policy of the schedule.
     #[prost(message, optional, tag = "8")]
-    pub job_creation_policy:
-        ::core::option::Option<super::super::common::v1::ScheduleJobCreationPolicy>,
+    pub job_creation_policy: ::core::option::Option<
+        super::super::common::v1::ScheduleJobCreationPolicy,
+    >,
     /// The time range of the schedule.
     #[prost(message, optional, tag = "10")]
     pub time_range: ::core::option::Option<super::super::common::v1::TimeRange>,
@@ -257,10 +261,10 @@ pub mod snapshot_service_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     /// A service that provides the ability to export and import
     /// the state of the system for backup and migration purposes.
     ///
@@ -312,8 +316,9 @@ pub mod snapshot_service_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             SnapshotServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -356,12 +361,18 @@ pub mod snapshot_service_client {
             tonic::Response<tonic::codec::Streaming<super::ExportResponse>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.snapshot.v1.SnapshotService/Export");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.snapshot.v1.SnapshotService/Export",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.snapshot.v1.SnapshotService", "Export"));
@@ -375,12 +386,18 @@ pub mod snapshot_service_client {
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = super::ImportRequest>,
         ) -> std::result::Result<tonic::Response<super::ImportResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.snapshot.v1.SnapshotService/Import");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.snapshot.v1.SnapshotService/Import",
+            );
             let mut req = request.into_streaming_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.snapshot.v1.SnapshotService", "Import"));
@@ -395,7 +412,7 @@ pub mod snapshot_service_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with SnapshotServiceServer.
@@ -405,8 +422,10 @@ pub mod snapshot_service_server {
         async fn export(
             &self,
             request: tonic::Request<super::ExportRequest>,
-        ) -> std::result::Result<tonic::Response<BoxStream<super::ExportResponse>>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<BoxStream<super::ExportResponse>>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Import the full snapshot of the system.
@@ -449,7 +468,10 @@ pub mod snapshot_service_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -504,14 +526,16 @@ pub mod snapshot_service_server {
                 "/ora.snapshot.v1.SnapshotService/Export" => {
                     #[allow(non_camel_case_types)]
                     struct ExportSvc<T: SnapshotService>(pub Arc<T>);
-                    impl<T: SnapshotService>
-                        tonic::server::ServerStreamingService<super::ExportRequest>
-                        for ExportSvc<T>
-                    {
+                    impl<
+                        T: SnapshotService,
+                    > tonic::server::ServerStreamingService<super::ExportRequest>
+                    for ExportSvc<T> {
                         type Response = super::ExportResponse;
                         type ResponseStream = BoxStream<super::ExportResponse>;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ExportRequest>,
@@ -548,15 +572,20 @@ pub mod snapshot_service_server {
                 "/ora.snapshot.v1.SnapshotService/Import" => {
                     #[allow(non_camel_case_types)]
                     struct ImportSvc<T: SnapshotService>(pub Arc<T>);
-                    impl<T: SnapshotService>
-                        tonic::server::ClientStreamingService<super::ImportRequest>
-                        for ImportSvc<T>
-                    {
+                    impl<
+                        T: SnapshotService,
+                    > tonic::server::ClientStreamingService<super::ImportRequest>
+                    for ImportSvc<T> {
                         type Response = super::ImportResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::ImportRequest>>,
+                            request: tonic::Request<
+                                tonic::Streaming<super::ImportRequest>,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -587,19 +616,23 @@ pub mod snapshot_service_server {
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    let mut response = http::Response::new(empty_body());
-                    let headers = response.headers_mut();
-                    headers.insert(
-                        tonic::Status::GRPC_STATUS,
-                        (tonic::Code::Unimplemented as i32).into(),
-                    );
-                    headers.insert(
-                        http::header::CONTENT_TYPE,
-                        tonic::metadata::GRPC_CONTENT_TYPE,
-                    );
-                    Ok(response)
-                }),
+                _ => {
+                    Box::pin(async move {
+                        let mut response = http::Response::new(empty_body());
+                        let headers = response.headers_mut();
+                        headers
+                            .insert(
+                                tonic::Status::GRPC_STATUS,
+                                (tonic::Code::Unimplemented as i32).into(),
+                            );
+                        headers
+                            .insert(
+                                http::header::CONTENT_TYPE,
+                                tonic::metadata::GRPC_CONTENT_TYPE,
+                            );
+                        Ok(response)
+                    })
+                }
             }
         }
     }

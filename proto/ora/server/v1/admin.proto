@@ -5,6 +5,7 @@ package ora.server.v1;
 import "google/protobuf/timestamp.proto";
 import "ora/common/v1/job.proto";
 import "ora/common/v1/schedule.proto";
+import "ora/common/v1/time_range.proto";
 
 // A service that provides administrative functionality.
 service AdminService {
@@ -258,6 +259,14 @@ message JobQueryFilter {
   //
   // If not provided, all jobs are included.
   optional bool active = 7;
+  // Filter by the target execution time.
+  //
+  // The range can be open-ended in either direction.
+  ora.common.v1.TimeRange target_execution_time = 8;
+  // Filter by the time the job was created.
+  //
+  // The range can be open-ended in either direction.
+  ora.common.v1.TimeRange created_at = 9;
 }
 
 // The order of jobs returned.
@@ -408,6 +417,10 @@ message ScheduleQueryFilter {
   //
   // If not provided, all schedules are included.
   optional bool active = 5;
+  // Filter by the time the schedule was created.
+  //
+  // The range can be open-ended in either direction.
+  ora.common.v1.TimeRange created_at = 6;
 }
 
 // The order of schedules returned.

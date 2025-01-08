@@ -1,6 +1,11 @@
 //! Query filters for jobs.
 
-use ora_proto::server::v1::{self, JobExecutionStatus, JobQueryOrder};
+use std::time::SystemTime;
+
+use ora_proto::{
+    common::v1::TimeRange,
+    server::v1::{self, JobExecutionStatus, JobQueryOrder},
+};
 use uuid::Uuid;
 
 use crate::{job_definition::JobStatus, IndexSet, JobType};
@@ -41,6 +46,22 @@ pub struct JobFilter {
     ///
     /// If not provided, all jobs are included.
     pub active: Option<bool>,
+    /// Only include jobs created after the provided time.
+    ///
+    /// The time is inclusive.
+    pub created_after: Option<SystemTime>,
+    /// Only include jobs created before the provided time.
+    ///
+    /// The time is exclusive.
+    pub created_before: Option<SystemTime>,
+    /// Only include jobs with a target execution time after the provided time.
+    ///
+    /// The time is inclusive.
+    pub target_execution_time_after: Option<SystemTime>,
+    /// Only include jobs with a target execution time before the provided time.
+    ///
+    /// The time is exclusive.
+    pub target_execution_time_before: Option<SystemTime>,
 }
 
 impl JobFilter {
@@ -176,6 +197,38 @@ impl JobFilter {
     {
         self.with_job_type_id(J::id())
     }
+
+    /// Include jobs created after the provided time.
+    ///
+    /// The time is inclusive.
+    pub fn created_after(mut self, time: SystemTime) -> Self {
+        self.created_after = Some(time);
+        self
+    }
+
+    /// Include jobs created before the provided time.
+    ///
+    /// The time is exclusive.
+    pub fn created_before(mut self, time: SystemTime) -> Self {
+        self.created_before = Some(time);
+        self
+    }
+
+    /// Include jobs with a target execution time after the provided time.
+    ///
+    /// The time is inclusive.
+    pub fn target_execution_after(mut self, time: SystemTime) -> Self {
+        self.target_execution_time_after = Some(time);
+        self
+    }
+
+    /// Include jobs with a target execution time before the provided time.
+    ///
+    /// The time is exclusive.
+    pub fn target_execution_before(mut self, time: SystemTime) -> Self {
+        self.target_execution_time_before = Some(time);
+        self
+    }
 }
 
 impl From<JobFilter> for v1::JobQueryFilter {
@@ -208,6 +261,14 @@ impl From<JobFilter> for v1::JobQueryFilter {
                 .collect(),
             labels: filter.labels.into_iter().map(Into::into).collect(),
             active: filter.active,
+            created_at: Some(TimeRange {
+                start: filter.created_after.map(Into::into),
+                end: filter.created_before.map(Into::into),
+            }),
+            target_execution_time: Some(TimeRange {
+                start: filter.target_execution_time_after.map(Into::into),
+                end: filter.target_execution_time_before.map(Into::into),
+            }),
         }
     }
 }

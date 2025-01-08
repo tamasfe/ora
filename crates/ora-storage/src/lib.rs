@@ -443,6 +443,14 @@ pub struct JobQueryFilters {
     pub labels: Option<IndexMap<String, JobLabelFilterValue>>,
     /// Whether to return active or inactive jobs only.
     pub active: Option<bool>,
+    /// Jobs created after the given time, inclusive.
+    pub created_after: Option<SystemTime>,
+    /// Jobs created before the given time, exclusive.
+    pub created_before: Option<SystemTime>,
+    /// Jobs with target execution time after the given time, inclusive.
+    pub target_execution_time_after: Option<SystemTime>,
+    /// Jobs with target execution time before the given time, exclusive.
+    pub target_execution_time_before: Option<SystemTime>,
 }
 
 /// The order of jobs returned.
@@ -684,6 +692,10 @@ pub struct ScheduleQueryFilters {
     pub labels: Option<IndexMap<String, ScheduleLabelFilterValue>>,
     /// Whether to return active or inactive schedules only.
     pub active: Option<bool>,
+    /// Schedules created after the given time, inclusive.
+    pub created_after: Option<SystemTime>,
+    /// Schedules created before the given time, exclusive.
+    pub created_before: Option<SystemTime>,
 }
 
 /// The order of jobs returned.
@@ -1177,6 +1189,18 @@ impl TryFrom<server::v1::JobQueryFilter> for JobQueryFilters {
                 )
             },
             active: filter.active,
+            created_after: filter
+                .created_at
+                .and_then(|c| c.start.and_then(|t| t.try_into().ok())),
+            created_before: filter
+                .created_at
+                .and_then(|c| c.end.and_then(|t| t.try_into().ok())),
+            target_execution_time_after: filter
+                .target_execution_time
+                .and_then(|c| c.start.and_then(|t| t.try_into().ok())),
+            target_execution_time_before: filter
+                .target_execution_time
+                .and_then(|c| c.end.and_then(|t| t.try_into().ok())),
         })
     }
 }
@@ -1341,6 +1365,12 @@ impl TryFrom<server::v1::ScheduleQueryFilter> for ScheduleQueryFilters {
                 )
             },
             active: value.active,
+            created_after: value
+                .created_at
+                .and_then(|c| c.start.and_then(|t| t.try_into().ok())),
+            created_before: value
+                .created_at
+                .and_then(|c| c.end.and_then(|t| t.try_into().ok())),
         })
     }
 }

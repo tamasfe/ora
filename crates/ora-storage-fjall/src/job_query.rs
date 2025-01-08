@@ -356,6 +356,7 @@ fn filter_job_candidates(
         active: applied_active,
         status: applied_status,
     } = applied_filters;
+    // TODO: created_at, target_execution_time filters
 
     if !applied_job_ids {
         if let Some(job_ids) = &filters.job_ids {

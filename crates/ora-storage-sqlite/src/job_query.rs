@@ -13,7 +13,7 @@ pub(super) fn count_jobs(tx: &mut Transaction, filters: JobQueryFilters) -> eyre
     let mut select_query = Query::select();
     select_query.expr(Expr::cust("COUNT(*)")).from(I("ora_job"));
 
-    filter_jobs_query(&mut select_query, filters, None);
+    filter_jobs_query(&mut select_query, filters, None)?;
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
 
@@ -28,7 +28,7 @@ pub(super) fn count_jobs(tx: &mut Transaction, filters: JobQueryFilters) -> eyre
 pub(super) fn job_ids(tx: &mut Transaction, filters: JobQueryFilters) -> eyre::Result<Vec<Uuid>> {
     let mut select_query = Query::select();
     select_query.column(I("id")).from(I("ora_job"));
-    filter_jobs_query(&mut select_query, filters, None);
+    filter_jobs_query(&mut select_query, filters, None)?;
     select_query.order_by(I("id"), sea_query::Order::Asc);
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
@@ -57,7 +57,7 @@ pub(super) fn delete_jobs(
         let mut select_query = Query::select();
         select_query.column(I("id")).from(I("ora_job"));
 
-        filter_jobs_query(&mut select_query, filters, None);
+        filter_jobs_query(&mut select_query, filters, None)?;
 
         let (query, values) = Query::insert()
             .into_table((I("temp"), I("query_jobs")))
@@ -144,7 +144,7 @@ pub(super) fn query_job_details(
         let mut select_query = Query::select();
         select_query.column(I("id")).from(I("ora_job"));
 
-        filter_jobs_query(&mut select_query, filters.clone(), last_job_id);
+        filter_jobs_query(&mut select_query, filters.clone(), last_job_id)?;
         order_jobs_query(&mut select_query, order);
 
         let (query, values) = Query::insert()
@@ -347,7 +347,11 @@ pub(super) fn query_job_details(
     })
 }
 
-fn filter_jobs_query(query: &mut SelectStatement, filters: JobQueryFilters, after: Option<Uuid>) {
+fn filter_jobs_query(
+    query: &mut SelectStatement,
+    filters: JobQueryFilters,
+    after: Option<Uuid>,
+) -> eyre::Result<()> {
     let JobQueryFilters {
         job_ids,
         job_type_ids,
@@ -356,6 +360,10 @@ fn filter_jobs_query(query: &mut SelectStatement, filters: JobQueryFilters, afte
         execution_status,
         labels,
         active,
+        created_after,
+        created_before,
+        target_execution_time_after,
+        target_execution_time_before,
     } = filters;
 
     if let Some(after) = after {
@@ -550,6 +558,34 @@ fn filter_jobs_query(query: &mut SelectStatement, filters: JobQueryFilters, afte
 
         query.and_where(active_expr);
     }
+
+    if let Some(created_after) = created_after {
+        query.and_where(
+            Expr::col(I("created_at_unix_ns")).gte(SqlSystemTime(created_after).as_i64()?),
+        );
+    }
+
+    if let Some(created_before) = created_before {
+        query.and_where(
+            Expr::col(I("created_at_unix_ns")).lt(SqlSystemTime(created_before).as_i64()?),
+        );
+    }
+
+    if let Some(target_execution_time_after) = target_execution_time_after {
+        query.and_where(
+            Expr::col(I("target_execution_time_unix_ns"))
+                .gte(SqlSystemTime(target_execution_time_after).as_i64()?),
+        );
+    }
+
+    if let Some(target_execution_time_before) = target_execution_time_before {
+        query.and_where(
+            Expr::col(I("target_execution_time_unix_ns"))
+                .lt(SqlSystemTime(target_execution_time_before).as_i64()?),
+        );
+    }
+
+    Ok(())
 }
 
 fn order_jobs_query(query: &mut SelectStatement, order: JobQueryOrder) {

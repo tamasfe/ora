@@ -37,11 +37,10 @@ impl ::prost::Name for ExecutorConnectionResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutorMessage {
     /// The message.
-    #[prost(
-        oneof = "executor_message::ExecutorMessageKind",
-        tags = "1, 2, 3, 4, 5"
-    )]
-    pub executor_message_kind: ::core::option::Option<executor_message::ExecutorMessageKind>,
+    #[prost(oneof = "executor_message::ExecutorMessageKind", tags = "1, 2, 3, 4, 5")]
+    pub executor_message_kind: ::core::option::Option<
+        executor_message::ExecutorMessageKind,
+    >,
 }
 /// Nested message and enum types in `ExecutorMessage`.
 pub mod executor_message {
@@ -309,10 +308,10 @@ pub mod executor_service_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     /// Endpoint on the server for a single executor.
     #[derive(Debug, Clone)]
     pub struct ExecutorServiceClient<T> {
@@ -357,8 +356,9 @@ pub mod executor_service_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ExecutorServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -396,23 +396,33 @@ pub mod executor_service_client {
         /// Long-lived bidirectional stream for the executor.
         pub async fn executor_connection(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::ExecutorConnectionRequest>,
+            request: impl tonic::IntoStreamingRequest<
+                Message = super::ExecutorConnectionRequest,
+            >,
         ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::ExecutorConnectionResponse>>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/ora.server.v1.ExecutorService/ExecutorConnection",
             );
             let mut req = request.into_streaming_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.ExecutorService",
-                "ExecutorConnection",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ora.server.v1.ExecutorService",
+                        "ExecutorConnection",
+                    ),
+                );
             self.inner.streaming(req, path, codec).await
         }
     }
@@ -424,7 +434,7 @@ pub mod executor_service_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ExecutorServiceServer.
@@ -463,7 +473,10 @@ pub mod executor_service_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -518,14 +531,18 @@ pub mod executor_service_server {
                 "/ora.server.v1.ExecutorService/ExecutorConnection" => {
                     #[allow(non_camel_case_types)]
                     struct ExecutorConnectionSvc<T: ExecutorService>(pub Arc<T>);
-                    impl<T: ExecutorService>
-                        tonic::server::StreamingService<super::ExecutorConnectionRequest>
-                        for ExecutorConnectionSvc<T>
-                    {
+                    impl<
+                        T: ExecutorService,
+                    > tonic::server::StreamingService<super::ExecutorConnectionRequest>
+                    for ExecutorConnectionSvc<T> {
                         type Response = super::ExecutorConnectionResponse;
-                        type ResponseStream = BoxStream<super::ExecutorConnectionResponse>;
-                        type Future =
-                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+                        type ResponseStream = BoxStream<
+                            super::ExecutorConnectionResponse,
+                        >;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::ResponseStream>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<
@@ -534,7 +551,8 @@ pub mod executor_service_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ExecutorService>::executor_connection(&inner, request).await
+                                <T as ExecutorService>::executor_connection(&inner, request)
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -561,19 +579,23 @@ pub mod executor_service_server {
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    let mut response = http::Response::new(empty_body());
-                    let headers = response.headers_mut();
-                    headers.insert(
-                        tonic::Status::GRPC_STATUS,
-                        (tonic::Code::Unimplemented as i32).into(),
-                    );
-                    headers.insert(
-                        http::header::CONTENT_TYPE,
-                        tonic::metadata::GRPC_CONTENT_TYPE,
-                    );
-                    Ok(response)
-                }),
+                _ => {
+                    Box::pin(async move {
+                        let mut response = http::Response::new(empty_body());
+                        let headers = response.headers_mut();
+                        headers
+                            .insert(
+                                tonic::Status::GRPC_STATUS,
+                                (tonic::Code::Unimplemented as i32).into(),
+                            );
+                        headers
+                            .insert(
+                                http::header::CONTENT_TYPE,
+                                tonic::metadata::GRPC_CONTENT_TYPE,
+                            );
+                        Ok(response)
+                    })
+                }
             }
         }
     }
@@ -857,7 +879,9 @@ impl ::prost::Name for ListExecutorsResponse {
 pub struct CreateSchedulesRequest {
     /// The schedules to create.
     #[prost(message, repeated, tag = "1")]
-    pub schedules: ::prost::alloc::vec::Vec<super::super::common::v1::ScheduleDefinition>,
+    pub schedules: ::prost::alloc::vec::Vec<
+        super::super::common::v1::ScheduleDefinition,
+    >,
 }
 impl ::prost::Name for CreateSchedulesRequest {
     const NAME: &'static str = "CreateSchedulesRequest";
@@ -1101,6 +1125,18 @@ pub struct JobQueryFilter {
     /// If not provided, all jobs are included.
     #[prost(bool, optional, tag = "7")]
     pub active: ::core::option::Option<bool>,
+    /// Filter by the target execution time.
+    ///
+    /// The range can be open-ended in either direction.
+    #[prost(message, optional, tag = "8")]
+    pub target_execution_time: ::core::option::Option<
+        super::super::common::v1::TimeRange,
+    >,
+    /// Filter by the time the job was created.
+    ///
+    /// The range can be open-ended in either direction.
+    #[prost(message, optional, tag = "9")]
+    pub created_at: ::core::option::Option<super::super::common::v1::TimeRange>,
 }
 impl ::prost::Name for JobQueryFilter {
     const NAME: &'static str = "JobQueryFilter";
@@ -1324,6 +1360,11 @@ pub struct ScheduleQueryFilter {
     /// If not provided, all schedules are included.
     #[prost(bool, optional, tag = "5")]
     pub active: ::core::option::Option<bool>,
+    /// Filter by the time the schedule was created.
+    ///
+    /// The range can be open-ended in either direction.
+    #[prost(message, optional, tag = "6")]
+    pub created_at: ::core::option::Option<super::super::common::v1::TimeRange>,
 }
 impl ::prost::Name for ScheduleQueryFilter {
     const NAME: &'static str = "ScheduleQueryFilter";
@@ -1403,8 +1444,12 @@ impl JobQueryOrder {
             "JOB_QUERY_ORDER_UNSPECIFIED" => Some(Self::Unspecified),
             "JOB_QUERY_ORDER_CREATED_AT_ASC" => Some(Self::CreatedAtAsc),
             "JOB_QUERY_ORDER_CREATED_AT_DESC" => Some(Self::CreatedAtDesc),
-            "JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_ASC" => Some(Self::TargetExecutionTimeAsc),
-            "JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_DESC" => Some(Self::TargetExecutionTimeDesc),
+            "JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_ASC" => {
+                Some(Self::TargetExecutionTimeAsc)
+            }
+            "JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_DESC" => {
+                Some(Self::TargetExecutionTimeDesc)
+            }
             _ => None,
         }
     }
@@ -1526,10 +1571,10 @@ pub mod admin_service_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
-    use tonic::codegen::http::Uri;
     use tonic::codegen::*;
+    use tonic::codegen::http::Uri;
     /// A service that provides administrative functionality.
     #[derive(Debug, Clone)]
     pub struct AdminServiceClient<T> {
@@ -1574,8 +1619,9 @@ pub mod admin_service_client {
                     <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error:
-                Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             AdminServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -1614,12 +1660,22 @@ pub mod admin_service_client {
         pub async fn add_jobs(
             &mut self,
             request: impl tonic::IntoRequest<super::AddJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AddJobsResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::AddJobsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/AddJobs");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/AddJobs",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.server.v1.AdminService", "AddJobs"));
@@ -1629,12 +1685,22 @@ pub mod admin_service_client {
         pub async fn list_jobs(
             &mut self,
             request: impl tonic::IntoRequest<super::ListJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListJobsResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ListJobsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/ListJobs");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/ListJobs",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.server.v1.AdminService", "ListJobs"));
@@ -1644,13 +1710,22 @@ pub mod admin_service_client {
         pub async fn count_jobs(
             &mut self,
             request: impl tonic::IntoRequest<super::CountJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::CountJobsResponse>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::CountJobsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/CountJobs");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/CountJobs",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.server.v1.AdminService", "CountJobs"));
@@ -1660,33 +1735,47 @@ pub mod admin_service_client {
         pub async fn list_job_types(
             &mut self,
             request: impl tonic::IntoRequest<super::ListJobTypesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListJobTypesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ListJobTypesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/ListJobTypes");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/ListJobTypes",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "ListJobTypes",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("ora.server.v1.AdminService", "ListJobTypes"));
             self.inner.unary(req, path, codec).await
         }
         /// Cancel jobs.
         pub async fn cancel_jobs(
             &mut self,
             request: impl tonic::IntoRequest<super::CancelJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::CancelJobsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::CancelJobsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/CancelJobs");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/CancelJobs",
+            );
             let mut req = request.into_request();
             req.extensions_mut()
                 .insert(GrpcMethod::new("ora.server.v1.AdminService", "CancelJobs"));
@@ -1696,115 +1785,156 @@ pub mod admin_service_client {
         pub async fn delete_inactive_jobs(
             &mut self,
             request: impl tonic::IntoRequest<super::DeleteInactiveJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::DeleteInactiveJobsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::DeleteInactiveJobsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/ora.server.v1.AdminService/DeleteInactiveJobs",
             );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "DeleteInactiveJobs",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("ora.server.v1.AdminService", "DeleteInactiveJobs"),
+                );
             self.inner.unary(req, path, codec).await
         }
         /// Get information about the executors.
         pub async fn list_executors(
             &mut self,
             request: impl tonic::IntoRequest<super::ListExecutorsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListExecutorsResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ListExecutorsResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/ListExecutors");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/ListExecutors",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "ListExecutors",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("ora.server.v1.AdminService", "ListExecutors"));
             self.inner.unary(req, path, codec).await
         }
         /// Create schedules.
         pub async fn create_schedules(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CreateSchedulesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::CreateSchedulesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/CreateSchedules");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/CreateSchedules",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "CreateSchedules",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("ora.server.v1.AdminService", "CreateSchedules"),
+                );
             self.inner.unary(req, path, codec).await
         }
         /// List schedules.
         pub async fn list_schedules(
             &mut self,
             request: impl tonic::IntoRequest<super::ListSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListSchedulesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::ListSchedulesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/ListSchedules");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/ListSchedules",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "ListSchedules",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("ora.server.v1.AdminService", "ListSchedules"));
             self.inner.unary(req, path, codec).await
         }
         /// Count the number of schedules.
         pub async fn count_schedules(
             &mut self,
             request: impl tonic::IntoRequest<super::CountSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CountSchedulesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::CountSchedulesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/CountSchedules");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/CountSchedules",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "CountSchedules",
-            ));
+            req.extensions_mut()
+                .insert(GrpcMethod::new("ora.server.v1.AdminService", "CountSchedules"));
             self.inner.unary(req, path, codec).await
         }
         /// Cancel schedules.
         pub async fn cancel_schedules(
             &mut self,
             request: impl tonic::IntoRequest<super::CancelSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CancelSchedulesResponse>, tonic::Status>
-        {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+        ) -> std::result::Result<
+            tonic::Response<super::CancelSchedulesResponse>,
+            tonic::Status,
+        > {
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/CancelSchedules");
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/CancelSchedules",
+            );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "CancelSchedules",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new("ora.server.v1.AdminService", "CancelSchedules"),
+                );
             self.inner.unary(req, path, codec).await
         }
         /// Delete inactive schedules from storage.
@@ -1815,18 +1945,26 @@ pub mod admin_service_client {
             tonic::Response<super::DeleteInactiveSchedulesResponse>,
             tonic::Status,
         > {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-            })?;
+            self.inner
+                .ready()
+                .await
+                .map_err(|e| {
+                    tonic::Status::unknown(
+                        format!("Service was not ready: {}", e.into()),
+                    )
+                })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/ora.server.v1.AdminService/DeleteInactiveSchedules",
             );
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod::new(
-                "ora.server.v1.AdminService",
-                "DeleteInactiveSchedules",
-            ));
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "ora.server.v1.AdminService",
+                        "DeleteInactiveSchedules",
+                    ),
+                );
             self.inner.unary(req, path, codec).await
         }
     }
@@ -1838,7 +1976,7 @@ pub mod admin_service_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value
+        clippy::let_unit_value,
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AdminServiceServer.
@@ -1848,85 +1986,110 @@ pub mod admin_service_server {
         async fn add_jobs(
             &self,
             request: tonic::Request<super::AddJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::AddJobsResponse>, tonic::Status> {
+        ) -> std::result::Result<
+            tonic::Response<super::AddJobsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List jobs.
         async fn list_jobs(
             &self,
             request: tonic::Request<super::ListJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListJobsResponse>, tonic::Status> {
+        ) -> std::result::Result<
+            tonic::Response<super::ListJobsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Count the number of jobs.
         async fn count_jobs(
             &self,
             request: tonic::Request<super::CountJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::CountJobsResponse>, tonic::Status> {
+        ) -> std::result::Result<
+            tonic::Response<super::CountJobsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List all job types.
         async fn list_job_types(
             &self,
             request: tonic::Request<super::ListJobTypesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListJobTypesResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::ListJobTypesResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Cancel jobs.
         async fn cancel_jobs(
             &self,
             request: tonic::Request<super::CancelJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::CancelJobsResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::CancelJobsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Delete inactive jobs from storage.
         async fn delete_inactive_jobs(
             &self,
             request: tonic::Request<super::DeleteInactiveJobsRequest>,
-        ) -> std::result::Result<tonic::Response<super::DeleteInactiveJobsResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::DeleteInactiveJobsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Get information about the executors.
         async fn list_executors(
             &self,
             request: tonic::Request<super::ListExecutorsRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListExecutorsResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::ListExecutorsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Create schedules.
         async fn create_schedules(
             &self,
             request: tonic::Request<super::CreateSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CreateSchedulesResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::CreateSchedulesResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List schedules.
         async fn list_schedules(
             &self,
             request: tonic::Request<super::ListSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::ListSchedulesResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::ListSchedulesResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Count the number of schedules.
         async fn count_schedules(
             &self,
             request: tonic::Request<super::CountSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CountSchedulesResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::CountSchedulesResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Cancel schedules.
         async fn cancel_schedules(
             &self,
             request: tonic::Request<super::CancelSchedulesRequest>,
-        ) -> std::result::Result<tonic::Response<super::CancelSchedulesResponse>, tonic::Status>
-        {
+        ) -> std::result::Result<
+            tonic::Response<super::CancelSchedulesResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Delete inactive schedules from storage.
@@ -1962,7 +2125,10 @@ pub mod admin_service_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(
+            inner: T,
+            interceptor: F,
+        ) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -2017,16 +2183,23 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/AddJobs" => {
                     #[allow(non_camel_case_types)]
                     struct AddJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::AddJobsRequest> for AddJobsSvc<T> {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::AddJobsRequest>
+                    for AddJobsSvc<T> {
                         type Response = super::AddJobsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddJobsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut =
-                                async move { <T as AdminService>::add_jobs(&inner, request).await };
+                            let fut = async move {
+                                <T as AdminService>::add_jobs(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -2055,9 +2228,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/ListJobs" => {
                     #[allow(non_camel_case_types)]
                     struct ListJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::ListJobsRequest> for ListJobsSvc<T> {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::ListJobsRequest>
+                    for ListJobsSvc<T> {
                         type Response = super::ListJobsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListJobsRequest>,
@@ -2094,9 +2273,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/CountJobs" => {
                     #[allow(non_camel_case_types)]
                     struct CountJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::CountJobsRequest> for CountJobsSvc<T> {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::CountJobsRequest>
+                    for CountJobsSvc<T> {
                         type Response = super::CountJobsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CountJobsRequest>,
@@ -2133,11 +2318,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/ListJobTypes" => {
                     #[allow(non_camel_case_types)]
                     struct ListJobTypesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::ListJobTypesRequest>
-                        for ListJobTypesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::ListJobTypesRequest>
+                    for ListJobTypesSvc<T> {
                         type Response = super::ListJobTypesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListJobTypesRequest>,
@@ -2174,9 +2363,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/CancelJobs" => {
                     #[allow(non_camel_case_types)]
                     struct CancelJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::CancelJobsRequest> for CancelJobsSvc<T> {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::CancelJobsRequest>
+                    for CancelJobsSvc<T> {
                         type Response = super::CancelJobsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CancelJobsRequest>,
@@ -2213,19 +2408,23 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/DeleteInactiveJobs" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteInactiveJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService>
-                        tonic::server::UnaryService<super::DeleteInactiveJobsRequest>
-                        for DeleteInactiveJobsSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::DeleteInactiveJobsRequest>
+                    for DeleteInactiveJobsSvc<T> {
                         type Response = super::DeleteInactiveJobsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeleteInactiveJobsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AdminService>::delete_inactive_jobs(&inner, request).await
+                                <T as AdminService>::delete_inactive_jobs(&inner, request)
+                                    .await
                             };
                             Box::pin(fut)
                         }
@@ -2255,11 +2454,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/ListExecutors" => {
                     #[allow(non_camel_case_types)]
                     struct ListExecutorsSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::ListExecutorsRequest>
-                        for ListExecutorsSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::ListExecutorsRequest>
+                    for ListExecutorsSvc<T> {
                         type Response = super::ListExecutorsResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListExecutorsRequest>,
@@ -2296,11 +2499,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/CreateSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct CreateSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::CreateSchedulesRequest>
-                        for CreateSchedulesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::CreateSchedulesRequest>
+                    for CreateSchedulesSvc<T> {
                         type Response = super::CreateSchedulesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CreateSchedulesRequest>,
@@ -2337,11 +2544,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/ListSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct ListSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::ListSchedulesRequest>
-                        for ListSchedulesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::ListSchedulesRequest>
+                    for ListSchedulesSvc<T> {
                         type Response = super::ListSchedulesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListSchedulesRequest>,
@@ -2378,11 +2589,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/CountSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct CountSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::CountSchedulesRequest>
-                        for CountSchedulesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::CountSchedulesRequest>
+                    for CountSchedulesSvc<T> {
                         type Response = super::CountSchedulesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CountSchedulesRequest>,
@@ -2419,11 +2634,15 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/CancelSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct CancelSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService> tonic::server::UnaryService<super::CancelSchedulesRequest>
-                        for CancelSchedulesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::CancelSchedulesRequest>
+                    for CancelSchedulesSvc<T> {
                         type Response = super::CancelSchedulesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CancelSchedulesRequest>,
@@ -2460,19 +2679,27 @@ pub mod admin_service_server {
                 "/ora.server.v1.AdminService/DeleteInactiveSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteInactiveSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<T: AdminService>
-                        tonic::server::UnaryService<super::DeleteInactiveSchedulesRequest>
-                        for DeleteInactiveSchedulesSvc<T>
-                    {
+                    impl<
+                        T: AdminService,
+                    > tonic::server::UnaryService<super::DeleteInactiveSchedulesRequest>
+                    for DeleteInactiveSchedulesSvc<T> {
                         type Response = super::DeleteInactiveSchedulesResponse;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        type Future = BoxFuture<
+                            tonic::Response<Self::Response>,
+                            tonic::Status,
+                        >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::DeleteInactiveSchedulesRequest>,
+                            request: tonic::Request<
+                                super::DeleteInactiveSchedulesRequest,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AdminService>::delete_inactive_schedules(&inner, request)
+                                <T as AdminService>::delete_inactive_schedules(
+                                        &inner,
+                                        request,
+                                    )
                                     .await
                             };
                             Box::pin(fut)
@@ -2500,19 +2727,23 @@ pub mod admin_service_server {
                     };
                     Box::pin(fut)
                 }
-                _ => Box::pin(async move {
-                    let mut response = http::Response::new(empty_body());
-                    let headers = response.headers_mut();
-                    headers.insert(
-                        tonic::Status::GRPC_STATUS,
-                        (tonic::Code::Unimplemented as i32).into(),
-                    );
-                    headers.insert(
-                        http::header::CONTENT_TYPE,
-                        tonic::metadata::GRPC_CONTENT_TYPE,
-                    );
-                    Ok(response)
-                }),
+                _ => {
+                    Box::pin(async move {
+                        let mut response = http::Response::new(empty_body());
+                        let headers = response.headers_mut();
+                        headers
+                            .insert(
+                                tonic::Status::GRPC_STATUS,
+                                (tonic::Code::Unimplemented as i32).into(),
+                            );
+                        headers
+                            .insert(
+                                http::header::CONTENT_TYPE,
+                                tonic::metadata::GRPC_CONTENT_TYPE,
+                            );
+                        Ok(response)
+                    })
+                }
             }
         }
     }

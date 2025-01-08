@@ -98,209 +98,6 @@ class LabelFilterExistCondition(betterproto.Enum):
 
 
 @dataclass(eq=False, repr=False)
-class ExecutorConnectionRequest(betterproto.Message):
-    """Request for `Heartbeat`."""
-
-    message: "ExecutorMessage" = betterproto.message_field(1)
-    """A message sent from the executor."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutorConnectionResponse(betterproto.Message):
-    """Response for `Heartbeat`."""
-
-    message: "ServerMessage" = betterproto.message_field(1)
-    """A message sent from the server."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutorMessage(betterproto.Message):
-    """A message sent from the executor."""
-
-    capabilities: "ExecutorCapabilities" = betterproto.message_field(
-        1, group="executor_message_kind"
-    )
-    """
-    The properties of the executor.
-    
-     The executor must send the properties
-     as the first message in the stream
-     before any heartbeats, subsequent properties
-     messages might be ignored.
-    """
-
-    heartbeat: "ExecutorHeartbeat" = betterproto.message_field(
-        2, group="executor_message_kind"
-    )
-    """The heartbeat request."""
-
-    execution_started: "ExecutionStarted" = betterproto.message_field(
-        3, group="executor_message_kind"
-    )
-    """The job execution has started."""
-
-    execution_succeeded: "ExecutionSucceeded" = betterproto.message_field(
-        4, group="executor_message_kind"
-    )
-    """The execution has succeeded."""
-
-    execution_failed: "ExecutionFailed" = betterproto.message_field(
-        5, group="executor_message_kind"
-    )
-    """The execution has failed."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutorCapabilities(betterproto.Message):
-    """
-    Capabilities of the executor and other information
-     that the server needs to know about the executor.
-    """
-
-    name: str = betterproto.string_field(1)
-    """The name of the executor."""
-
-    supported_job_types: List["__common_v1__.JobType"] = betterproto.message_field(2)
-    """The supported job types."""
-
-    max_concurrent_executions: int = betterproto.uint32_field(3)
-    """
-    The maximum number of concurrent job executions.
-    
-     The server will not assign more than `max_concurrent_executions`
-     job executions at the same time.
-    
-     0 means no limit.
-    """
-
-
-@dataclass(eq=False, repr=False)
-class ExecutorHeartbeat(betterproto.Message):
-    """The heartbeat content."""
-
-    pass
-
-
-@dataclass(eq=False, repr=False)
-class ExecutionStarted(betterproto.Message):
-    """The job execution has started."""
-
-    execution_id: str = betterproto.string_field(1)
-    """The ID of the job execution."""
-
-    timestamp: datetime = betterproto.message_field(2)
-    """The time when the job execution started."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutionSucceeded(betterproto.Message):
-    """A job execution has succeeded."""
-
-    execution_id: str = betterproto.string_field(1)
-    """The ID of the job execution."""
-
-    timestamp: datetime = betterproto.message_field(2)
-    """The time when the job execution succeeded."""
-
-    output_payload_json: str = betterproto.string_field(3)
-    """The output payload of the job."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutionFailed(betterproto.Message):
-    """The job execution has failed."""
-
-    execution_id: str = betterproto.string_field(1)
-    """The ID of the job execution."""
-
-    timestamp: datetime = betterproto.message_field(2)
-    """The time when the job execution failed."""
-
-    error_message: str = betterproto.string_field(3)
-    """The error message of the job."""
-
-
-@dataclass(eq=False, repr=False)
-class ServerMessage(betterproto.Message):
-    """A message sent from the server."""
-
-    properties: "ExecutorProperties" = betterproto.message_field(
-        1, group="server_message_kind"
-    )
-    """The properties of the executor."""
-
-    execution_ready: "ExecutionReady" = betterproto.message_field(
-        2, group="server_message_kind"
-    )
-    """A job execution is ready to be executed by the executor."""
-
-    execution_cancelled: "ExecutionCancelled" = betterproto.message_field(
-        3, group="server_message_kind"
-    )
-    """
-    The job execution was cancelled and should be dropped by the executor.
-    """
-
-
-@dataclass(eq=False, repr=False)
-class ExecutorProperties(betterproto.Message):
-    """Properties of the executor assigned by the server."""
-
-    executor_id: str = betterproto.string_field(1)
-    """The ID given to the executor."""
-
-    max_heartbeat_interval: timedelta = betterproto.message_field(2)
-    """
-    The maximum interval between heartbeats.
-    
-     Executors should repeat the executor ping
-     request at least every `max_heartbeat_interval`.
-    
-     Note that delays in the network or the server
-     may cause the executor to miss the deadline,
-     so the executor should send the heartbeat
-     before the deadline to account for this.
-    """
-
-
-@dataclass(eq=False, repr=False)
-class ExecutionReady(betterproto.Message):
-    """A job execution is ready to be executed by the executor."""
-
-    job_id: str = betterproto.string_field(1)
-    """The ID of the job."""
-
-    execution_id: str = betterproto.string_field(2)
-    """The execution ID of the job."""
-
-    job_type_id: str = betterproto.string_field(3)
-    """The job type ID."""
-
-    attempt_number: int = betterproto.uint64_field(4)
-    """
-    The attempt number of the job execution.
-    
-     The first attempt is 1.
-    """
-
-    input_payload_json: str = betterproto.string_field(5)
-    """The input payload of the job."""
-
-    target_execution_time: datetime = betterproto.message_field(6)
-    """The target execution time of the job."""
-
-
-@dataclass(eq=False, repr=False)
-class ExecutionCancelled(betterproto.Message):
-    """
-    The job execution was cancelled and should be dropped by the executor.
-    """
-
-    execution_id: str = betterproto.string_field(1)
-    """The ID of the job execution."""
-
-
-@dataclass(eq=False, repr=False)
 class AddJobsRequest(betterproto.Message):
     """Request for `AddJobs`."""
 
@@ -625,6 +422,20 @@ class JobQueryFilter(betterproto.Message):
      If not provided, all jobs are included.
     """
 
+    target_execution_time: "__common_v1__.TimeRange" = betterproto.message_field(8)
+    """
+    Filter by the target execution time.
+    
+     The range can be open-ended in either direction.
+    """
+
+    created_at: "__common_v1__.TimeRange" = betterproto.message_field(9)
+    """
+    Filter by the time the job was created.
+    
+     The range can be open-ended in either direction.
+    """
+
 
 @dataclass(eq=False, repr=False)
 class JobLabelFilter(betterproto.Message):
@@ -793,6 +604,13 @@ class ScheduleQueryFilter(betterproto.Message):
      If not provided, all schedules are included.
     """
 
+    created_at: "__common_v1__.TimeRange" = betterproto.message_field(6)
+    """
+    Filter by the time the schedule was created.
+    
+     The range can be open-ended in either direction.
+    """
+
 
 @dataclass(eq=False, repr=False)
 class ScheduleLabelFilter(betterproto.Message):
@@ -808,28 +626,209 @@ class ScheduleLabelFilter(betterproto.Message):
     """The value must be equal to the given value."""
 
 
-class ExecutorServiceStub(betterproto.ServiceStub):
-    async def executor_connection(
-        self,
-        executor_connection_request_iterator: Union[
-            AsyncIterable[ExecutorConnectionRequest],
-            Iterable[ExecutorConnectionRequest],
-        ],
-        *,
-        timeout: Optional[float] = None,
-        deadline: Optional["Deadline"] = None,
-        metadata: Optional["MetadataLike"] = None
-    ) -> AsyncIterator[ExecutorConnectionResponse]:
-        async for response in self._stream_stream(
-            "/ora.server.v1.ExecutorService/ExecutorConnection",
-            executor_connection_request_iterator,
-            ExecutorConnectionRequest,
-            ExecutorConnectionResponse,
-            timeout=timeout,
-            deadline=deadline,
-            metadata=metadata,
-        ):
-            yield response
+@dataclass(eq=False, repr=False)
+class ExecutorConnectionRequest(betterproto.Message):
+    """Request for `Heartbeat`."""
+
+    message: "ExecutorMessage" = betterproto.message_field(1)
+    """A message sent from the executor."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutorConnectionResponse(betterproto.Message):
+    """Response for `Heartbeat`."""
+
+    message: "ServerMessage" = betterproto.message_field(1)
+    """A message sent from the server."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutorMessage(betterproto.Message):
+    """A message sent from the executor."""
+
+    capabilities: "ExecutorCapabilities" = betterproto.message_field(
+        1, group="executor_message_kind"
+    )
+    """
+    The capabilities of the executor.
+    
+     The executor must send the capabilities
+     as the first message in the stream
+     before any heartbeats, subsequent capabilities
+     messages might be ignored.
+    """
+
+    heartbeat: "ExecutorHeartbeat" = betterproto.message_field(
+        2, group="executor_message_kind"
+    )
+    """The heartbeat request."""
+
+    execution_started: "ExecutionStarted" = betterproto.message_field(
+        3, group="executor_message_kind"
+    )
+    """The job execution has started."""
+
+    execution_succeeded: "ExecutionSucceeded" = betterproto.message_field(
+        4, group="executor_message_kind"
+    )
+    """The execution has succeeded."""
+
+    execution_failed: "ExecutionFailed" = betterproto.message_field(
+        5, group="executor_message_kind"
+    )
+    """The execution has failed."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutorCapabilities(betterproto.Message):
+    """
+    Capabilities of the executor and other information
+     that the server needs to know about the executor.
+    """
+
+    name: str = betterproto.string_field(1)
+    """The name of the executor."""
+
+    supported_job_types: List["__common_v1__.JobType"] = betterproto.message_field(2)
+    """The supported job types."""
+
+    max_concurrent_executions: int = betterproto.uint32_field(3)
+    """
+    The maximum number of concurrent job executions.
+    
+     The server will not assign more than `max_concurrent_executions`
+     job executions at the same time.
+    
+     0 means no limit. Note that other than this currently
+     there is no backpressure mechanism in place, a sensible
+     limit is recommended in all cases.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class ExecutorHeartbeat(betterproto.Message):
+    """The heartbeat content."""
+
+    pass
+
+
+@dataclass(eq=False, repr=False)
+class ExecutionStarted(betterproto.Message):
+    """The job execution has started."""
+
+    execution_id: str = betterproto.string_field(1)
+    """The ID of the job execution."""
+
+    timestamp: datetime = betterproto.message_field(2)
+    """The time when the job execution started."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutionSucceeded(betterproto.Message):
+    """A job execution has succeeded."""
+
+    execution_id: str = betterproto.string_field(1)
+    """The ID of the job execution."""
+
+    timestamp: datetime = betterproto.message_field(2)
+    """The time when the job execution succeeded."""
+
+    output_payload_json: str = betterproto.string_field(3)
+    """The output payload of the job."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutionFailed(betterproto.Message):
+    """The job execution has failed."""
+
+    execution_id: str = betterproto.string_field(1)
+    """The ID of the job execution."""
+
+    timestamp: datetime = betterproto.message_field(2)
+    """The time when the job execution failed."""
+
+    error_message: str = betterproto.string_field(3)
+    """The error message of the job."""
+
+
+@dataclass(eq=False, repr=False)
+class ServerMessage(betterproto.Message):
+    """A message sent from the server."""
+
+    properties: "ExecutorProperties" = betterproto.message_field(
+        1, group="server_message_kind"
+    )
+    """The properties of the executor."""
+
+    execution_ready: "ExecutionReady" = betterproto.message_field(
+        2, group="server_message_kind"
+    )
+    """A job execution is ready to be executed by the executor."""
+
+    execution_cancelled: "ExecutionCancelled" = betterproto.message_field(
+        3, group="server_message_kind"
+    )
+    """
+    The job execution was cancelled and should be dropped by the executor.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class ExecutorProperties(betterproto.Message):
+    """Properties of the executor assigned by the server."""
+
+    executor_id: str = betterproto.string_field(1)
+    """The ID given to the executor."""
+
+    max_heartbeat_interval: timedelta = betterproto.message_field(2)
+    """
+    The maximum interval between heartbeats.
+    
+     Executors should repeat the executor ping
+     request at least every `max_heartbeat_interval`.
+    
+     Note that delays in the network or the server
+     may cause the executor to miss the deadline,
+     so the executor should send the heartbeat
+     before the deadline to account for this.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class ExecutionReady(betterproto.Message):
+    """A job execution is ready to be executed by the executor."""
+
+    job_id: str = betterproto.string_field(1)
+    """The ID of the job."""
+
+    execution_id: str = betterproto.string_field(2)
+    """The execution ID of the job."""
+
+    job_type_id: str = betterproto.string_field(3)
+    """The job type ID."""
+
+    attempt_number: int = betterproto.uint64_field(4)
+    """
+    The attempt number of the job execution.
+    
+     The first attempt is 1.
+    """
+
+    input_payload_json: str = betterproto.string_field(5)
+    """The input payload of the job."""
+
+    target_execution_time: datetime = betterproto.message_field(6)
+    """The target execution time of the job."""
+
+
+@dataclass(eq=False, repr=False)
+class ExecutionCancelled(betterproto.Message):
+    """
+    The job execution was cancelled and should be dropped by the executor.
+    """
+
+    execution_id: str = betterproto.string_field(1)
+    """The ID of the job execution."""
 
 
 class AdminServiceStub(betterproto.ServiceStub):
@@ -1038,35 +1037,28 @@ class AdminServiceStub(betterproto.ServiceStub):
         )
 
 
-class ExecutorServiceBase(ServiceBase):
-
+class ExecutorServiceStub(betterproto.ServiceStub):
     async def executor_connection(
         self,
-        executor_connection_request_iterator: AsyncIterator[ExecutorConnectionRequest],
+        executor_connection_request_iterator: Union[
+            AsyncIterable[ExecutorConnectionRequest],
+            Iterable[ExecutorConnectionRequest],
+        ],
+        *,
+        timeout: Optional[float] = None,
+        deadline: Optional["Deadline"] = None,
+        metadata: Optional["MetadataLike"] = None
     ) -> AsyncIterator[ExecutorConnectionResponse]:
-        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
-        yield ExecutorConnectionResponse()
-
-    async def __rpc_executor_connection(
-        self,
-        stream: "grpclib.server.Stream[ExecutorConnectionRequest, ExecutorConnectionResponse]",
-    ) -> None:
-        request = stream.__aiter__()
-        await self._call_rpc_handler_server_stream(
-            self.executor_connection,
-            stream,
-            request,
-        )
-
-    def __mapping__(self) -> Dict[str, grpclib.const.Handler]:
-        return {
-            "/ora.server.v1.ExecutorService/ExecutorConnection": grpclib.const.Handler(
-                self.__rpc_executor_connection,
-                grpclib.const.Cardinality.STREAM_STREAM,
-                ExecutorConnectionRequest,
-                ExecutorConnectionResponse,
-            ),
-        }
+        async for response in self._stream_stream(
+            "/ora.server.v1.ExecutorService/ExecutorConnection",
+            executor_connection_request_iterator,
+            ExecutorConnectionRequest,
+            ExecutorConnectionResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        ):
+            yield response
 
 
 class AdminServiceBase(ServiceBase):
@@ -1293,5 +1285,36 @@ class AdminServiceBase(ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 DeleteInactiveSchedulesRequest,
                 DeleteInactiveSchedulesResponse,
+            ),
+        }
+
+
+class ExecutorServiceBase(ServiceBase):
+
+    async def executor_connection(
+        self,
+        executor_connection_request_iterator: AsyncIterator[ExecutorConnectionRequest],
+    ) -> AsyncIterator[ExecutorConnectionResponse]:
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+        yield ExecutorConnectionResponse()
+
+    async def __rpc_executor_connection(
+        self,
+        stream: "grpclib.server.Stream[ExecutorConnectionRequest, ExecutorConnectionResponse]",
+    ) -> None:
+        request = stream.__aiter__()
+        await self._call_rpc_handler_server_stream(
+            self.executor_connection,
+            stream,
+            request,
+        )
+
+    def __mapping__(self) -> Dict[str, grpclib.const.Handler]:
+        return {
+            "/ora.server.v1.ExecutorService/ExecutorConnection": grpclib.const.Handler(
+                self.__rpc_executor_connection,
+                grpclib.const.Cardinality.STREAM_STREAM,
+                ExecutorConnectionRequest,
+                ExecutorConnectionResponse,
             ),
         }

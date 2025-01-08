@@ -3,3 +3,9 @@ Cargo.lock
 flamegraph.svg
 perf.data*
 *.local*
+.venv
+
+*.pyc
+.venv
+__pycache__
+uv.
