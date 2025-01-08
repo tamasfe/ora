@@ -1,6 +1,6 @@
 [package]
 name = "ora-storage-memory"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -12,7 +12,7 @@ async-trait.workspace = true
 eyre = "0.6.12"
 futures.workspace = true
 indexmap = "2.7.0"
-ora-proto = { version = "0.1.0", path = "../ora-proto" }
+ora-proto = { version = "0.1.1", path = "../ora-proto" }
 ora-storage = { version = "0.1.0", path = "../ora-storage" }
 parking_lot = "0.12.3"
 serde = { version = "1.0.216", features = ["derive"] }

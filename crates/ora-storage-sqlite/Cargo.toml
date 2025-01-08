@@ -1,6 +1,6 @@
 [package]
 name = "ora-storage-sqlite"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -11,7 +11,7 @@ repository.workspace = true
 async-trait.workspace = true
 eyre = "0.6.12"
 futures.workspace = true
-ora-proto = { version = "0.1.0", path = "../ora-proto" }
+ora-proto = { version = "0.1.1", path = "../ora-proto" }
 ora-storage = { version = "0.1.0", path = "../ora-storage" }
 parking_lot = "0.12.3"
 rkyv = { version = "0.8.9", features = ["indexmap-2", "unaligned", "uuid-1"] }
