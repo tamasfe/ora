@@ -1,13 +1,13 @@
 [package]
 name = "ora"
-version = "0.1.0"
+version = "0.8.0"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
 license.workspace = true
 
 [dependencies]
-ora-client = { version = "0.1.0", path = "../ora-client" }
+ora-client = { version = "0.8.0", path = "../ora-client" }
 
 [lints]
 workspace = true

@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 ora-proto = { version = "0.1.0", path = "../ora-proto" }
-ora-timer = { version = "0.1.0", path = "../ora-timer" }
+ora-timer = { version = "0.2.0", path = "../ora-timer" }
 tokio = { version = "1.40.0", features = ["sync"] }
 tonic.workspace = true
 futures.workspace = true
