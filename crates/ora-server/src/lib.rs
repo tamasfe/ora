@@ -1,6 +1,10 @@
 //! Ora server implementation.
 
-use std::{future::ready, num::NonZeroUsize, time::Duration};
+use std::{
+    future::ready,
+    num::NonZeroUsize,
+    time::{Duration, SystemTime},
+};
 
 use executor_registry::{ExecutorRegistry, ExecutorRegistryOptions};
 use futures::{future::select, StreamExt};
@@ -13,6 +17,7 @@ use ora_proto::{
         snapshot_service_client::SnapshotServiceClient, snapshot_service_server::SnapshotService,
     },
 };
+use ora_storage::{JobQueryFilters, ScheduleQueryFilters};
 use scheduling::{
     create_executions, create_schedule_jobs, mark_executions_ready, schedule_executions,
     timer::spawn_timer,
@@ -66,6 +71,14 @@ pub struct ServerOptions {
     pub bookkeeping_interval: std::time::Duration,
     /// Executor shutdown timeout.
     pub executor_shutdown_timeout: std::time::Duration,
+    /// Delete inactive jobs after this duration.
+    ///
+    /// By default, jobs are never deleted.
+    pub max_job_age: Option<std::time::Duration>,
+    /// Delete inactive schedules after this duration.
+    ///
+    /// By default, schedules are never deleted.
+    pub max_schedule_age: Option<std::time::Duration>,
 }
 
 impl Default for ServerOptions {
@@ -77,6 +90,8 @@ impl Default for ServerOptions {
             event_buffer_size: NonZeroUsize::new(10_1000).unwrap(),
             bookkeeping_interval: Duration::from_secs(5),
             executor_shutdown_timeout: Duration::from_secs(10),
+            max_job_age: None,
+            max_schedule_age: None,
         }
     }
 }
@@ -345,6 +360,72 @@ where
             }
             .instrument(tracing::info_span!("clean_up_orphan_executions"))
         });
+
+        if let Some(max_job_age) = options.max_job_age {
+            tokio::spawn({
+                let guard = wg.add_with("remove_old_jobs");
+                let storage = storage.clone();
+
+                async move {
+                    loop {
+                        tracing::trace!("running remove_old_jobs");
+
+                        if guard.is_waiting() {
+                            break;
+                        }
+
+                        let after = SystemTime::now() - max_job_age;
+
+                        if let Err(error) = storage
+                            .delete_jobs(JobQueryFilters {
+                                active: Some(false),
+                                created_before: Some(after),
+                                ..Default::default()
+                            })
+                            .await
+                        {
+                            tracing::error!(?error, "failed to clean up orphan executions");
+                        }
+
+                        sleep(options.bookkeeping_interval).await;
+                    }
+                }
+                .instrument(tracing::info_span!("remove_old_jobs"))
+            });
+        }
+
+        if let Some(max_schedule_age) = options.max_schedule_age {
+            tokio::spawn({
+                let guard = wg.add_with("remove_old_schedules");
+                let storage = storage.clone();
+
+                async move {
+                    loop {
+                        tracing::trace!("running remove_old_schedules");
+
+                        if guard.is_waiting() {
+                            break;
+                        }
+
+                        let after = SystemTime::now() - max_schedule_age;
+
+                        if let Err(error) = storage
+                            .delete_schedules(ScheduleQueryFilters {
+                                active: Some(false),
+                                created_before: Some(after),
+                                ..Default::default()
+                            })
+                            .await
+                        {
+                            tracing::error!(?error, "failed to clean up schedules");
+                        }
+
+                        sleep(options.bookkeeping_interval).await;
+                    }
+                }
+                .instrument(tracing::info_span!("remove_old_schedules"))
+            });
+        }
 
         tokio::spawn({
             let guard = wg.add_with("create_schedule_jobs");
