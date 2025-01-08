@@ -1,0 +1,442 @@
+syntax = "proto3";
+
+package ora.server.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ora/common/v1/job.proto";
+import "ora/common/v1/schedule.proto";
+
+// A service that provides administrative functionality.
+service AdminService {
+  // Add jobs to be executed.
+  rpc AddJobs(AddJobsRequest) returns (AddJobsResponse);
+  // List jobs.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  // Count the number of jobs.
+  rpc CountJobs(CountJobsRequest) returns (CountJobsResponse);
+  // List all job types.
+  rpc ListJobTypes(ListJobTypesRequest) returns (ListJobTypesResponse);
+  // Cancel jobs.
+  rpc CancelJobs(CancelJobsRequest) returns (CancelJobsResponse);
+  // Delete inactive jobs from storage.
+  rpc DeleteInactiveJobs(DeleteInactiveJobsRequest) returns (DeleteInactiveJobsResponse);
+  // Get information about the executors.
+  rpc ListExecutors(ListExecutorsRequest) returns (ListExecutorsResponse);
+  // Create schedules.
+  rpc CreateSchedules(CreateSchedulesRequest) returns (CreateSchedulesResponse);
+  // List schedules.
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  // Count the number of schedules.
+  rpc CountSchedules(CountSchedulesRequest) returns (CountSchedulesResponse);
+  // Cancel schedules.
+  rpc CancelSchedules(CancelSchedulesRequest) returns (CancelSchedulesResponse);
+  // Delete inactive schedules from storage.
+  rpc DeleteInactiveSchedules(DeleteInactiveSchedulesRequest) returns (DeleteInactiveSchedulesResponse);
+}
+
+// Request for `AddJobs`.
+message AddJobsRequest {
+  // The jobs to add.
+  repeated ora.common.v1.JobDefinition jobs = 1;
+}
+
+// Response for `AddJobs`.
+message AddJobsResponse {
+  // The IDs of the added jobs.
+  repeated string job_ids = 1;
+}
+
+// Request for `ListJobs`.
+message ListJobsRequest {
+  // A cursor that can be used to continue a previous query.
+  //
+  // Note that if the cursor is present, filters
+  // and order may be ignored.
+  optional string cursor = 1;
+  // Filter the returned jobs.
+  JobQueryFilter filter = 2;
+  // The order of the returned jobs.
+  optional JobQueryOrder order = 3;
+  // The maximum number of jobs to return.
+  //
+  // If the number is 0, the amount
+  // returned is unspecified.
+  uint32 limit = 4;
+}
+
+// Response for `ListJobs`.
+message ListJobsResponse {
+  // A batch of jobs.
+  repeated Job jobs = 1;
+  // A cursor that can be used to continue a previous query.
+  //
+  // A cursor may be present even if there are no more
+  // jobs to return.
+  //
+  // Note that the format of the cursor is implementation-specific
+  // and should not be relied upon.
+  optional string cursor = 2;
+  // Whether there are more jobs to return.
+  bool has_more = 3;
+}
+
+// Request for `ListJobTypes`.
+message ListJobTypesRequest {}
+
+// Response for `ListJobTypes`.
+message ListJobTypesResponse {
+  // The job types.
+  repeated ora.common.v1.JobType job_types = 1;
+}
+
+// Request for `CountJobs`.
+message CountJobsRequest {
+  // Filter the jobs to count.
+  JobQueryFilter filter = 1;
+}
+
+// Response for `CountJobs`.
+message CountJobsResponse {
+  // The number of jobs.
+  uint64 count = 1;
+}
+
+// Request for `CancelJobs`.
+message CancelJobsRequest {
+  // The filter to select the jobs to cancel.
+  JobQueryFilter filter = 1;
+}
+
+// Response for `CancelJobs`.
+message CancelJobsResponse {
+  // The IDs of the cancelled jobs.
+  repeated string job_ids = 1;
+}
+
+// Request for `DeleteInactiveJobs`.
+message DeleteInactiveJobsRequest {
+  // The filter to select the jobs to remove.
+  JobQueryFilter filter = 1;
+}
+
+// Response for `DeleteInactiveJobs`.
+message DeleteInactiveJobsResponse {
+  // The IDs of the cleaned up jobs.
+  repeated string job_ids = 1;
+}
+
+// Request for `ListExecutors`.
+message ListExecutorsRequest {}
+
+// Response for `ListExecutors`.
+message ListExecutorsResponse {
+  // The executors.
+  repeated ExecutorInfo executors = 1;
+}
+
+// Request for `CreateSchedules`.
+message CreateSchedulesRequest {
+  // The schedules to create.
+  repeated ora.common.v1.ScheduleDefinition schedules = 1;
+}
+
+// Response for `CreateSchedules`.
+message CreateSchedulesResponse {
+  // The IDs of the created schedules.
+  repeated string schedule_ids = 1;
+}
+
+// Request for `ListSchedules`.
+message ListSchedulesRequest {
+  // A cursor that can be used to continue a previous query.
+  //
+  // Note that if the cursor is present, filters
+  // and order may be ignored.
+  optional string cursor = 1;
+  // Filter the returned schedules.
+  ScheduleQueryFilter filter = 2;
+  // The order of the returned schedules.
+  optional ScheduleQueryOrder order = 3;
+  // The maximum number of schedules to return.
+  //
+  // If the number is 0, the amount
+  // returned is unspecified.
+  uint32 limit = 4;
+}
+
+// Response for `ListSchedules`.
+message ListSchedulesResponse {
+  // A batch of schedules.
+  repeated Schedule schedules = 1;
+  // A cursor that can be used to continue a previous query.
+  //
+  // A cursor may be present even if there are no more
+  // schedules to return.
+  //
+  // Note that the format of the cursor is implementation-specific
+  // and should not be relied upon.
+  optional string cursor = 2;
+  // Whether there are more schedules to return.
+  bool has_more = 3;
+}
+
+// Request for `CountSchedules`.
+message CountSchedulesRequest {
+  // Filter the schedules to count.
+  ScheduleQueryFilter filter = 1;
+}
+
+// Response for `CountSchedules`.
+message CountSchedulesResponse {
+  // The number of schedules.
+  uint64 count = 1;
+}
+
+// Request for `CancelSchedules`.
+message CancelSchedulesRequest {
+  // The filter to select the schedules to cancel.
+  ScheduleQueryFilter filter = 1;
+  // Whether to also cancel the jobs created by the schedules.
+  bool cancel_jobs = 2;
+}
+
+// Response for `CancelSchedules`.
+message CancelSchedulesResponse {
+  // The IDs of the cancelled schedules.
+  repeated string schedule_ids = 1;
+  // The IDs of the cancelled jobs that were
+  // created by the schedules.
+  repeated string job_ids = 2;
+}
+
+// Request for `DeleteInactiveSchedules`.
+message DeleteInactiveSchedulesRequest {
+  // The filter to select the schedules to remove.
+  ScheduleQueryFilter filter = 1;
+}
+
+// Response for `DeleteInactiveSchedules`.
+message DeleteInactiveSchedulesResponse {
+  // The IDs of the cleaned up schedules.
+  repeated string schedule_ids = 1;
+}
+
+// Filter of job queries.
+message JobQueryFilter {
+  // The job IDs to filter by.
+  //
+  // If the list is empty, all jobs are included.
+  repeated string job_ids = 1;
+  // The job type IDs to filter by.
+  //
+  // If the list is empty, all job types are included.
+  repeated string job_type_ids = 2;
+  // The execution IDs to filter by.
+  //
+  // If the list is empty, all executors are included.
+  repeated string execution_ids = 3;
+  // The schedule IDs to filter by.
+  //
+  // If the list is empty, all schedules and jobs without
+  // schedules are included.
+  repeated string schedule_ids = 4;
+  // A list of execution statuses to filter by.
+  // If the list is empty, all statuses are included.
+  //
+  // If a job has multiple executions, the last
+  // execution status is used.
+  //
+  // If a job has no executions, its status is
+  // considered to be pending.
+  repeated JobExecutionStatus status = 5;
+  // A list of labels to filter by.
+  //
+  // If multiple filters are specified, all of them
+  // must match.
+  repeated JobLabelFilter labels = 6;
+  // Only include active or inactive jobs.
+  //
+  // If not provided, all jobs are included.
+  optional bool active = 7;
+}
+
+// The order of jobs returned.
+enum JobQueryOrder {
+  // The order is unspecified.
+  JOB_QUERY_ORDER_UNSPECIFIED = 0;
+  // Order by the time the job was created in ascending order.
+  JOB_QUERY_ORDER_CREATED_AT_ASC = 1;
+  // Order by the time the job was created in descending order.
+  JOB_QUERY_ORDER_CREATED_AT_DESC = 2;
+  // Order by the target execution time in ascending order.
+  JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_ASC = 3;
+  // Order by the target execution time in descending order.
+  JOB_QUERY_ORDER_TARGET_EXECUTION_TIME_DESC = 4;
+}
+
+// A job label filter.
+message JobLabelFilter {
+  // The key of the label.
+  string key = 1;
+
+  // The condition of matching the value.
+  oneof value {
+    // Whether the label should exist with any value.
+    LabelFilterExistCondition exists = 2;
+    // The value must be equal to the given value.
+    string equals = 3;
+  }
+}
+
+// A job.
+message Job {
+  // The ID of the job.
+  string id = 1;
+  // The ID of the schedule that created the job.
+  optional string schedule_id = 2;
+  // The job definition.
+  ora.common.v1.JobDefinition definition = 3;
+  // The time the job was created.
+  google.protobuf.Timestamp created_at = 4;
+  // All the executions of this job.
+  repeated JobExecution executions = 5;
+  // Whether the job is active.
+  bool active = 6;
+  // Whether the job was cancelled.
+  bool cancelled = 7;
+}
+
+message JobExecution {
+  // The ID of the job execution.
+  string id = 1;
+  // The ID of the job.
+  string job_id = 2;
+  // The ID of the associated executor.
+  optional string executor_id = 3;
+  // The status of the job execution.
+  JobExecutionStatus status = 4;
+  // The time the job execution was created.
+  google.protobuf.Timestamp created_at = 5;
+  // The time the job execution was marked as ready.
+  google.protobuf.Timestamp ready_at = 6;
+  // The time the job execution was assigned to an executor.
+  google.protobuf.Timestamp assigned_at = 7;
+  // The time the job execution has started.
+  google.protobuf.Timestamp started_at = 8;
+  // The time the job execution has succeeded.
+  google.protobuf.Timestamp succeeded_at = 9;
+  // The time the job execution has failed.
+  google.protobuf.Timestamp failed_at = 10;
+  // The output payload of the execution.
+  optional string output_payload_json = 11;
+  // The error message of the execution.
+  optional string failure_reason = 12;
+}
+
+// The status of a job execution.
+enum JobExecutionStatus {
+  // The status is unspecified and depends on the implementation.
+  JOB_EXECUTION_STATUS_UNSPECIFIED = 0;
+  // The job execution is pending and is not ready to run.
+  JOB_EXECUTION_STATUS_PENDING = 1;
+  // The job execution is ready to run.
+  JOB_EXECUTION_STATUS_READY = 2;
+  // The job execution was assigned to an executor.
+  JOB_EXECUTION_STATUS_ASSIGNED = 3;
+  // The job execution is running.
+  JOB_EXECUTION_STATUS_RUNNING = 4;
+  // The job execution is completed successfully.
+  JOB_EXECUTION_STATUS_SUCCEEDED = 5;
+  // The job execution is failed.
+  JOB_EXECUTION_STATUS_FAILED = 6;
+}
+
+// Information about an executor.
+message ExecutorInfo {
+  // The ID of the executor.
+  string id = 1;
+  // The name of the executor.
+  string name = 2;
+  // The time the executor was last seen.
+  google.protobuf.Timestamp last_seen_at = 3;
+  // Whether the executor is alive.
+  bool alive = 4;
+  // The job types supported by the executor.
+  repeated string supported_job_type_ids = 5;
+  // The maximum number of concurrent job executions.
+  uint32 max_concurrent_executions = 6;
+  // A list of execution IDs assigned to the executor.
+  repeated string assigned_execution_ids = 7;
+}
+
+// A schedule.
+message Schedule {
+  // The ID of the schedule.
+  string id = 1;
+  // The schedule definition.
+  ora.common.v1.ScheduleDefinition definition = 2;
+  // The time the schedule was created.
+  google.protobuf.Timestamp created_at = 3;
+  // Whether the schedule is active.
+  bool active = 5;
+  // Whether the schedule was cancelled.
+  bool cancelled = 6;
+}
+
+// Filter of schedule queries.
+message ScheduleQueryFilter {
+  // The schedule IDs to filter by.
+  //
+  // If the list is empty, all schedules are included.
+  repeated string schedule_ids = 1;
+  // Filter by job IDs that
+  // are created by the schedules.
+  //
+  // If the list is empty, no filtering is done.
+  repeated string job_ids = 2;
+  // Filter by job type IDs of jobs
+  // that are created by the schedules (if applicable).
+  //
+  // If the list is empty, no filtering is done.
+  repeated string job_type_ids = 3;
+  // A list of labels to filter by.
+  //
+  // If multiple filters are specified, all of them
+  // must match.
+  repeated ScheduleLabelFilter labels = 4;
+  // Only include active or inactive schedules.
+  //
+  // If not provided, all schedules are included.
+  optional bool active = 5;
+}
+
+// The order of schedules returned.
+enum ScheduleQueryOrder {
+  // The order is unspecified.
+  SCHEDULE_QUERY_ORDER_UNSPECIFIED = 0;
+  // Order by the time the schedule was created in ascending order.
+  SCHEDULE_QUERY_ORDER_CREATED_AT_ASC = 1;
+  // Order by the time the schedule was created in descending order.
+  SCHEDULE_QUERY_ORDER_CREATED_AT_DESC = 2;
+}
+
+// A schedule label filter.
+message ScheduleLabelFilter {
+  // The key of the label.
+  string key = 1;
+
+  // The condition of matching the value.
+  oneof value {
+    // Whether the label should exist with any value.
+    LabelFilterExistCondition exists = 2;
+    // The value must be equal to the given value.
+    string equals = 3;
+  }
+}
+
+enum LabelFilterExistCondition {
+  // The condition is unspecified.
+  LABEL_FILTER_EXIST_CONDITION_UNSPECIFIED = 0;
+  // The label must exist.
+  LABEL_FILTER_EXIST_CONDITION_EXISTS = 1;
+}

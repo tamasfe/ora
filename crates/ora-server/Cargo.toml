@@ -1,0 +1,44 @@
+[package]
+name = "ora-server"
+version = "0.1.0"
+edition = "2021"
+publish.workspace = true
+
+[dependencies]
+ora-proto = { version = "0.1.0", path = "../ora-proto" }
+ora-timer = { version = "0.1.0", path = "../ora-timer" }
+tokio = { version = "1.40.0", features = ["sync"] }
+tonic.workspace = true
+futures.workspace = true
+tracing.workspace = true
+uuid = { workspace = true, features = ["serde"] }
+async-trait.workspace = true
+flume = "0.11.0"
+wgroup = { version = "0.1.0", path = "../wgroup" }
+async-stream = "0.3.5"
+ahash = "0.8.11"
+indexmap = { version = "2.5.0", features = ["serde"] }
+arc-swap = "1.7.1"
+parking_lot = "0.12.3"
+eyre = "0.6.12"
+atomic = "0.6.0"
+bytemuck = { version = "1.20.0", features = ["derive"] }
+trait-variant = "0.1.2"
+rtrb = "0.3.1"
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+paste = "1.0.15"
+tower = { version = "0.5.2", features = ["util"] }
+hyper-util = { version = "0.1.10", features = ["tokio"] }
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.134"
+cronexpr = "1.1.2"
+jiff = "0.1.15"
+ora-storage = { version = "0.1.0", path = "../ora-storage" }
+metrics = { version = "0.24.1", optional = true }
+
+[features]
+default = ["metrics"]
+metrics = ["dep:metrics"]
+
+[lints]
+workspace = true

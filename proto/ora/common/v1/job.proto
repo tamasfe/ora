@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package ora.common.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// Definition of a job type.
+message JobType {
+  // The ID of the job type.
+  string id = 1;
+  // The name of the job type.
+  optional string name = 2;
+  // The description of the job type.
+  optional string description = 3;
+  // The input JSON schema of the job type.
+  optional string input_schema_json = 4;
+  // The output JSON schema of the job type.
+  optional string output_schema_json = 5;
+}
+
+// Definition of a job.
+message JobDefinition {
+  // The ID of the job type.
+  string job_type_id = 1;
+  // The target execution time of the job.
+  //
+  // If not provided, it should be set to the current time.
+  google.protobuf.Timestamp target_execution_time = 2;
+  // The job input payload JSON that is passed to the executor.
+  string input_payload_json = 3;
+  // The labels of the job.
+  repeated JobLabel labels = 4;
+  // The timeout policy of the job.
+  JobTimeoutPolicy timeout_policy = 5;
+  // Retry policy for the job.
+  JobRetryPolicy retry_policy = 6;
+  // Arbitrary metadata in JSON format.
+  optional string metadata_json = 7;
+}
+
+// A label for a job.
+//
+// Labels can be used to categorize, filter,
+// and group jobs.
+//
+// Any arbitrary metadata can be stored in a label.
+message JobLabel {
+  // The key of the label.
+  //
+  // The key must be unique within the job.
+  // The handling of duplicate keys is undefined
+  // and depends on the implementation.
+  string key = 1;
+  // The value of the label.
+  string value = 2;
+}
+
+// Timeout policy for a job.
+message JobTimeoutPolicy {
+  // The timeout for the job.
+  google.protobuf.Duration timeout = 1;
+  // The base time for the timeout.
+  //
+  // The timeout is calculated from this time.
+  JobTimeoutBaseTime base_time = 2;
+}
+
+// The base time for the timeout.
+enum JobTimeoutBaseTime {
+  // The base time is unspecified and depends on the implementation.
+  JOB_TIMEOUT_BASE_TIME_UNSPECIFIED = 0;
+  // The base time is the target execution time of the job.
+  //
+  // Note that if the target execution time is not set,
+  // the timeout is calculated from the start time of the job.
+  //
+  // If the target execution time is in the past,
+  // the jobs may be immediately timed out.
+  JOB_TIMEOUT_BASE_TIME_TARGET_EXECUTION_TIME = 1;
+  // The base time is the start time of the job.
+  JOB_TIMEOUT_BASE_TIME_START_TIME = 2;
+}
+
+// Retry policy for a job.
+message JobRetryPolicy {
+  // The number of retries for the job.
+  //
+  // If the number of retries is zero, the job is not retried.
+  uint64 retries = 1;
+}

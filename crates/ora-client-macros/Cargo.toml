@@ -1,0 +1,18 @@
+[package]
+name = "ora-client-macros"
+version = "0.1.0"
+edition = "2021"
+publish.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+darling = "0.20.10"
+humantime = "2.1.0"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "2.0"
+
+[lints]
+workspace = true

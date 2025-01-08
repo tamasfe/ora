@@ -1,0 +1,506 @@
+//! Wrappers over client connections that provide higher-level abstractions.
+
+use std::sync::Arc;
+
+use futures::{Stream, StreamExt};
+use ora_proto::server::v1::{
+    admin_service_client::AdminServiceClient, AddJobsRequest, CountJobsRequest, JobQueryOrder,
+    ListJobsRequest, ListSchedulesRequest, ScheduleQueryOrder,
+};
+use thiserror::Error;
+use tonic::{transport::Channel, Request};
+use uuid::Uuid;
+
+use crate::{
+    job_definition::JobDetails,
+    job_handle::JobHandle,
+    job_query::{JobFilter, JobOrder},
+    job_type::TypedJobDefinition,
+    schedule_definition::{ScheduleDefinition, ScheduleDetails},
+    schedule_handle::ScheduleHandle,
+    schedule_query::{ScheduleFilter, ScheduleOrder},
+    JobType,
+};
+
+/// A high-level client for interacting with the Ora server admin endpoints.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct AdminClient {
+    client: AdminServiceClient<Channel>,
+}
+
+impl AdminClient {
+    /// Create a new admin client from a gRPC client.
+    pub fn new(client: AdminServiceClient<Channel>) -> Self {
+        Self { client }
+    }
+
+    /// Add a new job to be executed.
+    pub async fn add_job<J>(
+        &self,
+        definition: TypedJobDefinition<J>,
+    ) -> Result<JobHandle<J>, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .add_jobs(Request::new(AddJobsRequest {
+                jobs: vec![definition.into_inner().into()],
+            }))
+            .await?
+            .into_inner();
+
+        let job_id: Uuid = res
+            .job_ids
+            .into_iter()
+            .next()
+            .ok_or(AdminClientError::NotEnoughJobIds {
+                expected: 1,
+                actual: 0,
+            })?
+            .parse()?;
+
+        Ok(JobHandle::new(job_id, self.client.clone()))
+    }
+
+    /// Add multiple new jobs to be executed.
+    pub async fn add_jobs<J>(
+        &self,
+        definitions: impl IntoIterator<Item = TypedJobDefinition<J>>,
+    ) -> Result<Vec<JobHandle<J>>, AdminClientError> {
+        let definitions = definitions
+            .into_iter()
+            .map(|d| d.into_inner().into())
+            .collect();
+
+        let res = self
+            .client
+            .clone()
+            .add_jobs(Request::new(AddJobsRequest { jobs: definitions }))
+            .await?
+            .into_inner();
+
+        let job_ids = res
+            .job_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        Ok(job_ids
+            .into_iter()
+            .map(|id| JobHandle::new(id, self.client.clone()))
+            .collect())
+    }
+
+    /// Create a job handle for a specific job.
+    ///
+    /// Note that this method does not check if the job exists.
+    pub fn job(&self, job_id: Uuid) -> JobHandle {
+        JobHandle::new(job_id, self.client.clone())
+    }
+
+    /// Retrieve a list of jobs of a specific type
+    /// with a specific filter and order.
+    ///
+    /// The returned job handles will have their details pre-fetched.
+    pub fn jobs_of_type<J>(
+        &self,
+        mut filter: JobFilter,
+        order_by: JobOrder,
+    ) -> impl Stream<Item = Result<JobHandle<J>, AdminClientError>> + Send + Unpin + 'static
+    where
+        J: JobType,
+    {
+        filter.job_type_ids = [J::id().into()].into_iter().collect();
+
+        let client = self.client.clone();
+
+        async_stream::try_stream!({
+            let mut cursor: Option<String> = None;
+
+            loop {
+                let res = client
+                    .clone()
+                    .list_jobs(Request::new(ListJobsRequest {
+                        cursor: cursor.take(),
+                        limit: 100,
+                        filter: Some(filter.clone().into()),
+                        order: Some(JobQueryOrder::from(order_by) as i32),
+                    }))
+                    .await?
+                    .into_inner();
+
+                for job in res.jobs {
+                    let job_id = job.id.parse().map_err(AdminClientError::InvalidId)?;
+                    let h = JobHandle::new(job_id, client.clone());
+                    h.set_details(Arc::new(JobDetails::try_from(job)?));
+                    yield h;
+                }
+
+                cursor = res.cursor;
+
+                if !res.has_more {
+                    break;
+                }
+            }
+        })
+        .boxed()
+    }
+
+    /// Retrieve a list of jobs with a specific filter and order.
+    ///
+    /// The returned job handles will have their details pre-fetched.
+    pub fn jobs(
+        &self,
+        filter: JobFilter,
+        order_by: JobOrder,
+    ) -> impl Stream<Item = Result<JobHandle, AdminClientError>> + Send + Unpin + 'static {
+        let client = self.client.clone();
+
+        async_stream::try_stream!({
+            let mut cursor: Option<String> = None;
+
+            loop {
+                let res = client
+                    .clone()
+                    .list_jobs(Request::new(ListJobsRequest {
+                        cursor: cursor.take(),
+                        limit: 100,
+                        filter: Some(filter.clone().into()),
+                        order: Some(JobQueryOrder::from(order_by) as i32),
+                    }))
+                    .await?
+                    .into_inner();
+
+                for job in res.jobs {
+                    let job_id = job.id.parse().map_err(AdminClientError::InvalidId)?;
+                    let h = JobHandle::new(job_id, client.clone());
+                    h.set_details(Arc::new(JobDetails::try_from(job)?));
+                    yield h;
+                }
+
+                cursor = res.cursor;
+
+                if !res.has_more {
+                    break;
+                }
+            }
+        })
+        .boxed()
+    }
+
+    /// Count the number of jobs with a specific filter.
+    pub async fn job_count(&self, filter: JobFilter) -> Result<u64, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .count_jobs(Request::new(CountJobsRequest {
+                filter: Some(filter.into()),
+            }))
+            .await?;
+
+        Ok(res.into_inner().count)
+    }
+
+    /// Count the number of jobs of a specific type with a specific filter.
+    pub async fn job_count_of_type<J>(&self, mut filter: JobFilter) -> Result<u64, AdminClientError>
+    where
+        J: JobType,
+    {
+        filter.job_type_ids = [J::id().into()].into_iter().collect();
+
+        let res = self
+            .client
+            .clone()
+            .count_jobs(Request::new(CountJobsRequest {
+                filter: Some(filter.into()),
+            }))
+            .await?;
+
+        Ok(res.into_inner().count)
+    }
+
+    /// Cancel jobs with a specific filter.
+    ///
+    /// Returns handles to jobs that were successfully cancelled.
+    pub async fn cancel_jobs(&self, filter: JobFilter) -> Result<Vec<JobHandle>, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .cancel_jobs(Request::new(ora_proto::server::v1::CancelJobsRequest {
+                filter: Some(filter.into()),
+            }))
+            .await?
+            .into_inner();
+
+        let job_ids = res
+            .job_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        Ok(job_ids
+            .into_iter()
+            .map(|id| JobHandle::new(id, self.client.clone()))
+            .collect())
+    }
+
+    /// Delete inactive jobs and associated with a specific filter,
+    /// returning the deleted job IDs.
+    pub async fn delete_inactive_jobs(
+        &self,
+        filter: JobFilter,
+    ) -> Result<Vec<Uuid>, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .delete_inactive_jobs(Request::new(
+                ora_proto::server::v1::DeleteInactiveJobsRequest {
+                    filter: Some(filter.into()),
+                },
+            ))
+            .await?
+            .into_inner();
+
+        let job_ids = res
+            .job_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        Ok(job_ids)
+    }
+
+    /// Add a new schedule.
+    pub async fn add_schedule(
+        &self,
+        mut schedule: ScheduleDefinition,
+    ) -> Result<ScheduleHandle, AdminClientError> {
+        if schedule.propagate_labels_to_jobs {
+            match &mut schedule.job_creation_policy {
+                crate::schedule_definition::ScheduleJobCreationPolicy::JobDefinition(
+                    job_definition,
+                ) => {
+                    for (key, value) in &schedule.labels {
+                        if job_definition.labels.contains_key(key) {
+                            continue;
+                        }
+
+                        job_definition.labels.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+
+        let res = self
+            .client
+            .clone()
+            .create_schedules(Request::new(
+                ora_proto::server::v1::CreateSchedulesRequest {
+                    schedules: vec![schedule.into()],
+                },
+            ))
+            .await?
+            .into_inner();
+
+        let schedule_id: Uuid = res
+            .schedule_ids
+            .into_iter()
+            .next()
+            .ok_or(AdminClientError::NotEnoughScheduleIds {
+                expected: 1,
+                actual: 0,
+            })?
+            .parse()?;
+
+        Ok(ScheduleHandle::new(schedule_id, self.client.clone()))
+    }
+
+    /// Add multiple new schedules.
+    ///
+    /// Returns handles to the created schedules.
+    pub async fn add_schedules(
+        &self,
+        schedules: impl IntoIterator<Item = ScheduleDefinition>,
+    ) -> Result<Vec<ScheduleHandle>, AdminClientError> {
+        let schedules = schedules
+            .into_iter()
+            .map(|mut schedule| {
+                if schedule.propagate_labels_to_jobs {
+                    match &mut schedule.job_creation_policy {
+                        crate::schedule_definition::ScheduleJobCreationPolicy::JobDefinition(
+                            job_definition,
+                        ) => {
+                            for (key, value) in &schedule.labels {
+                                if job_definition.labels.contains_key(key) {
+                                    continue;
+                                }
+
+                                job_definition.labels.insert(key.clone(), value.clone());
+                            }
+                        }
+                    }
+                }
+
+                schedule
+            })
+            .map(Into::into)
+            .collect::<Vec<_>>();
+
+        let res = self
+            .client
+            .clone()
+            .create_schedules(Request::new(
+                ora_proto::server::v1::CreateSchedulesRequest { schedules },
+            ))
+            .await?
+            .into_inner();
+
+        let schedule_ids = res
+            .schedule_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        Ok(schedule_ids
+            .into_iter()
+            .map(|id| ScheduleHandle::new(id, self.client.clone()))
+            .collect())
+    }
+
+    /// Create a new schedule handle for a specific schedule.
+    ///
+    /// Note that this method does not check if the schedule exists.
+    pub fn schedule(&self, schedule_id: Uuid) -> ScheduleHandle {
+        ScheduleHandle::new(schedule_id, self.client.clone())
+    }
+
+    /// Retrieve a list of schedules with a specific filter and order.
+    ///
+    /// The returned schedule handles will have their details pre-fetched.
+    pub fn schedules(
+        &self,
+        filter: ScheduleFilter,
+        order: ScheduleOrder,
+    ) -> impl Stream<Item = Result<ScheduleHandle, AdminClientError>> + Send + Unpin + 'static {
+        let client = self.client.clone();
+
+        async_stream::try_stream!({
+            let mut cursor: Option<String> = None;
+
+            loop {
+                let res = client
+                    .clone()
+                    .list_schedules(Request::new(ListSchedulesRequest {
+                        cursor: cursor.take(),
+                        limit: 100,
+                        filter: Some(filter.clone().into()),
+                        order: Some(ScheduleQueryOrder::from(order) as i32),
+                    }))
+                    .await?
+                    .into_inner();
+
+                for schedule in res.schedules {
+                    let schedule_id = schedule.id.parse().map_err(AdminClientError::InvalidId)?;
+                    let h = ScheduleHandle::new(schedule_id, client.clone());
+                    h.set_details(Arc::new(ScheduleDetails::try_from(schedule)?));
+                    yield h;
+                }
+
+                cursor = res.cursor;
+
+                if !res.has_more {
+                    break;
+                }
+            }
+        })
+        .boxed()
+    }
+
+    /// Return the number of schedules that match a specific filter.
+    pub async fn schedule_count(&self, filter: ScheduleFilter) -> Result<u64, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .count_schedules(Request::new(ora_proto::server::v1::CountSchedulesRequest {
+                filter: Some(filter.into()),
+            }))
+            .await?;
+
+        Ok(res.into_inner().count)
+    }
+
+    /// Cancel schedules with a specific filter,
+    /// optionally cancelling the jobs associated with them.
+    pub async fn cancel_schedules(
+        &self,
+        filter: ScheduleFilter,
+        cancel_jobs: bool,
+    ) -> Result<ScheduleCancellationResult, AdminClientError> {
+        let res = self
+            .client
+            .clone()
+            .cancel_schedules(Request::new(
+                ora_proto::server::v1::CancelSchedulesRequest {
+                    filter: Some(filter.into()),
+                    cancel_jobs,
+                },
+            ))
+            .await?
+            .into_inner();
+
+        let schedule_ids = res
+            .schedule_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        let job_ids = res
+            .job_ids
+            .into_iter()
+            .map(|id| id.parse())
+            .collect::<Result<Vec<Uuid>, _>>()?;
+
+        Ok(ScheduleCancellationResult {
+            schedules: schedule_ids
+                .into_iter()
+                .map(|id| ScheduleHandle::new(id, self.client.clone()))
+                .collect(),
+            jobs: job_ids
+                .into_iter()
+                .map(|id| JobHandle::new(id, self.client.clone()))
+                .collect(),
+        })
+    }
+}
+
+/// The result of a schedule cancellation.
+pub struct ScheduleCancellationResult {
+    /// Cancelled schedules.
+    pub schedules: Vec<ScheduleHandle>,
+    /// Cancelled jobs.
+    pub jobs: Vec<JobHandle>,
+}
+
+impl From<AdminServiceClient<Channel>> for AdminClient {
+    fn from(client: AdminServiceClient<Channel>) -> Self {
+        Self { client }
+    }
+}
+
+/// Errors that can occur when interacting with the admin client.
+#[allow(missing_docs)]
+#[derive(Debug, Error)]
+pub enum AdminClientError {
+    #[error("gRPC error: {0}")]
+    Grpc(#[from] tonic::Status),
+    #[error("not enough job IDs were returned by the server (expected {expected}, got {actual})")]
+    NotEnoughJobIds { expected: usize, actual: usize },
+    #[error("invalid ID: {0}")]
+    InvalidId(#[from] uuid::Error),
+    #[error(
+        "not enough schedule IDs were returned by the server (expected {expected}, got {actual})"
+    )]
+    NotEnoughScheduleIds { expected: usize, actual: usize },
+    #[error("{0}")]
+    Other(#[from] eyre::Error),
+}

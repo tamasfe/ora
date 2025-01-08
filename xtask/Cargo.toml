@@ -1,0 +1,13 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+prost-build = "0.13.2"
+tonic-build = "0.12.2"
+xflags = "0.3.2"
+
+[lints]
+workspace = true

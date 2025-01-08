@@ -1,0 +1,46 @@
+[project]
+name = "ora-client"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "tamasfe", email = "me@tamasfe.dev" },
+]
+requires-python = ">=3.12"
+dependencies = [
+    "betterproto>=2.0.0b7",
+    "loguru>=0.7.3",
+    "pydantic>=2.10.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.custom]
+path = "build.py"
+dependencies = [
+    "betterproto[compiler]>=2.0.0b7",
+    "grpcio-tools>=1.66.2",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.391",
+    "ruff>=0.8.5",
+]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+enableReachabilityAnalysis = true
+
+include = ["src"]
+exclude = [
+    "**/src/ora_client/proto/**/*.py",
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    ".ruff_cache",
+    ".vscode",
+    "**/build.py",
+]

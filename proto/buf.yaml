@@ -1,0 +1,22 @@
+version: v2
+lint:
+  use:
+    - COMMENTS
+    - DEFAULT
+    - ENUM_FIRST_VALUE_ZERO
+  except:
+    - FIELD_NOT_REQUIRED
+    - PACKAGE_NO_IMPORT_CYCLE
+    - COMMENTS
+  ignore:
+    - grpc
+  disallow_comment_ignores: true
+breaking:
+  use:
+    - FILE
+    - PACKAGE
+    - WIRE
+  except:
+    - EXTENSION_NO_DELETE
+    - FIELD_SAME_DEFAULT
+    - PACKAGE_EXTENSION_NO_DELETE

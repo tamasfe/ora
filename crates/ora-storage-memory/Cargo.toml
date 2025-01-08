@@ -1,0 +1,21 @@
+[package]
+name = "ora-storage-memory"
+version = "0.1.0"
+edition = "2021"
+publish.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+eyre = "0.6.12"
+futures.workspace = true
+indexmap = "2.7.0"
+ora-proto = { version = "0.1.0", path = "../ora-proto" }
+ora-storage = { version = "0.1.0", path = "../ora-storage" }
+parking_lot = "0.12.3"
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.134"
+tokio = { version = "1.42.0", features = ["rt"] }
+uuid.workspace = true
+
+[lints]
+workspace = true

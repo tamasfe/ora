@@ -1,0 +1,48 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+publish = true
+description = "Part of the Ora scheduler framework."
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+tonic = "0.12.3"
+futures = "0.3.31"
+tracing = "0.1.41"
+uuid = { version = "1.11.0", features = ["v4", "v7"] }
+async-trait = "0.1.83"
+
+[workspace.lints.rust]
+missing_docs = "warn"
+
+[profile.release]
+debug = true
+# lto = true
+codegen-units = 1
+opt-level = 3
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+empty_docs = "allow"
+default_trait_access = "allow"
+module_name_repetitions = "allow"
+single_match = "allow"
+single_match_else = "allow"
+type_repetition_in_bounds = "allow"
+struct_excessive_bools = "allow"
+too_many_lines = "allow"
+too_many_arguments = "allow"
+ignored_unit_patterns = "allow"
+similar_names = "allow"
+match_wildcard_for_single_variants = "allow"
+needless_raw_string_hashes = "allow"
+should_panic_without_expect = "allow"
+needless_pass_by_value = "allow"
+ref_option_ref = "allow"
+missing_errors_doc = "allow"
+map_unwrap_or = "allow"
+no_effect_underscore_binding = "allow"
+struct_field_names = "allow"
