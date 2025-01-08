@@ -5,6 +5,7 @@ edition = "2021"
 publish.workspace = true
 description.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 ora-client = { version = "0.8.0", path = "../ora-client" }

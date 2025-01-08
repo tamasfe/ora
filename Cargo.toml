@@ -6,6 +6,7 @@ members = ["crates/*", "xtask"]
 publish = true
 description = "Part of the Ora scheduler framework."
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/tamasfe/ora/tree/master"
 
 [workspace.dependencies]
 tonic = "0.12.3"
