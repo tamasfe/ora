@@ -374,7 +374,10 @@ where
                             break;
                         }
 
-                        let after = SystemTime::now() - max_job_age;
+                        let Some(after) = SystemTime::now().checked_sub(max_job_age) else {
+                            sleep(options.bookkeeping_interval).await;
+                            continue;
+                        };
 
                         if let Err(error) = storage
                             .delete_jobs(JobQueryFilters {
@@ -384,7 +387,7 @@ where
                             })
                             .await
                         {
-                            tracing::error!(?error, "failed to clean up orphan executions");
+                            tracing::error!(?error, "failed to clean up jobs");
                         }
 
                         sleep(options.bookkeeping_interval).await;
@@ -407,7 +410,10 @@ where
                             break;
                         }
 
-                        let after = SystemTime::now() - max_schedule_age;
+                        let Some(after) = SystemTime::now().checked_sub(max_schedule_age) else {
+                            sleep(options.bookkeeping_interval).await;
+                            continue;
+                        };
 
                         if let Err(error) = storage
                             .delete_schedules(ScheduleQueryFilters {
