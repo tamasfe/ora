@@ -3,6 +3,8 @@ name = "ora-timer"
 version = "0.1.0"
 edition = "2021"
 publish.workspace = true
+description.workspace = true
+license.workspace = true
 
 [dependencies]
 minstant = "0.1.7"

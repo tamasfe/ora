@@ -3,6 +3,8 @@ name = "ora-client-macros"
 version = "0.1.0"
 edition = "2021"
 publish.workspace = true
+description.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
