@@ -335,7 +335,7 @@ impl MemoryStorage {
                             schedule
                                 .job_type_id
                                 .as_ref()
-                                .map_or(false, |id| job_type_ids.contains(id))
+                                .is_some_and(|id| job_type_ids.contains(id))
                         })
                         .unwrap_or(false),
                     Some(false) => self
@@ -346,7 +346,7 @@ impl MemoryStorage {
                             schedule
                                 .job_type_id
                                 .as_ref()
-                                .map_or(false, |id| job_type_ids.contains(id))
+                                .is_some_and(|id| job_type_ids.contains(id))
                         })
                         .unwrap_or(false),
                     None => {
@@ -357,7 +357,7 @@ impl MemoryStorage {
                                 schedule
                                     .job_type_id
                                     .as_ref()
-                                    .map_or(false, |id| job_type_ids.contains(id))
+                                    .is_some_and(|id| job_type_ids.contains(id))
                             })
                             .unwrap_or(false)
                             || self
@@ -368,7 +368,7 @@ impl MemoryStorage {
                                     schedule
                                         .job_type_id
                                         .as_ref()
-                                        .map_or(false, |id| job_type_ids.contains(id))
+                                        .is_some_and(|id| job_type_ids.contains(id))
                                 })
                                 .unwrap_or(false)
                     }

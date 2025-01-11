@@ -437,7 +437,7 @@ impl MemoryStorage {
                         };
 
                         job.schedule_id
-                            .map_or(false, |schedule_id| schedule_ids.contains(&schedule_id))
+                            .is_some_and(|schedule_id| schedule_ids.contains(&schedule_id))
                     }
                     Some(false) => {
                         let inactive_jobs = self.unschedulable_jobs.read();
@@ -447,7 +447,7 @@ impl MemoryStorage {
                         };
 
                         job.schedule_id
-                            .map_or(false, |schedule_id| schedule_ids.contains(&schedule_id))
+                            .is_some_and(|schedule_id| schedule_ids.contains(&schedule_id))
                     }
                     None => {
                         let inactive_jobs = self.unschedulable_jobs.read();
@@ -461,7 +461,7 @@ impl MemoryStorage {
                         };
 
                         job.schedule_id
-                            .map_or(false, |schedule_id| schedule_ids.contains(&schedule_id))
+                            .is_some_and(|schedule_id| schedule_ids.contains(&schedule_id))
                     }
                 });
             }
