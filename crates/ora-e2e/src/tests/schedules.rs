@@ -2,7 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
 use ora_client::{executor::IntoExecutionHandler, job_type::JobTypeExt, AdminClient};
-use ora_server::{ServerOptions, Storage};
+use ora_server::{ServerOptions, Storage, TimerOptions};
 use tokio::time::sleep;
 
 use crate::{jobs, util::log_audit_events};
@@ -19,6 +19,10 @@ where
             bookkeeping_interval: std::time::Duration::from_millis(100),
             executor_shutdown_timeout: Duration::from_secs(1),
             executor_heartbeat_timeout: Duration::from_secs(1),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -87,6 +91,10 @@ where
             bookkeeping_interval: std::time::Duration::from_millis(100),
             executor_shutdown_timeout: Duration::from_secs(1),
             executor_heartbeat_timeout: Duration::from_secs(1),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;

@@ -1,12 +1,12 @@
 //! Simple test cases.
 
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 use futures::{stream::FuturesOrdered, StreamExt, TryStreamExt};
 use ora_client::{
     executor::IntoExecutionHandler, job_definition::JobStatus, job_type::JobTypeExt, AdminClient,
 };
-use ora_server::{AuditEvent, AuditEventKind, ServerOptions, Storage};
+use ora_server::{AuditEvent, AuditEventKind, ServerOptions, Storage, TimerOptions};
 use tokio::time::sleep;
 
 use crate::{jobs, util::log_audit_events};
@@ -21,6 +21,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -62,6 +66,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -105,6 +113,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -159,6 +171,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -244,6 +260,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -281,6 +301,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -314,6 +338,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -379,6 +407,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -427,6 +459,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -476,6 +512,10 @@ where
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
             executor_heartbeat_timeout: std::time::Duration::from_millis(50),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -531,6 +571,10 @@ where
                 bookkeeping_interval: std::time::Duration::from_millis(100),
                 executor_heartbeat_timeout: std::time::Duration::from_millis(50),
                 executor_shutdown_timeout: std::time::Duration::from_millis(50),
+                timer: TimerOptions {
+                    sleep_threshold: Duration::ZERO,
+                    bookkeeping_interval: Duration::ZERO,
+                },
                 ..ServerOptions::default()
             },
         )?;
@@ -548,7 +592,7 @@ where
 
         job_id = job.id();
 
-        sleep(std::time::Duration::from_millis(50)).await;
+        sleep(std::time::Duration::from_millis(100)).await;
 
         let details = job.details().await?;
         assert_eq!(details.executions.len(), 1);
@@ -568,6 +612,10 @@ where
             bookkeeping_interval: std::time::Duration::from_millis(100),
             executor_heartbeat_timeout: std::time::Duration::from_millis(50),
             executor_shutdown_timeout: std::time::Duration::from_millis(50),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;

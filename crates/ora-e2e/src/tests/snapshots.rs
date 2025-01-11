@@ -1,11 +1,11 @@
 //! Test snapshot export and import.
 
+use std::time::Duration;
+
 use ora_client::{
     executor::IntoExecutionHandler, job_type::JobTypeExt, snapshot::SnapshotClient, AdminClient,
 };
-use ora_server::{
-    ServerOptions, {Storage, StorageSnapshot},
-};
+use ora_server::{ServerOptions, Storage, StorageSnapshot, TimerOptions};
 
 use crate::jobs::{self, StrLen};
 
@@ -19,6 +19,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -57,6 +61,10 @@ where
         storage_factory(),
         ServerOptions {
             bookkeeping_interval: std::time::Duration::from_millis(100),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;

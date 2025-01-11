@@ -10,7 +10,7 @@ use ora_client::{
     job_type::JobTypeExt,
     AdminClient,
 };
-use ora_server::{ServerOptions, Storage};
+use ora_server::{ServerOptions, Storage, TimerOptions};
 use tokio::time::sleep;
 
 use crate::jobs;
@@ -27,6 +27,10 @@ where
             bookkeeping_interval: Duration::from_millis(100),
             executor_shutdown_timeout: Duration::from_secs(1),
             executor_heartbeat_timeout: Duration::from_secs(1),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
@@ -162,6 +166,10 @@ where
             bookkeeping_interval: Duration::from_millis(100),
             executor_shutdown_timeout: Duration::from_secs(1),
             executor_heartbeat_timeout: Duration::from_secs(1),
+            timer: TimerOptions {
+                sleep_threshold: Duration::ZERO,
+                bookkeeping_interval: Duration::ZERO,
+            },
             ..ServerOptions::default()
         },
     )?;
