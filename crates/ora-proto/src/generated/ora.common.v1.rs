@@ -168,9 +168,7 @@ impl JobTimeoutBaseTime {
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
             "JOB_TIMEOUT_BASE_TIME_UNSPECIFIED" => Some(Self::Unspecified),
-            "JOB_TIMEOUT_BASE_TIME_TARGET_EXECUTION_TIME" => {
-                Some(Self::TargetExecutionTime)
-            }
+            "JOB_TIMEOUT_BASE_TIME_TARGET_EXECUTION_TIME" => Some(Self::TargetExecutionTime),
             "JOB_TIMEOUT_BASE_TIME_START_TIME" => Some(Self::StartTime),
             _ => None,
         }
