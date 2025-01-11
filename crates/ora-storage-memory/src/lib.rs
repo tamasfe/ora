@@ -603,11 +603,7 @@ impl Storage for MemoryStorage {
         for schedule in schedules {
             let mut active_schedules = self.schedulable_schedules.write();
 
-            if self
-                .schedulable_schedules
-                .write()
-                .contains_key(&schedule.id)
-            {
+            if active_schedules.contains_key(&schedule.id) {
                 bail!("schedule with ID {} already exists", schedule.id);
             }
 
