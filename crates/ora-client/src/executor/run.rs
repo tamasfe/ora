@@ -16,11 +16,20 @@ use tracing::Instrument;
 use uuid::Uuid;
 use wgroup::WaitGroup;
 
+#[allow(clippy::wildcard_imports)]
+use tonic::codegen::*;
+
 use crate::{executor::ExecutionContext, IndexMap};
 
 use super::{ExecutionHandlerRaw, Executor, ExecutorOptions};
 
-impl Executor {
+impl<C> Executor<C>
+where
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone,
+    C::Error: Into<StdError>,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+{
     /// Run the executor until an error occurs.
     ///
     /// The error includes any errors that would prevent

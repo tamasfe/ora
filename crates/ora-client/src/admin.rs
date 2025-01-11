@@ -22,16 +22,26 @@ use crate::{
     JobType,
 };
 
+#[allow(clippy::wildcard_imports)]
+use tonic::codegen::*;
+
 /// A high-level client for interacting with the Ora server admin endpoints.
 #[derive(Debug, Clone)]
 #[must_use]
-pub struct AdminClient {
-    client: AdminServiceClient<Channel>,
+pub struct AdminClient<C = Channel> {
+    client: AdminServiceClient<C>,
 }
 
-impl AdminClient {
+impl<C> AdminClient<C>
+where
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone + Send + Sync + 'static,
+    <C as tonic::client::GrpcService<tonic::body::BoxBody>>::Future: Send,
+    C::Error: Into<StdError>,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+{
     /// Create a new admin client from a gRPC client.
-    pub fn new(client: AdminServiceClient<Channel>) -> Self {
+    pub fn new(client: AdminServiceClient<C>) -> Self {
         Self { client }
     }
 
@@ -39,7 +49,7 @@ impl AdminClient {
     pub async fn add_job<J>(
         &self,
         definition: TypedJobDefinition<J>,
-    ) -> Result<JobHandle<J>, AdminClientError> {
+    ) -> Result<JobHandle<J, C>, AdminClientError> {
         let res = self
             .client
             .clone()
@@ -66,7 +76,7 @@ impl AdminClient {
     pub async fn add_jobs<J>(
         &self,
         definitions: impl IntoIterator<Item = TypedJobDefinition<J>>,
-    ) -> Result<Vec<JobHandle<J>>, AdminClientError> {
+    ) -> Result<Vec<JobHandle<J, C>>, AdminClientError> {
         let definitions = definitions
             .into_iter()
             .map(|d| d.into_inner().into())
@@ -94,7 +104,7 @@ impl AdminClient {
     /// Create a job handle for a specific job.
     ///
     /// Note that this method does not check if the job exists.
-    pub fn job(&self, job_id: Uuid) -> JobHandle {
+    pub fn job(&self, job_id: Uuid) -> JobHandle<(), C> {
         JobHandle::new(job_id, self.client.clone())
     }
 
@@ -106,7 +116,7 @@ impl AdminClient {
         &self,
         mut filter: JobFilter,
         order_by: JobOrder,
-    ) -> impl Stream<Item = Result<JobHandle<J>, AdminClientError>> + Send + Unpin + 'static
+    ) -> impl Stream<Item = Result<JobHandle<J, C>, AdminClientError>> + Send + Unpin + 'static
     where
         J: JobType,
     {
@@ -153,7 +163,8 @@ impl AdminClient {
         &self,
         filter: JobFilter,
         order_by: JobOrder,
-    ) -> impl Stream<Item = Result<JobHandle, AdminClientError>> + Send + Unpin + 'static {
+    ) -> impl Stream<Item = Result<JobHandle<(), C>, AdminClientError>> + Send + Unpin + 'static
+    {
         let client = self.client.clone();
 
         async_stream::try_stream!({
@@ -222,7 +233,10 @@ impl AdminClient {
     /// Cancel jobs with a specific filter.
     ///
     /// Returns handles to jobs that were successfully cancelled.
-    pub async fn cancel_jobs(&self, filter: JobFilter) -> Result<Vec<JobHandle>, AdminClientError> {
+    pub async fn cancel_jobs(
+        &self,
+        filter: JobFilter,
+    ) -> Result<Vec<JobHandle<(), C>>, AdminClientError> {
         let res = self
             .client
             .clone()
@@ -274,7 +288,7 @@ impl AdminClient {
     pub async fn add_schedule(
         &self,
         mut schedule: ScheduleDefinition,
-    ) -> Result<ScheduleHandle, AdminClientError> {
+    ) -> Result<ScheduleHandle<C>, AdminClientError> {
         if schedule.propagate_labels_to_jobs {
             match &mut schedule.job_creation_policy {
                 crate::schedule_definition::ScheduleJobCreationPolicy::JobDefinition(
@@ -321,7 +335,7 @@ impl AdminClient {
     pub async fn add_schedules(
         &self,
         schedules: impl IntoIterator<Item = ScheduleDefinition>,
-    ) -> Result<Vec<ScheduleHandle>, AdminClientError> {
+    ) -> Result<Vec<ScheduleHandle<C>>, AdminClientError> {
         let schedules = schedules
             .into_iter()
             .map(|mut schedule| {
@@ -370,7 +384,7 @@ impl AdminClient {
     /// Create a new schedule handle for a specific schedule.
     ///
     /// Note that this method does not check if the schedule exists.
-    pub fn schedule(&self, schedule_id: Uuid) -> ScheduleHandle {
+    pub fn schedule(&self, schedule_id: Uuid) -> ScheduleHandle<C> {
         ScheduleHandle::new(schedule_id, self.client.clone())
     }
 
@@ -381,7 +395,8 @@ impl AdminClient {
         &self,
         filter: ScheduleFilter,
         order: ScheduleOrder,
-    ) -> impl Stream<Item = Result<ScheduleHandle, AdminClientError>> + Send + Unpin + 'static {
+    ) -> impl Stream<Item = Result<ScheduleHandle<C>, AdminClientError>> + Send + Unpin + 'static
+    {
         let client = self.client.clone();
 
         async_stream::try_stream!({
@@ -435,7 +450,7 @@ impl AdminClient {
         &self,
         filter: ScheduleFilter,
         cancel_jobs: bool,
-    ) -> Result<ScheduleCancellationResult, AdminClientError> {
+    ) -> Result<ScheduleCancellationResult<C>, AdminClientError> {
         let res = self
             .client
             .clone()
@@ -474,11 +489,11 @@ impl AdminClient {
 }
 
 /// The result of a schedule cancellation.
-pub struct ScheduleCancellationResult {
+pub struct ScheduleCancellationResult<C> {
     /// Cancelled schedules.
-    pub schedules: Vec<ScheduleHandle>,
+    pub schedules: Vec<ScheduleHandle<C>>,
     /// Cancelled jobs.
-    pub jobs: Vec<JobHandle>,
+    pub jobs: Vec<JobHandle<(), C>>,
 }
 
 impl From<AdminServiceClient<Channel>> for AdminClient {

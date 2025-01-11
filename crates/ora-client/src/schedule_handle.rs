@@ -16,19 +16,29 @@ use crate::{
     schedule_query::ScheduleFilter,
     AdminClient,
 };
+#[allow(clippy::wildcard_imports)]
+use tonic::codegen::*;
 
 /// A handle to a schedule.
-pub struct ScheduleHandle {
+#[derive(Debug, Clone)]
+pub struct ScheduleHandle<C = Channel> {
     /// The ID of the schedule.
     id: Uuid,
     /// The client used to interact with the schedule.
-    client: AdminServiceClient<Channel>,
+    client: AdminServiceClient<C>,
     details: Arc<Mutex<Option<Arc<ScheduleDetails>>>>,
 }
 
-impl ScheduleHandle {
+impl<C> ScheduleHandle<C>
+where
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone + Send + Sync + 'static,
+    <C as tonic::client::GrpcService<tonic::body::BoxBody>>::Future: Send,
+    C::Error: Into<StdError>,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+{
     /// Create a new schedule handle.
-    pub(crate) fn new(id: Uuid, client: AdminServiceClient<Channel>) -> Self {
+    pub(crate) fn new(id: Uuid, client: AdminServiceClient<C>) -> Self {
         Self {
             id,
             client,
@@ -83,7 +93,8 @@ impl ScheduleHandle {
         &self,
         mut filter: JobFilter,
         order: JobOrder,
-    ) -> impl Stream<Item = Result<JobHandle, AdminClientError>> + Send + Unpin + 'static {
+    ) -> impl Stream<Item = Result<JobHandle<(), C>, AdminClientError>> + Send + Unpin + 'static
+    {
         filter.schedule_ids = [self.id].into_iter().collect();
         AdminClient::new(self.client.clone()).jobs(filter, order)
     }
@@ -106,7 +117,7 @@ impl ScheduleHandle {
     }
 
     /// Get the active job of the schedule.
-    pub async fn active_job(&self) -> Result<Option<JobHandle>, AdminClientError> {
+    pub async fn active_job(&self) -> Result<Option<JobHandle<(), C>>, AdminClientError> {
         let job = self
             .client
             .clone()

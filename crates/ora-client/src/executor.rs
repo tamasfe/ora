@@ -40,20 +40,20 @@ impl Default for ExecutorOptions {
 }
 
 /// An executor for running jobs.
-pub struct Executor {
+pub struct Executor<C = Channel> {
     options: ExecutorOptions,
-    client: ExecutorServiceClient<Channel>,
+    client: ExecutorServiceClient<C>,
     handlers: Vec<Arc<dyn ExecutionHandlerRaw + Send + Sync>>,
 }
 
-impl Executor {
+impl<C> Executor<C> {
     /// Create a new executor.
-    pub fn new(client: ExecutorServiceClient<Channel>) -> Self {
+    pub fn new(client: ExecutorServiceClient<C>) -> Self {
         Self::with_options(client, ExecutorOptions::default())
     }
 
     /// Create a new executor with the given options.
-    pub fn with_options(client: ExecutorServiceClient<Channel>, options: ExecutorOptions) -> Self {
+    pub fn with_options(client: ExecutorServiceClient<C>, options: ExecutorOptions) -> Self {
         Self {
             client,
             options,

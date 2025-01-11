@@ -14,15 +14,17 @@ use crate::{
     job_query::JobFilter,
     JobType,
 };
+#[allow(clippy::wildcard_imports)]
+use tonic::codegen::*;
 
 /// A handle to a single job.
 ///
 /// The handle also caches the details of the job, so that
 /// they can be accessed without making a network request.
 #[derive(Debug)]
-pub struct JobHandle<J = ()> {
+pub struct JobHandle<J = (), C = Channel> {
     id: Uuid,
-    client: AdminServiceClient<Channel>,
+    client: AdminServiceClient<C>,
     details: Arc<Mutex<Option<Arc<JobDetails>>>>,
     _job_type: std::marker::PhantomData<J>,
 }
@@ -38,9 +40,15 @@ impl<J> Clone for JobHandle<J> {
     }
 }
 
-impl<J> JobHandle<J> {
+impl<J, C> JobHandle<J, C>
+where
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone,
+    C::Error: Into<StdError>,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
+{
     /// Create a new job handle.
-    pub(crate) fn new(id: Uuid, client: AdminServiceClient<Channel>) -> Self {
+    pub(crate) fn new(id: Uuid, client: AdminServiceClient<C>) -> Self {
         Self {
             id,
             client,
@@ -126,7 +134,7 @@ impl<J> JobHandle<J> {
     ///
     /// This does not perform any runtime checks, so it is up to the caller
     /// to ensure that the job type is correct.
-    pub fn cast_type<T: JobType>(&self) -> JobHandle<T> {
+    pub fn cast_type<T: JobType>(&self) -> JobHandle<T, C> {
         JobHandle {
             id: self.id,
             client: self.client.clone(),
@@ -136,7 +144,7 @@ impl<J> JobHandle<J> {
     }
 
     /// Cast the job handle to an unknown job type.
-    pub fn cast_unknown(&self) -> JobHandle {
+    pub fn cast_unknown(&self) -> JobHandle<(), C> {
         JobHandle {
             id: self.id,
             client: self.client.clone(),
@@ -146,9 +154,13 @@ impl<J> JobHandle<J> {
     }
 }
 
-impl<J> JobHandle<J>
+impl<J, C> JobHandle<J, C>
 where
     J: JobType,
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone,
+    C::Error: Into<StdError>,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
 {
     /// Retrieve the input of the job.
     pub async fn input(&self) -> eyre::Result<J> {
@@ -194,9 +206,14 @@ where
     }
 }
 
-impl<J> IntoFuture for JobHandle<J>
+impl<J, C> IntoFuture for JobHandle<J, C>
 where
     J: JobType,
+    C: tonic::client::GrpcService<tonic::body::BoxBody> + Clone + Send + Sync + 'static,
+    <C as tonic::client::GrpcService<tonic::body::BoxBody>>::Future: Send,
+    C::Error: Into<StdError> + Send,
+    C::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+    <C::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
 {
     type Output = eyre::Result<J::Output>;
 
