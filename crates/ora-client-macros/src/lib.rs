@@ -34,8 +34,8 @@ impl ToTokens for JobType {
 
         let retry_policy = match &self.retries {
             Some(retries) => quote! {
-                fn default_retry_policy() -> ora_client::job_definition::RetryPolicy {
-                    ora_client::job_definition::RetryPolicy {
+                fn default_retry_policy() -> ora::job_definition::RetryPolicy {
+                    ora::job_definition::RetryPolicy {
                         retries: #retries,
                     }
                 }
@@ -48,10 +48,10 @@ impl ToTokens for JobType {
                 let timeout_seconds = humantime::parse_duration(timeout).unwrap().as_secs();
 
                 quote! {
-                    fn default_timeout_policy() -> ora_client::job_definition::TimeoutPolicy {
-                        ora_client::job_definition::TimeoutPolicy {
+                    fn default_timeout_policy() -> ora::job_definition::TimeoutPolicy {
+                        ora::job_definition::TimeoutPolicy {
                             timeout: Some(std::time::Duration::from_secs(#timeout_seconds as _)),
-                            base_time: ora_client::job_definition::TimeoutBaseTime::StartTime,
+                            base_time: ora::job_definition::TimeoutBaseTime::StartTime,
                         }
                     }
                 }
@@ -70,7 +70,7 @@ impl ToTokens for JobType {
 
         let ident = &self.ident;
         tokens.extend(quote! {
-            impl ora_client::JobType for #ident {
+            impl ora::JobType for #ident {
                 type Output = #output;
 
                 fn id() -> &'static str {

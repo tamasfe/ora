@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 ora-client = { version = "0.10.0", path = "../ora-client" }
-ora-client-macros = { version = "0.8.0", path = "../ora-client-macros", optional = true }
+ora-client-macros = { version = "0.8.1", path = "../ora-client-macros", optional = true }
 
 [features]
 default = ["macros"]
