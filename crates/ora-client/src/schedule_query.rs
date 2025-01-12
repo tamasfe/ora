@@ -8,7 +8,7 @@ use ora_proto::{
 };
 use uuid::Uuid;
 
-use crate::IndexSet;
+use crate::{IndexSet, JobType};
 
 /// A filter for querying schedules.
 #[derive(Debug, Clone, Default)]
@@ -129,6 +129,11 @@ impl ScheduleFilter {
     pub fn created_before(mut self, time: SystemTime) -> Self {
         self.created_before = Some(time);
         self
+    }
+
+    /// Filter by a job type.
+    pub fn include_job_type<J: JobType>(self) -> Self {
+        self.with_job_type_id(J::id())
     }
 }
 
