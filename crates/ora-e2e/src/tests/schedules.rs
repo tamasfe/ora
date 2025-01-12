@@ -1,7 +1,7 @@
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
-use ora_client::{executor::IntoExecutionHandler, job_type::JobTypeExt, AdminClient};
+use ora::{executor::IntoExecutionHandler, job_type::JobTypeExt, AdminClient};
 use ora_server::{ServerOptions, Storage, TimerOptions};
 use tokio::time::sleep;
 
@@ -28,7 +28,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::wait_forever_handler.handler());
 
     tokio::spawn(async move {
@@ -100,7 +100,7 @@ where
     )?;
     crate::util::log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::assert_execution_time_handler.handler());
 
     tokio::spawn(async move {

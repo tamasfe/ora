@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use ora_client::{
+use ora::{
     executor::IntoExecutionHandler, job_type::JobTypeExt, snapshot::SnapshotClient, AdminClient,
 };
 use ora_server::{ServerOptions, Storage, StorageSnapshot, TimerOptions};
@@ -27,7 +27,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {

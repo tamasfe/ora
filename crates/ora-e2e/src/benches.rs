@@ -3,7 +3,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use ora_client::{
+use ora::{
     executor::{ExecutionContext, IntoExecutionHandler},
     job_type::JobTypeExt,
     AdminClient, JobType,
@@ -31,7 +31,7 @@ pub async fn bench_generic<S: Storage>(
     let executor_count = 10;
 
     for _ in 0..executor_count {
-        let mut executor = ora_client::Executor::new(server.executor_service_client());
+        let mut executor = ora::Executor::new(server.executor_service_client());
         executor.add_handler({
             let state = state.clone();
 

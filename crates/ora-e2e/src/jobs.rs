@@ -4,9 +4,9 @@ use std::time::SystemTime;
 
 use eyre::bail;
 use futures::future::pending;
-use ora_client::executor::{self, ExecutionContext};
+use ora::executor::{self, ExecutionContext};
 
-use ora_client::JobType;
+use ora::JobType;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

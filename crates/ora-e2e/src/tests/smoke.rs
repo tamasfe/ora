@@ -3,7 +3,7 @@
 use std::time::{Duration, SystemTime};
 
 use futures::{stream::FuturesOrdered, StreamExt, TryStreamExt};
-use ora_client::{
+use ora::{
     executor::IntoExecutionHandler, job_definition::JobStatus, job_type::JobTypeExt, AdminClient,
 };
 use ora_server::{AuditEvent, AuditEventKind, ServerOptions, Storage, TimerOptions};
@@ -29,7 +29,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -74,7 +74,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -121,7 +121,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -179,7 +179,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -269,7 +269,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::timeout_handler.handler());
 
     tokio::spawn(async move {
@@ -310,7 +310,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::panic_handler.handler());
 
     tokio::spawn(async move {
@@ -347,7 +347,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::retry3_handler.handler());
 
     tokio::spawn(async move {
@@ -433,7 +433,7 @@ where
     assert!(!job.details().await.unwrap().status().is_terminal());
     assert!(job.details().await.unwrap().status() == JobStatus::Ready);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -468,7 +468,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::str_len_handler.handler());
 
     tokio::spawn(async move {
@@ -521,7 +521,7 @@ where
     )?;
     log_audit_events(&server);
 
-    let mut executor = ora_client::Executor::new(server.executor_service_client());
+    let mut executor = ora::Executor::new(server.executor_service_client());
     executor.add_handler(jobs::wait_forever_handler.handler());
 
     let executor_handle = tokio::spawn(async move {
@@ -579,7 +579,7 @@ where
             },
         )?;
 
-        let mut executor = ora_client::Executor::new(server.executor_service_client());
+        let mut executor = ora::Executor::new(server.executor_service_client());
         executor.add_handler(jobs::wait_forever_handler.handler());
 
         let executor_handle = tokio::spawn(async move {

@@ -3,7 +3,7 @@
 use std::time::{Duration, SystemTime};
 
 use futures::TryStreamExt;
-use ora_client::{
+use ora::{
     executor::{ExecutorOptions, IntoExecutionHandler},
     job_definition::JobStatus,
     job_query::{JobFilter, JobOrder},
@@ -35,7 +35,7 @@ where
         },
     )?;
 
-    let mut executor = ora_client::Executor::with_options(
+    let mut executor = ora::Executor::with_options(
         server.executor_service_client(),
         ExecutorOptions {
             max_concurrent_executions: u32::MAX.try_into().unwrap(),

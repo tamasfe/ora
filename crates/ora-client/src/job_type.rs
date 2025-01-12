@@ -11,9 +11,6 @@ use crate::{
     IndexMap,
 };
 
-#[cfg(feature = "macros")]
-pub use ora_client_macros::JobType;
-
 /// A job type that can be executed by the server.
 ///
 /// The instances of the type implementing this
