@@ -12,8 +12,8 @@ eyre = "0.6.12"
 fjall = { version = "2.4.4" }
 flume = "0.11.1"
 futures.workspace = true
-ora = { version = "0.9.0", path = "../ora" }
-ora-client = { version = "0.9.0", path = "../ora-client" }
+ora = { version = "0.10.0", path = "../ora" }
+ora-client = { version = "0.10.0", path = "../ora-client" }
 ora-proto = { version = "0.1.1", path = "../ora-proto" }
 ora-server = { version = "0.1.1", path = "../ora-server" }
 ora-storage = { version = "0.1.1", path = "../ora-storage" }
