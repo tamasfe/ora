@@ -197,7 +197,7 @@ where
                     .0
                     .execute(context, input)
                     .await
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| format!("{e:?}"))?;
 
                 let output_json = serde_json::to_string(&result)
                     .map_err(|e| format!("Failed to serialize job output JSON: {e}"))?;
