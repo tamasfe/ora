@@ -1,7 +1,7 @@
 [project]
 name = "ora-client"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.2"
+description = "Client library for the Ora scheduling system"
 readme = "README.md"
 authors = [
     { name = "tamasfe", email = "me@tamasfe.dev" },

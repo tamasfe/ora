@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, AsyncGenerator, Iterable, Literal, cast
 
@@ -41,13 +42,61 @@ from ora_client.proto.ora.server.v1 import (
     JobQueryFilter,
     JobQueryOrder,
     LabelFilterExistCondition,
+    ListExecutorsRequest,
     ListJobsRequest,
+    ListJobTypesRequest,
     ListSchedulesRequest,
     Schedule,
     ScheduleLabelFilter,
     ScheduleQueryFilter,
 )
 from ora_client.schedule_definition import ScheduleDefinition
+
+
+@dataclass
+class JobTypeInfo:
+    """Definition of a job type."""
+
+    id: str
+    """The ID of the job type."""
+
+    name: str | None
+    """The name of the job type."""
+
+    description: str | None
+    """The description of the job type."""
+
+    input_schema_json: str | None
+    """The input JSON schema of the job type."""
+
+    output_schema_json: str | None
+    """The output JSON schema of the job type."""
+
+
+@dataclass
+class ExecutorInfo:
+    """Information about an executor."""
+
+    id: str
+    """The ID of the executor."""
+
+    name: str
+    """The name of the executor."""
+
+    last_seen_at: datetime
+    """The time the executor was last seen."""
+
+    alive: bool
+    """Whether the executor is alive."""
+
+    supported_job_type_ids: list[str]
+    """The job types supported by the executor."""
+
+    max_concurrent_executions: int
+    """The maximum number of concurrent job executions."""
+
+    assigned_execution_ids: list[str]
+    """A list of execution IDs assigned to the executor."""
 
 
 class JobHandle:
@@ -224,6 +273,13 @@ class AdminClient:
     def __init__(self, channel: Channel):
         self._channel = channel
         self._client = AdminServiceStub(channel)
+
+    async def __aenter__(self):
+        await self._channel.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self._channel.__aexit__(exc_type, exc, tb)
 
     async def add_jobs(
         self, *jobs: JobDefinition | Iterable[JobDefinition]
@@ -957,6 +1013,44 @@ class AdminClient:
                 filter=filter,
             )
         )
+
+    async def job_types(self) -> list[JobTypeInfo]:
+        """
+        Retrieve all known job types.
+        """
+
+        res = await self._client.list_job_types(ListJobTypesRequest())
+
+        return [
+            JobTypeInfo(
+                id=t.id,
+                name=t.name,
+                description=t.description,
+                input_schema_json=t.input_schema_json,
+                output_schema_json=t.output_schema_json,
+            )
+            for t in res.job_types
+        ]
+
+    async def executors(self) -> list[ExecutorInfo]:
+        """
+        Retrieve all executors that are connected to the server.
+        """
+
+        res = await self._client.list_executors(ListExecutorsRequest())
+
+        return [
+            ExecutorInfo(
+                id=e.id,
+                name=e.name,
+                last_seen_at=e.last_seen_at,
+                alive=e.alive,
+                supported_job_type_ids=e.supported_job_type_ids,
+                max_concurrent_executions=e.max_concurrent_executions,
+                assigned_execution_ids=e.assigned_execution_ids,
+            )
+            for e in res.executors
+        ]
 
     def inner(self):
         return self._client
