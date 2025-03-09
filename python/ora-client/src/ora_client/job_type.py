@@ -21,12 +21,10 @@ class JobType[OutputType](BaseModel):
 
         generic_args = cls.__pydantic_generic_metadata__.get("args", [])
 
-        if len(generic_args) != 1:
-            raise TypeError(
-                f"JobType must have exactly one generic argument, found {len(generic_args)}"
-            )
-
-        setattr(cls, "__ora_output_type__", generic_args[0])
+        if len(generic_args) < 1:
+            setattr(cls, "__ora_output_type__", None)
+        else:
+            setattr(cls, "__ora_output_type__", generic_args[0])
 
     @classmethod
     def __ora_input_schema_json__(cls) -> str:
