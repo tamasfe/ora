@@ -1,6 +1,6 @@
 [project]
 name = "ora-client"
-version = "0.2.3"
+version = "0.2.4"
 description = "Client library for the Ora scheduling system"
 readme = "README.md"
 authors = [

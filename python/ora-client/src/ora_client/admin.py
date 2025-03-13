@@ -128,7 +128,6 @@ class JobHandle:
         res = await self._client.list_jobs(
             ListJobsRequest(
                 filter=JobQueryFilter(
-                    active=True,
                     job_ids=[self._job_id],
                 )
             )
