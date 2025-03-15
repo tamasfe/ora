@@ -72,6 +72,7 @@ where
                         }
                         msg = recv.recv_async() => {
                             if let Ok(msg) = msg {
+                                tracing::trace!(?msg, "sending message");
                                 yield msg;
                             } else {
                                 tracing::debug!("send channel closed, stopping stream");

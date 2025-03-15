@@ -40,6 +40,8 @@ pub(super) async fn handle_executor_message_stream(
                             bail!("missing message");
                         };
 
+                        tracing::trace!(executor_message = ?message, "received executor message");
+
                         executor
                             .inner
                             .last_seen
@@ -64,6 +66,7 @@ pub(super) async fn handle_executor_message_stream(
                         }
                     },
                     None => {
+                        tracing::trace!("executor stream ended");
                         return Ok(());
                     }
                 }
@@ -121,6 +124,7 @@ async fn handle_capabilities(
             ),
         })));
 
+    tracing::info!("executor capabilities updated");
     if !had_capabilities {
         tracing::info!("executor ready");
     }
