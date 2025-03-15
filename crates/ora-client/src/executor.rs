@@ -61,6 +61,11 @@ impl<C> Executor<C> {
         }
     }
 
+    /// Get the options of the executor.
+    pub fn options(&self) -> &ExecutorOptions {
+        &self.options
+    }
+
     /// Add a new handler to the executor.
     ///
     /// # Panics
