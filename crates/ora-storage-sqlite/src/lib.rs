@@ -44,15 +44,24 @@ impl SqliteStorage {
         F: FnOnce(&mut Connection) -> eyre::Result<O> + Send + 'static,
         O: Send + 'static,
     {
+        let span = tracing::Span::current();
+
         let db = self.db.clone();
-        tokio::task::spawn_blocking(move || f(&mut db.lock()))
-            .await
-            .unwrap()
+        tokio::task::spawn_blocking(move || {
+            let _guard = span.enter();
+            tracing::trace!("acquiring database lock");
+            let mut db = db.lock();
+            tracing::trace!("acquired database lock");
+            f(&mut db)
+        })
+        .await
+        .unwrap()
     }
 }
 
 #[async_trait]
 impl Storage for SqliteStorage {
+    #[tracing::instrument(skip_all)]
     async fn job_types_added(&self, job_types: Vec<ora_storage::JobType>) -> eyre::Result<()> {
         if job_types.is_empty() {
             return Ok(());
@@ -104,6 +113,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn jobs_added(&self, jobs: Vec<ora_storage::NewJob>) -> eyre::Result<()> {
         if jobs.is_empty() {
             return Ok(());
@@ -181,6 +191,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn jobs_cancelled(
         &self,
         job_ids: &[Uuid],
@@ -298,6 +309,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn executions_added(
         &self,
         executions: Vec<ora_storage::NewExecution>,
@@ -342,6 +354,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn executions_ready(
         &self,
         execution_ids: &[Uuid],
@@ -404,6 +417,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn execution_assigned(
         &self,
         execution_id: Uuid,
@@ -437,6 +451,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn execution_started(
         &self,
         execution_id: Uuid,
@@ -467,6 +482,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn execution_succeeded(
         &self,
         execution_id: Uuid,
@@ -514,6 +530,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn executions_failed(
         &self,
         execution_ids: &[Uuid],
@@ -620,6 +637,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn orphan_execution_ids(&self, executor_ids: &[Uuid]) -> eyre::Result<Vec<Uuid>> {
         let executor_ids: Vec<_> = executor_ids.into();
 
@@ -670,6 +688,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn jobs_unschedulable(
         &self,
         job_ids: &[Uuid],
@@ -736,6 +755,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn pending_executions(
         &self,
         after: Option<Uuid>,
@@ -772,6 +792,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn ready_executions(
         &self,
         after: Option<Uuid>,
@@ -829,6 +850,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn pending_jobs(
         &self,
         after: Option<Uuid>,
@@ -881,6 +903,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn query_jobs(
         &self,
         cursor: Option<String>,
@@ -902,6 +925,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn query_job_ids(
         &self,
         filters: ora_storage::JobQueryFilters,
@@ -915,6 +939,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn count_jobs(&self, filters: ora_storage::JobQueryFilters) -> eyre::Result<u64> {
         self.with_db(|db| {
             let mut tx = db.transaction()?;
@@ -925,6 +950,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn query_job_types(&self) -> eyre::Result<Vec<ora_storage::JobType>> {
         self.with_db(|db| {
             let mut stmt = db.prepare_cached(
@@ -956,6 +982,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn delete_jobs(&self, filters: ora_storage::JobQueryFilters) -> eyre::Result<Vec<Uuid>> {
         self.with_db(|db| {
             let mut tx = db.transaction()?;
@@ -966,6 +993,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn schedules_added(&self, schedules: Vec<ora_storage::NewSchedule>) -> eyre::Result<()> {
         if schedules.is_empty() {
             return Ok(());
@@ -1051,6 +1079,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn schedules_cancelled(
         &self,
         schedule_ids: &[Uuid],
@@ -1147,6 +1176,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn schedules_unschedulable(
         &self,
         schedule_ids: &[Uuid],
@@ -1214,6 +1244,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn pending_schedules(
         &self,
         after: Option<Uuid>,
@@ -1275,6 +1306,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn query_schedules(
         &self,
         cursor: Option<String>,
@@ -1297,6 +1329,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn query_schedule_ids(
         &self,
         filters: ora_storage::ScheduleQueryFilters,
@@ -1310,6 +1343,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn count_schedules(
         &self,
         filters: ora_storage::ScheduleQueryFilters,
@@ -1323,6 +1357,7 @@ impl Storage for SqliteStorage {
         .await
     }
 
+    #[tracing::instrument(skip_all)]
     async fn delete_schedules(
         &self,
         filters: ora_storage::ScheduleQueryFilters,
