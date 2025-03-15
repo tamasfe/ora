@@ -45,7 +45,7 @@ impl ExecutorHandle {
             .sender
             .load()
             .as_ref()
-            .map(|s| s.is_disconnected())
+            .map(|s| !s.is_disconnected())
             .unwrap_or(false);
 
         let recv_connected = self.inner.recv_connected.load(Ordering::Relaxed);
