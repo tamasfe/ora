@@ -19,7 +19,7 @@ ora-server = { version = "0.1.3", path = "../ora-server" }
 ora-storage = { version = "0.1.1", path = "../ora-storage" }
 ora-storage-fjall = { version = "0.1.0", path = "../ora-storage-fjall" }
 ora-storage-memory = { version = "0.1.2", path = "../ora-storage-memory" }
-ora-storage-sqlite = { version = "0.1.3", path = "../ora-storage-sqlite" }
+ora-storage-sqlite = { version = "0.1.4", path = "../ora-storage-sqlite" }
 parking_lot = { version = "0.12.3", features = ["deadlock_detection"] }
 rand = "0.8.5"
 rusqlite = "0.32.1"
