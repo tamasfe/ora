@@ -32,10 +32,10 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
             PRIMARY KEY (job_id, key)
         );
 
-        CREATE INDEX ora_job_schedule_id ON ora_job (schedule_id);
-        CREATE INDEX ora_job_target_execution_time_unix_ns ON ora_job (target_execution_time_unix_ns);
-        CREATE INDEX ora_job_job_type_id ON ora_job (job_type_id);
-        CREATE INDEX ora_job_marked_unschedulable_at_unix_ns ON ora_job (marked_unschedulable_at_unix_ns) WHERE marked_unschedulable_at_unix_ns IS NULL;
+        CREATE INDEX IF NOT EXISTS ora_job_schedule_id ON ora_job (schedule_id);
+        CREATE INDEX IF NOT EXISTS ora_job_target_execution_time_unix_ns ON ora_job (target_execution_time_unix_ns);
+        CREATE INDEX IF NOT EXISTS ora_job_job_type_id ON ora_job (job_type_id);
+        CREATE INDEX IF NOT EXISTS ora_job_marked_unschedulable_at_unix_ns ON ora_job (marked_unschedulable_at_unix_ns) WHERE marked_unschedulable_at_unix_ns IS NULL;
 
         CREATE TABLE IF NOT EXISTS ora_execution (
             id BLOB PRIMARY KEY NOT NULL,
@@ -65,10 +65,10 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
             ) STORED
         );
 
-        CREATE INDEX ora_execution_job_id ON ora_execution (job_id);
-        CREATE INDEX ora_execution_executor_id ON ora_execution (executor_id);
-        CREATE INDEX ora_execution_status ON ora_execution ("status");
-        CREATE INDEX ora_execution_active ON ora_execution (active) WHERE active;
+        CREATE INDEX IF NOT EXISTS ora_execution_job_id ON ora_execution (job_id);
+        CREATE INDEX IF NOT EXISTS ora_execution_executor_id ON ora_execution (executor_id);
+        CREATE INDEX IF NOT EXISTS ora_execution_status ON ora_execution ("status");
+        CREATE INDEX IF NOT EXISTS ora_execution_active ON ora_execution (active) WHERE active;
 
         CREATE TABLE IF NOT EXISTS ora_schedule (
             id BLOB PRIMARY KEY NOT NULL,
@@ -90,8 +90,8 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
             PRIMARY KEY (schedule_id, key)
         );
 
-        CREATE INDEX ora_schedule_job_type_id ON ora_schedule (job_type_id);
-        CREATE INDEX ora_schedule_marked_unschedulable_at_unix_ns ON ora_schedule (marked_unschedulable_at_unix_ns) WHERE marked_unschedulable_at_unix_ns IS NULL;
+        CREATE INDEX IF NOT EXISTS ora_schedule_job_type_id ON ora_schedule (job_type_id);
+        CREATE INDEX IF NOT EXISTS ora_schedule_marked_unschedulable_at_unix_ns ON ora_schedule (marked_unschedulable_at_unix_ns) WHERE marked_unschedulable_at_unix_ns IS NULL;
         "#,
     )?;
 
