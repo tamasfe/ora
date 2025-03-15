@@ -525,7 +525,7 @@ impl Drop for ExecutionDropWarnBomb {
     fn drop(&mut self) {
         if !self.defused {
             self.span.in_scope(|| {
-                tracing::warn!("execution was dropped during execution");
+                tracing::warn!("execution in progess was dropped");
             });
         }
     }
