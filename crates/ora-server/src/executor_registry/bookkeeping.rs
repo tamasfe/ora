@@ -35,6 +35,7 @@ where
 
         for executor_id in dead_executors {
             if let Some(executor) = self.executors.write().swap_remove(&executor_id) {
+                executor.cancel_all_executions();
                 executor.disconnect();
                 tracing::info!(
                     executor_id = %executor.id,
@@ -199,22 +200,9 @@ where
                         "disconnecting executor with remaining executions",
                     );
                 }
-
-                for execution_id in executor.inner.executions.read().keys() {
-                    if let Some(sender) = &*executor.inner.sender.load() {
-                        _ = sender.send(ServerMessage::V1(v1::ServerMessage {
-                            server_message_kind: Some(
-                                v1::server_message::ServerMessageKind::ExecutionCancelled(
-                                    v1::ExecutionCancelled {
-                                        execution_id: execution_id.to_string(),
-                                    },
-                                ),
-                            ),
-                        }));
-                    }
-                }
             }
 
+            executor.cancel_all_executions();
             executor.disconnect();
         }
 

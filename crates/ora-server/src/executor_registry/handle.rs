@@ -10,6 +10,7 @@ use std::{
 use ahash::{HashMap, HashSet};
 use arc_swap::ArcSwapOption;
 use atomic::Atomic;
+use ora_proto::server::v1;
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -52,9 +53,35 @@ impl ExecutorHandle {
         snd_connected && recv_connected
     }
 
-    // Destroy the connection to the executor, queued
-    // messages will still be sent, but no more messages
-    // will be accepted.
+    /// Cancel all executions assigned to this executor.
+    pub(crate) fn cancel_all_executions(&self) {
+        if let Some(sender) = &*self.inner.sender.load() {
+            let executions = self.inner.executions.read();
+            for (execution_id, _) in executions.iter() {
+                let sent = sender
+                    .send(ServerMessage::V1(v1::ServerMessage {
+                        server_message_kind: Some(
+                            v1::server_message::ServerMessageKind::ExecutionCancelled(
+                                v1::ExecutionCancelled {
+                                    execution_id: execution_id.to_string(),
+                                },
+                            ),
+                        ),
+                    }))
+                    .is_ok();
+
+                if !sent {
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Destroy the connection to the executor, queued
+    /// messages will still be sent, but no more messages
+    /// will be accepted.
+    ///
+    /// Note that this does not cancel any executions.
     pub(crate) fn disconnect(&self) {
         self.inner.sender.swap(None);
         _ = self.inner.close_recv_signal.try_send(());
