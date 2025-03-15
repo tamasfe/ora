@@ -35,6 +35,7 @@ where
 
         for executor_id in dead_executors {
             if let Some(executor) = self.executors.write().swap_remove(&executor_id) {
+                executor.disconnect();
                 tracing::info!(
                     executor_id = %executor.id,
                     assigned_executions = executor.inner.executions.read().len(),

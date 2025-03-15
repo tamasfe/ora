@@ -35,8 +35,7 @@ impl ExecutorHandle {
     /// Whether the executor is ready to accept executions.
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        self.inner.capabilities.load().is_some()
-            && self.inner.recv_connected.load(Ordering::Relaxed)
+        self.is_alive() && self.inner.capabilities.load().is_some()
     }
 
     #[must_use]
@@ -50,7 +49,7 @@ impl ExecutorHandle {
             .unwrap_or(false);
 
         let recv_connected = self.inner.recv_connected.load(Ordering::Relaxed);
-        snd_connected || recv_connected
+        snd_connected && recv_connected
     }
 
     // Destroy the connection to the executor, queued

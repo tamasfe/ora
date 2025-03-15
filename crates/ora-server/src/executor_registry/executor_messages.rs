@@ -34,10 +34,18 @@ pub(super) async fn handle_executor_message_stream(
             message = stream.next() => {
                 match message {
                     Some(request) => {
-                        let request = request?;
+                        let request = match request {
+                            Ok(request) => request,
+                            Err(e) => {
+                                // These errors are most likely due to the client disconnecting,
+                                // so we don't log them as errors.
+                                tracing::debug!(error = ?e, "failed to receive executor message");
+                                return Ok(());
+                            }
+                        };
 
                         let Some(message) = request.message.and_then(|m| m.executor_message_kind) else {
-                            bail!("missing message");
+                            bail!("missing executor message");
                         };
 
                         tracing::trace!(executor_message = ?message, "received executor message");
