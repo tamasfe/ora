@@ -5,7 +5,7 @@ use ora_storage::{
 };
 use rusqlite::Transaction;
 use sea_query::{Expr, Query, SelectStatement, SqliteQueryBuilder};
-use sea_query_rusqlite::RusqliteBinder;
+use crate::sea_query_binder::RusqliteBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

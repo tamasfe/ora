@@ -1,9 +1,9 @@
 use core::fmt::Write;
 
+use crate::sea_query_binder::RusqliteBinder;
 use ora_storage::{JobQueryFilters, JobQueryOrder, JobQueryResult};
 use rusqlite::Transaction;
 use sea_query::{Expr, Query, SelectStatement, SqliteQueryBuilder};
-use sea_query_rusqlite::RusqliteBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

@@ -20,6 +20,8 @@ mod models;
 mod job_query;
 mod schedule_query;
 
+mod sea_query_binder;
+
 const DEFAULT_TEMP_TABLE_THRESHOLD: usize = 1000;
 
 /// A storage implementation backed by sqlite.
