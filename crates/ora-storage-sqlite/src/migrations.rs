@@ -92,6 +92,8 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
 
         CREATE INDEX IF NOT EXISTS ora_schedule_job_type_id ON ora_schedule (job_type_id);
         CREATE INDEX IF NOT EXISTS ora_schedule_marked_unschedulable_at_unix_ns ON ora_schedule (marked_unschedulable_at_unix_ns) WHERE marked_unschedulable_at_unix_ns IS NULL;
+
+        PRAGMA optimize=0x10002;
         "#,
     )?;
 

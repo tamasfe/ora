@@ -37,6 +37,37 @@ impl SqliteStorage {
         })
     }
 
+    /// Run `optimize` on the database.
+    /// 
+    /// This should be called periodically (e.g. hourly).
+    pub async fn optimize(&self) -> eyre::Result<()> {
+        self.with_db(|db| {
+            db.execute_batch(
+                r#"--sql
+                    PRAGMA optimize;
+                "#,
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
+    /// Run `vacuum` on the database.
+    /// 
+    /// This should be called periodically depending
+    /// on the amount of data generated and deleted (e.g. daily).
+    pub async fn vacuum(&self) -> eyre::Result<()> {
+        self.with_db(|db| {
+            db.execute_batch(
+                r#"--sql
+                    VACUUM;
+                "#,
+            )?;
+            Ok(())
+        })
+        .await
+    }
+
     /// Run a function on a separate thread
     /// with a mutable reference to the sqlite connection.
     async fn with_db<F, O>(&self, f: F) -> eyre::Result<O>
