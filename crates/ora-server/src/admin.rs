@@ -547,9 +547,14 @@ async fn create_schedules(
                         missed_policy: schedule_job_timing_policy_cron.missed_time_policy().into(),
                         immediate: schedule_job_timing_policy_cron.immediate,
                         cron_expression: {
+                            let mut parse_options = cronexpr::ParseOptions::default();
+                            parse_options.fallback_timezone_option =
+                                cronexpr::FallbackTimezoneOption::UTC;
+
                             // Validate the cron expression.
-                            cronexpr::parse_crontab(
+                            cronexpr::parse_crontab_with(
                                 &schedule_job_timing_policy_cron.cron_expression,
+                                parse_options,
                             )
                             .map_err(|err| {
                                 Status::invalid_argument(format!("invalid cron expression: {err}"))

@@ -848,10 +848,15 @@ impl TryFrom<common::v1::ScheduleJobTimingPolicy> for ScheduleJobTimingPolicy {
                 Ok(Self::Cron(SchedulingPolicyCron {
                     missed_policy: policy.missed_time_policy().into(),
                     cron_expression: {
+                        let mut parse_options = cronexpr::ParseOptions::default();
+                        parse_options.fallback_timezone_option =
+                            cronexpr::FallbackTimezoneOption::UTC;
+
                         // Validate the cron expression.
-                        cronexpr::parse_crontab(&policy.cron_expression).map_err(|err| {
-                            Status::invalid_argument(format!("invalid cron expression: {err}"))
-                        })?;
+                        cronexpr::parse_crontab_with(&policy.cron_expression, parse_options)
+                            .map_err(|err| {
+                                Status::invalid_argument(format!("invalid cron expression: {err}"))
+                            })?;
 
                         policy.cron_expression
                     },
