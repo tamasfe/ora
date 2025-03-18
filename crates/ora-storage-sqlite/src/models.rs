@@ -400,13 +400,6 @@ impl FromSql for SqlSystemTime {
     }
 }
 
-// WHEN failed_at_unix_ns IS NOT NULL THEN 'failed'
-// WHEN succeeded_at_unix_ns IS NOT NULL THEN 'succeeded'
-// WHEN started_at_unix_ns IS NOT NULL THEN 'running'
-// WHEN assigned_at_unix_ns IS NOT NULL THEN 'assigned'
-// WHEN ready_at_unix_ns IS NOT NULL THEN 'ready'
-// ELSE 'pending'
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i64)]
 pub(crate) enum SqlExecutionStatus {

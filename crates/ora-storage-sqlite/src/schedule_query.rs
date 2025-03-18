@@ -82,17 +82,16 @@ pub(super) fn delete_schedules(
     let deleted_schedules: Vec<Uuid> = tx
         .prepare(
             r#"--sql
-        DELETE FROM
-            "ora_schedule"
-        WHERE
-            "id" IN (
-                SELECT
-                    "id"
-                FROM
-                    temp.query_schedules
-            )
-        RETURNING
-            "id"
+            DELETE FROM
+                "ora_schedule"
+            WHERE
+                "id" IN (
+                    SELECT
+                        "id"
+                    FROM
+                        temp.query_schedules
+                )
+            RETURNING "id"
         "#,
         )?
         .query_map([], |row| row.get(0))?

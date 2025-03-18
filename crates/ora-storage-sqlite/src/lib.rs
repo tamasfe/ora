@@ -1289,22 +1289,15 @@ impl Storage for SqliteStorage {
                         id,
                         job_timing_policy,
                         job_creation_policy,
-                        (
-                            SELECT MAX(target_execution_time_unix_ns)
-                            FROM ora_job
-                            WHERE schedule_id = ora_schedule.id
-                        ) AS last_target_execution_time_ns,
+                        last_target_execution_time_unix_ns,
                         start_after_unix_ns,
                         end_before_unix_ns
-                    FROM ora_schedule
+                    FROM ora_schedule_job_state
+                    JOIN ora_schedule ON
+                        ora_schedule_job_state.schedule_id = ora_schedule.id
                     WHERE
                         marked_unschedulable_at_unix_ns IS NULL
-                        AND NOT EXISTS (
-                            SELECT 1
-                            FROM ora_job
-                            WHERE schedule_id = ora_schedule.id
-                            AND marked_unschedulable_at_unix_ns IS NULL
-                        )
+                        AND active_job_id IS NULL
                         AND (? IS NULL OR id > ?)
                     ORDER BY id ASC
                     LIMIT 10000;
