@@ -177,15 +177,7 @@ pub(super) fn query_job_details(
                 "ora_job"."id",
                 (
                     "marked_unschedulable_at_unix_ns" IS NULL
-                    OR EXISTS (
-                        SELECT
-                            1
-                        FROM
-                            "ora_execution"
-                        WHERE
-                            "status" IN (0, 1, 2)
-                            AND "job_id" = "ora_job"."id"
-                    )
+                    OR "ora_job_execution_state"."active_execution_id" IS NOT NULL
                 ) AS "active",
                 cancelled_at_unix_ns IS NOT NULL AS "cancelled",
                 "job_type_id",
@@ -198,9 +190,9 @@ pub(super) fn query_job_details(
                 "retry_policy"
             FROM
                 "ora_job"
-            JOIN
-                temp.query_jobs
-            ON
+            JOIN "ora_job_execution_state" ON
+                "ora_job"."id" = "ora_job_execution_state"."job_id"
+            JOIN temp.query_jobs ON
                 "ora_job"."id" = temp.query_jobs."id"
             LIMIT ?
             "#,
@@ -543,10 +535,10 @@ fn filter_jobs_query(
                         SELECT
                             1
                         FROM
-                            "ora_execution"
+                            "ora_job_execution_state" es
                         WHERE
-                            "status" IN (0, 1, 2)
-                            AND "job_id" = "ora_job"."id"
+                            es."job_id" = "ora_job"."id"
+                            AND es.active_execution_id IS NOT NULL
                     )
                 )
                 "#,

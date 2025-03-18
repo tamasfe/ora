@@ -209,6 +209,114 @@ pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 3 {
+        db.execute_batch(
+            r#"--sql
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS ora_job_execution_state (
+                job_id BLOB PRIMARY KEY NOT NULL,
+                active_execution_id BLOB,
+                last_execution_status INTEGER,
+                execution_count INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TRIGGER IF NOT EXISTS create_job_execution_state
+            AFTER INSERT ON ora_job
+            FOR EACH ROW
+            BEGIN
+                INSERT INTO ora_job_execution_state (
+                    job_id
+                ) VALUES (
+                    NEW.id
+                );
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS update_job_active_execution
+            AFTER INSERT ON ora_execution
+            FOR EACH ROW
+            BEGIN
+                INSERT INTO ora_job_execution_state (
+                    job_id,
+                    active_execution_id,
+                    last_execution_status,
+                    execution_count
+                ) VALUES (
+                    NEW.job_id,
+                    NEW.id,
+                    NEW."status",
+                    1
+                )
+                ON CONFLICT (job_id) DO UPDATE
+                SET
+                    active_execution_id = NEW.id,
+                    last_execution_status = NEW."status",
+                    execution_count = ora_job_execution_state.execution_count + 1;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS update_job_last_execution_status
+            AFTER UPDATE ON ora_execution
+            FOR EACH ROW
+            BEGIN
+                UPDATE ora_job_execution_state
+                SET
+                    last_execution_status = NEW."status"
+                WHERE
+                    job_id = NEW.job_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS remove_job_active_execution
+            AFTER UPDATE ON ora_execution
+            FOR EACH ROW
+            WHEN
+                NEW.succeeded_at_unix_ns IS NOT NULL
+                OR NEW.failed_at_unix_ns IS NOT NULL
+            BEGIN
+                UPDATE ora_job_execution_state
+                SET
+                    active_execution_id = NULL
+                WHERE job_id = NEW.job_id;
+            END;
+
+            INSERT INTO ora_job_execution_state (
+                job_id,
+                active_execution_id,
+                last_execution_status
+            ) SELECT
+                id AS job_id,
+                (
+                    SELECT
+                        id
+                    FROM
+                        ora_execution
+                    WHERE
+                        job_id = ora_job.id
+                        AND succeeded_at_unix_ns IS NULL
+                        AND failed_at_unix_ns IS NULL
+                ) AS active_execution_id,
+                (
+                    SELECT
+                        "status"
+                    FROM
+                        ora_execution
+                    WHERE
+                        job_id = ora_job.id
+                    ORDER BY
+                        id DESC
+                    LIMIT 1
+                ) AS last_execution_status
+            FROM ora_job;
+
+            CREATE INDEX ora_job_no_active_execution ON ora_job_execution_state (job_id) WHERE active_execution_id IS NULL;
+
+            INSERT INTO ora_migrations (ver) VALUES (3);
+
+            COMMIT;
+
+            ANALYZE;
+            "#,
+        )?;
+    }
+
     db.execute("PRAGMA optimize=0x10002", [])?;
 
     Ok(())

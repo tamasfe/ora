@@ -189,15 +189,7 @@ pub(super) fn query_schedule_details(
                 "job_creation_policy",
                 (
                     "marked_unschedulable_at_unix_ns" IS NULL
-                    OR EXISTS (
-                        SELECT
-                            1
-                        FROM
-                            "ora_schedule_job_state" js
-                        WHERE
-                            js."schedule_id" = "ora_schedule"."id"
-                            AND js."active_job_id" IS NOT NULL
-                    )
+                    OR "ora_schedule_job_state"."active_job_id" IS NOT NULL
                 ) AS "active",
                 "cancelled_at_unix_ns",
                 "start_after_unix_ns",
@@ -205,9 +197,9 @@ pub(super) fn query_schedule_details(
                 "metadata_json"
             FROM
                 "ora_schedule"
-            JOIN
-                temp.query_schedules
-            ON
+            JOIN "ora_schedule_job_state" ON
+                "ora_schedule"."id" = "ora_schedule_job_state"."schedule_id"
+            JOIN temp.query_schedules ON
                 "ora_schedule"."id" = temp.query_schedules."id"
             LIMIT ?
             "#,

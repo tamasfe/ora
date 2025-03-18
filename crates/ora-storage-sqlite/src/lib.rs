@@ -40,7 +40,7 @@ impl SqliteStorage {
     }
 
     /// Run `optimize` on the database.
-    /// 
+    ///
     /// This should be called periodically (e.g. hourly).
     pub async fn optimize(&self) -> eyre::Result<()> {
         self.with_db(|db| {
@@ -55,7 +55,7 @@ impl SqliteStorage {
     }
 
     /// Run `vacuum` on the database.
-    /// 
+    ///
     /// This should be called periodically depending
     /// on the amount of data generated and deleted (e.g. daily).
     pub async fn vacuum(&self) -> eyre::Result<()> {
@@ -837,15 +837,15 @@ impl Storage for SqliteStorage {
                         e.id,
                         e.job_id,
                         j.input_payload_json,
-                        (SELECT COUNT(*) FROM ora_execution WHERE job_id = e.job_id) AS attempt_number,
+                        es.execution_count AS attempt_number,
                         j.job_type_id,
                         j.target_execution_time_unix_ns,
                         j.timeout_policy
                     FROM ora_execution e
-                    JOIN
-                        ora_job j
-                    ON
+                    JOIN ora_job j ON
                         j.id = e.job_id
+                    JOIN ora_job_execution_state es ON
+                        j.id = es.job_id
                     WHERE
                         ready_at_unix_ns IS NOT NULL
                         AND assigned_at_unix_ns IS NULL
@@ -858,10 +858,7 @@ impl Storage for SqliteStorage {
                 "#,
             )?;
 
-            let mut rows = stmt.query([
-                after,
-                after,
-            ])?;
+            let mut rows = stmt.query([after, after])?;
 
             let mut ready_executions = Vec::new();
 
@@ -878,7 +875,6 @@ impl Storage for SqliteStorage {
             }
 
             Ok(ready_executions)
-
         })
         .await
     }
@@ -892,27 +888,19 @@ impl Storage for SqliteStorage {
             let mut stmt = db.prepare_cached(
                 r#"--sql
                     SELECT
-                        id,
+                        ora_job.id,
                         target_execution_time_unix_ns,
-                        (
-                            SELECT COUNT(*)
-                            FROM ora_execution
-                            WHERE job_id = ora_job.id
-                        ) AS execution_count,
+                        es.execution_count,
                         retry_policy,
                         timeout_policy
                     FROM ora_job
+                    JOIN ora_job_execution_state es ON
+                        ora_job.id = es.job_id
                     WHERE
                         marked_unschedulable_at_unix_ns IS NULL
-                        AND NOT EXISTS (
-                            SELECT 1
-                            FROM ora_execution
-                            WHERE job_id = ora_job.id
-                            AND succeeded_at_unix_ns IS NULL
-                            AND failed_at_unix_ns IS NULL
-                        )
+                        AND es.active_execution_id IS NULL
                         AND (? IS NULL OR id > ?)
-                    ORDER BY id ASC
+                    ORDER BY ora_job.id ASC
                     LIMIT 10000;
                 "#,
             )?;
