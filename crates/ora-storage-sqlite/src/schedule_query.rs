@@ -1,11 +1,11 @@
 use core::fmt::Write;
 
+use crate::sea_query_binder::RusqliteBinder;
 use ora_storage::{
     ScheduleQueryFilters, ScheduleQueryOrder, ScheduleQueryResult, ScheduleTimeRange,
 };
 use rusqlite::Transaction;
 use sea_query::{Expr, Query, SelectStatement, SqliteQueryBuilder};
-use crate::sea_query_binder::RusqliteBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -400,19 +400,10 @@ fn filter_schedules_query(
                         SELECT
                             1
                         FROM
-                            "ora_job"
+                            "ora_schedule_job_state" js
                         WHERE
-                            marked_unschedulable_at_unix_ns IS NULL
-                            AND "schedule_id" = "ora_schedule"."id"
-                            AND EXISTS (
-                                SELECT
-                                    1
-                                FROM
-                                    "ora_execution"
-                                WHERE
-                                    "status" IN (0, 1, 2)
-                                    AND "job_id" = "ora_job"."id"
-                            )
+                            js."schedule_id" = "ora_schedule"."id"
+                            AND js."active_job_id" IS NOT NULL
                     )
                 )
                 "#,
