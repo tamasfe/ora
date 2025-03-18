@@ -1,6 +1,6 @@
 [package]
 name = "ora-server"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -36,7 +36,7 @@ serde = { version = "1.0.216", features = ["derive"] }
 serde_json = "1.0.134"
 cronexpr = "1.2.0"
 jiff = "0.2.1"
-ora-storage = { version = "0.1.1", path = "../ora-storage" }
+ora-storage = { version = "0.1.2", path = "../ora-storage" }
 metrics = { version = "0.24.1", optional = true }
 
 [features]

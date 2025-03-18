@@ -15,8 +15,8 @@ futures.workspace = true
 ora = { version = "0.10.3", path = "../ora" }
 ora-client = { version = "0.10.3", path = "../ora-client" }
 ora-proto = { version = "0.1.1", path = "../ora-proto" }
-ora-server = { version = "0.1.5", path = "../ora-server" }
-ora-storage = { version = "0.1.1", path = "../ora-storage" }
+ora-server = { version = "0.1.6", path = "../ora-server" }
+ora-storage = { version = "0.1.2", path = "../ora-storage" }
 ora-storage-fjall = { version = "0.1.0", path = "../ora-storage-fjall" }
 ora-storage-memory = { version = "0.1.2", path = "../ora-storage-memory" }
 ora-storage-sqlite = { version = "0.2.0", path = "../ora-storage-sqlite" }
