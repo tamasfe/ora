@@ -355,7 +355,7 @@ impl SqlSystemTime {
         i64::try_from(
             self.0
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or(Duration::ZERO)
                 .as_nanos(),
         )
         .map_err(Into::into)
@@ -380,7 +380,7 @@ impl ToSql for SqlSystemTime {
             i64::try_from(
                 self.0
                     .duration_since(SystemTime::UNIX_EPOCH)
-                    .map_err(|err| rusqlite::Error::ToSqlConversionFailure(Box::new(err)))?
+                    .unwrap_or(Duration::ZERO)
                     .as_nanos(),
             )
             .map_err(|err| rusqlite::Error::ToSqlConversionFailure(Box::new(err)))?,
