@@ -3,7 +3,7 @@ use core::fmt::Write;
 use crate::sea_query_binder::RusqliteBinder;
 use ora_storage::{JobQueryFilters, JobQueryOrder, JobQueryResult};
 use rusqlite::Transaction;
-use sea_query::{Expr, Query, SelectStatement, SqliteQueryBuilder};
+use sea_query::{Expr, JoinType, Query, SelectStatement, SqliteQueryBuilder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -11,7 +11,9 @@ use crate::models::{JobRetryPolicy, JobTimeoutPolicy, SqlExecutionStatus, SqlSys
 
 pub(super) fn count_jobs(tx: &mut Transaction, filters: JobQueryFilters) -> eyre::Result<u64> {
     let mut select_query = Query::select();
-    select_query.expr(Expr::cust("COUNT(*)")).from(I("ora_job"));
+    select_query
+        .expr(Expr::cust("COUNT(ora_job.id)"))
+        .from(I("ora_job"));
 
     filter_jobs_query(&mut select_query, filters, None)?;
 
@@ -27,9 +29,11 @@ pub(super) fn count_jobs(tx: &mut Transaction, filters: JobQueryFilters) -> eyre
 
 pub(super) fn job_ids(tx: &mut Transaction, filters: JobQueryFilters) -> eyre::Result<Vec<Uuid>> {
     let mut select_query = Query::select();
-    select_query.column(I("id")).from(I("ora_job"));
+    select_query
+        .column((I("ora_job"), I("id")))
+        .from(I("ora_job"));
     filter_jobs_query(&mut select_query, filters, None)?;
-    select_query.order_by(I("id"), sea_query::Order::Asc);
+    select_query.order_by((I("ora_job"), I("id")), sea_query::Order::Asc);
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
 
@@ -55,7 +59,9 @@ pub(super) fn delete_jobs(
 
     {
         let mut select_query = Query::select();
-        select_query.column(I("id")).from(I("ora_job"));
+        select_query
+            .column((I("ora_job"), I("id")))
+            .from(I("ora_job"));
 
         filter_jobs_query(&mut select_query, filters, None)?;
 
@@ -142,7 +148,9 @@ pub(super) fn query_job_details(
 
     {
         let mut select_query = Query::select();
-        select_query.column(I("id")).from(I("ora_job"));
+        select_query
+            .column((I("ora_job"), I("id")))
+            .from(I("ora_job"));
 
         filter_jobs_query(&mut select_query, filters.clone(), last_job_id)?;
         order_jobs_query(&mut select_query, order);
@@ -358,13 +366,19 @@ fn filter_jobs_query(
         target_execution_time_before,
     } = filters;
 
+    let joined_schedule = false;
+    let joined_execution = false;
+    let mut joined_execution_state = false;
+
     if let Some(after) = after {
-        query.and_where(Expr::col(I("id")).gt(sea_query::Value::Uuid(Some(Box::new(after)))));
+        query.and_where(
+            Expr::col((I("ora_job"), I("id"))).gt(sea_query::Value::Uuid(Some(Box::new(after)))),
+        );
     }
 
     if let Some(job_ids) = job_ids {
         query.and_where(
-            Expr::col(I("id")).is_in(
+            Expr::col((I("ora_job"), I("id"))).is_in(
                 job_ids
                     .into_iter()
                     .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
@@ -383,49 +397,51 @@ fn filter_jobs_query(
     }
 
     if let Some(execution_ids) = execution_ids {
-        let mut subquery = Query::select();
-        subquery
-            .expr(Expr::value(1))
-            .from(I("ora_execution"))
-            .and_where(Expr::col(I("job_id")).equals((I("ora_job"), I("id"))))
-            .and_where(
-                Expr::col((I("ora_execution"), I("id"))).is_in(
-                    execution_ids
-                        .into_iter()
-                        .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
-                ),
+        if !joined_execution {
+            query.join(
+                JoinType::Join,
+                I("ora_execution"),
+                Expr::col((I("ora_execution"), I("job_id"))).equals((I("ora_job"), I("id"))),
             );
+        }
 
-        query.and_where(Expr::exists(subquery));
+        query.and_where(
+            Expr::col((I("ora_execution"), I("id"))).is_in(
+                execution_ids
+                    .into_iter()
+                    .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
+            ),
+        );
     }
 
     if let Some(schedule_ids) = schedule_ids {
-        let mut subquery = Query::select();
-        subquery
-            .expr(Expr::value(1))
-            .from(I("ora_schedule"))
-            .and_where(
+        if !joined_schedule {
+            query.join(
+                JoinType::Join,
+                I("ora_schedule"),
                 Expr::col((I("ora_schedule"), I("id"))).equals((I("ora_job"), I("schedule_id"))),
-            )
-            .and_where(
-                Expr::col((I("ora_schedule"), I("id"))).is_in(
-                    schedule_ids
-                        .into_iter()
-                        .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
-                ),
             );
+        }
 
-        query.and_where(Expr::exists(subquery));
+        query.and_where(
+            Expr::col((I("ora_schedule"), I("id"))).is_in(
+                schedule_ids
+                    .into_iter()
+                    .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
+            ),
+        );
     }
 
     if let Some(execution_status) = execution_status {
-        let mut last_execution_status = Query::select();
-        last_execution_status
-            .column(I("status"))
-            .from(I("ora_execution"))
-            .and_where(Expr::col(I("job_id")).equals((I("ora_job"), I("id"))))
-            .order_by((I("ora_execution"), I("id")), sea_query::Order::Desc)
-            .limit(1);
+        if !joined_execution_state {
+            query.join(
+                JoinType::Join,
+                I("ora_job_execution_state"),
+                Expr::col((I("ora_job_execution_state"), I("job_id")))
+                    .equals((I("ora_job"), I("id"))),
+            );
+            joined_execution_state = true;
+        }
 
         for status in execution_status {
             let status = SqlExecutionStatus::from(status);
@@ -433,47 +449,15 @@ fn filter_jobs_query(
             if status == SqlExecutionStatus::Pending {
                 query.and_where(Expr::cust_with_values(
                     r#"--sql
-                        (
-                            NOT EXISTS
-                            (
-                                SELECT
-                                    1
-                                FROM
-                                    "ora_execution"
-                                WHERE
-                                    "job_id" = "ora_job"."id"
-                                ORDER BY
-                                    "id" DESC
-                                LIMIT 1
-                            ) OR (
-                                SELECT
-                                    "status"
-                                FROM
-                                    "ora_execution"
-                                WHERE
-                                    "job_id" = "ora_job"."id"
-                                ORDER BY
-                                    "id" DESC
-                                LIMIT 1
-                            ) = ?
-                        )
+                        "ora_job_execution_state"."last_execution_status" IS NULL
+                        OR "ora_job_execution_state"."last_execution_status" = ?
                         "#,
                     [sea_query::Value::BigInt(Some(status as _))],
                 ));
             } else {
                 query.and_where(Expr::cust_with_values(
                     r#"--sql
-                        (
-                            SELECT
-                                "status"
-                            FROM
-                                "ora_execution"
-                            WHERE
-                                "job_id" = "ora_job"."id"
-                            ORDER BY
-                                "id" DESC
-                            LIMIT 1
-                        ) = ?
+                        "ora_job_execution_state"."last_execution_status" = ?
                         "#,
                     [sea_query::Value::BigInt(Some(status as _))],
                 ));
@@ -527,19 +511,20 @@ fn filter_jobs_query(
     }
 
     if let Some(active) = active {
+        if !joined_execution_state {
+            query.join(
+                JoinType::Join,
+                I("ora_job_execution_state"),
+                Expr::col((I("ora_job_execution_state"), I("job_id")))
+                    .equals((I("ora_job"), I("id"))),
+            );
+        }
+
         let mut active_expr = Expr::cust(
             r#"--sql
                 (
-                    "marked_unschedulable_at_unix_ns" IS NULL
-                    OR EXISTS (
-                        SELECT
-                            1
-                        FROM
-                            "ora_job_execution_state" es
-                        WHERE
-                            es."job_id" = "ora_job"."id"
-                            AND es.active_execution_id IS NOT NULL
-                    )
+                    "ora_job"."marked_unschedulable_at_unix_ns" IS NULL
+                    OR "ora_job_execution_state"."active_execution_id" IS NOT NULL
                 )
                 "#,
         );
@@ -553,26 +538,28 @@ fn filter_jobs_query(
 
     if let Some(created_after) = created_after {
         query.and_where(
-            Expr::col(I("created_at_unix_ns")).gte(SqlSystemTime(created_after).as_i64()?),
+            Expr::col((I("ora_job"), I("created_at_unix_ns")))
+                .gte(SqlSystemTime(created_after).as_i64()?),
         );
     }
 
     if let Some(created_before) = created_before {
         query.and_where(
-            Expr::col(I("created_at_unix_ns")).lt(SqlSystemTime(created_before).as_i64()?),
+            Expr::col((I("ora_job"), I("created_at_unix_ns")))
+                .lt(SqlSystemTime(created_before).as_i64()?),
         );
     }
 
     if let Some(target_execution_time_after) = target_execution_time_after {
         query.and_where(
-            Expr::col(I("target_execution_time_unix_ns"))
+            Expr::col((I("ora_job"), I("target_execution_time_unix_ns")))
                 .gte(SqlSystemTime(target_execution_time_after).as_i64()?),
         );
     }
 
     if let Some(target_execution_time_before) = target_execution_time_before {
         query.and_where(
-            Expr::col(I("target_execution_time_unix_ns"))
+            Expr::col((I("ora_job"), I("target_execution_time_unix_ns")))
                 .lt(SqlSystemTime(target_execution_time_before).as_i64()?),
         );
     }
