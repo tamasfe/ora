@@ -5,7 +5,7 @@ use ora_storage::{
     ScheduleQueryFilters, ScheduleQueryOrder, ScheduleQueryResult, ScheduleTimeRange,
 };
 use rusqlite::Transaction;
-use sea_query::{Expr, Query, SelectStatement, SqliteQueryBuilder};
+use sea_query::{Expr, JoinType, Query, SelectStatement, SqliteQueryBuilder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ pub(super) fn count_schedules(
 ) -> eyre::Result<u64> {
     let mut select_query = Query::select();
     select_query
-        .expr(Expr::cust("COUNT(*)"))
+        .expr(Expr::cust("COUNT(ora_schedule.id)"))
         .from(I("ora_schedule"));
 
     filter_schedules_query(&mut select_query, filters, None)?;
@@ -37,9 +37,11 @@ pub(super) fn schedule_ids(
     filters: ScheduleQueryFilters,
 ) -> eyre::Result<Vec<Uuid>> {
     let mut select_query = Query::select();
-    select_query.column(I("id")).from(I("ora_schedule"));
+    select_query
+        .column((I("ora_schedule"), I("id")))
+        .from(I("ora_schedule"));
     filter_schedules_query(&mut select_query, filters, None)?;
-    select_query.order_by(I("id"), sea_query::Order::Asc);
+    select_query.order_by((I("ora_schedule"), I("id")), sea_query::Order::Asc);
 
     let (query, values) = select_query.build_rusqlite(SqliteQueryBuilder);
 
@@ -65,7 +67,9 @@ pub(super) fn delete_schedules(
 
     {
         let mut select_query = Query::select();
-        select_query.column(I("id")).from(I("ora_schedule"));
+        select_query
+            .column((I("ora_schedule"), I("id")))
+            .from(I("ora_schedule"));
 
         filter_schedules_query(&mut select_query, filters, None)?;
 
@@ -151,7 +155,9 @@ pub(super) fn query_schedule_details(
 
     {
         let mut select_query = Query::select();
-        select_query.column(I("id")).from(I("ora_schedule"));
+        select_query
+            .column((I("ora_schedule"), I("id")))
+            .from(I("ora_schedule"));
 
         filter_schedules_query(&mut select_query, filters.clone(), last_schedule_id)?;
         order_schedules_query(&mut select_query, order);
@@ -297,8 +303,14 @@ fn filter_schedules_query(
         created_before,
     } = filters;
 
+    let job_state_joined = false;
+    let jobs_joined = false;
+
     if let Some(after_id) = after_id {
-        query.and_where(Expr::col(I("id")).gt(sea_query::Value::Uuid(Some(Box::new(after_id)))));
+        query.and_where(
+            Expr::col((I("ora_schedule"), I("id")))
+                .gt(sea_query::Value::Uuid(Some(Box::new(after_id)))),
+        );
     }
 
     if let Some(job_type_ids) = job_type_ids {
@@ -313,7 +325,7 @@ fn filter_schedules_query(
 
     if let Some(schedule_ids) = schedule_ids {
         query.and_where(
-            Expr::col(I("id")).is_in(
+            Expr::col((I("ora_schedule"), I("id"))).is_in(
                 schedule_ids
                     .into_iter()
                     .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
@@ -322,20 +334,21 @@ fn filter_schedules_query(
     }
 
     if let Some(job_ids) = job_ids {
-        let mut subquery = Query::select();
-        subquery
-            .expr(Expr::value(1))
-            .from(I("ora_job"))
-            .and_where(Expr::col(I("schedule_id")).equals((I("ora_schedule"), I("id"))))
-            .and_where(
-                Expr::col((I("ora_job"), I("id"))).is_in(
-                    job_ids
-                        .into_iter()
-                        .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
-                ),
+        if !jobs_joined {
+            query.join(
+                JoinType::Join,
+                I("ora_job"),
+                Expr::col((I("ora_schedule"), I("id"))).equals((I("ora_job"), I("schedule_id"))),
             );
+        }
 
-        query.and_where(Expr::exists(subquery));
+        query.and_where(
+            Expr::col((I("ora_job"), I("id"))).is_in(
+                job_ids
+                    .into_iter()
+                    .map(|id| sea_query::Value::Uuid(Some(Box::new(id)))),
+            ),
+        );
     }
 
     if let Some(labels) = labels {
@@ -384,39 +397,47 @@ fn filter_schedules_query(
     }
 
     if let Some(active) = active {
-        let mut active_expr = Expr::cust(
-            r#"--sql
-                (
-                    "marked_unschedulable_at_unix_ns" IS NULL
-                    OR EXISTS (
-                        SELECT
-                            1
-                        FROM
-                            "ora_schedule_job_state" js
-                        WHERE
-                            js."schedule_id" = "ora_schedule"."id"
-                            AND js."active_job_id" IS NOT NULL
-                    )
-                )
-                "#,
-        );
-
-        if !active {
-            active_expr = active_expr.not();
+        if !job_state_joined {
+            query.join(
+                JoinType::Join,
+                I("ora_schedule_job_state"),
+                Expr::col((I("ora_schedule"), I("id")))
+                    .equals((I("ora_schedule_job_state"), I("schedule_id"))),
+            );
         }
 
-        query.and_where(active_expr);
+        if active {
+            query.and_where(Expr::cust(
+                r#"--sql
+                    (
+                        "ora_schedule"."marked_unschedulable_at_unix_ns" IS NULL
+                        OR "ora_schedule_job_state"."active_job_id" IS NOT NULL
+                    )
+                    "#,
+            ));
+        } else {
+            query.and_where(Expr::cust(
+                r#"--sql
+                    (
+                        "ora_schedule"."marked_unschedulable_at_unix_ns" IS NOT NULL
+                        AND "ora_schedule_job_state"."active_job_id" IS NULL
+                    )
+                    "#,
+            ));
+        }
     }
 
     if let Some(created_after) = created_after {
         query.and_where(
-            Expr::col(I("created_at_unix_ns")).gte(SqlSystemTime(created_after).as_i64()?),
+            Expr::col((I("ora_schedule"), I("created_at_unix_ns")))
+                .gte(SqlSystemTime(created_after).as_i64()?),
         );
     }
 
     if let Some(created_before) = created_before {
         query.and_where(
-            Expr::col(I("created_at_unix_ns")).lt(SqlSystemTime(created_before).as_i64()?),
+            Expr::col((I("ora_schedule"), I("created_at_unix_ns")))
+                .lt(SqlSystemTime(created_before).as_i64()?),
         );
     }
 
@@ -426,10 +447,10 @@ fn filter_schedules_query(
 fn order_schedules_query(query: &mut SelectStatement, order: ScheduleQueryOrder) {
     match order {
         ScheduleQueryOrder::CreatedAtAsc => {
-            query.order_by(I("id"), sea_query::Order::Asc);
+            query.order_by((I("ora_schedule"), I("id")), sea_query::Order::Asc);
         }
         ScheduleQueryOrder::CreatedAtDesc => {
-            query.order_by(I("id"), sea_query::Order::Desc);
+            query.order_by((I("ora_schedule"), I("id")), sea_query::Order::Desc);
         }
     }
 }

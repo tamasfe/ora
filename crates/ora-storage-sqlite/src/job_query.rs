@@ -520,20 +520,25 @@ fn filter_jobs_query(
             );
         }
 
-        let mut active_expr = Expr::cust(
-            r#"--sql
-                (
-                    "ora_job"."marked_unschedulable_at_unix_ns" IS NULL
-                    OR "ora_job_execution_state"."active_execution_id" IS NOT NULL
-                )
-                "#,
-        );
-
-        if !active {
-            active_expr = active_expr.not();
+        if active {
+            query.and_where(Expr::cust(
+                r#"--sql
+                    (
+                        "ora_job"."marked_unschedulable_at_unix_ns" IS NULL
+                        OR "ora_job_execution_state"."active_execution_id" IS NOT NULL
+                    )
+                    "#,
+            ));
+        } else {
+            query.and_where(Expr::cust(
+                r#"--sql
+                    (
+                        "ora_job"."marked_unschedulable_at_unix_ns" IS NOT NULL
+                        AND "ora_job_execution_state"."active_execution_id" IS NULL
+                    )
+                    "#,
+            ));
         }
-
-        query.and_where(active_expr);
     }
 
     if let Some(created_after) = created_after {
