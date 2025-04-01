@@ -2,7 +2,7 @@
 
 use ora_proto::server::v1::admin_service_server::AdminServiceServer;
 use ora_server::ServerOptions;
-use ora_storage_sqlite::SqliteStorage;
+use ora_storage_sqlite::{SqliteStorage, SqliteStorageConfig};
 use tonic_web::GrpcWebLayer;
 use tower_http::{
     cors::CorsLayer,
@@ -14,7 +14,7 @@ use tracing::Level;
 async fn main() -> eyre::Result<()> {
     ora_e2e::util::init_tracing();
 
-    let storage = SqliteStorage::new(rusqlite::Connection::open_in_memory()?)?;
+    let storage = SqliteStorage::new(SqliteStorageConfig::new_in_memory())?;
 
     let server = ora_server::Server::spawn(storage, ServerOptions::default())?;
     ora_e2e::util::log_audit_events(&server);

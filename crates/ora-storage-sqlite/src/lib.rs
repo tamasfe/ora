@@ -1,6 +1,6 @@
 //! Storage implementation for `ora` backed by sqlite.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use eyre::Context;
@@ -8,7 +8,7 @@ use migrations::run_migrations;
 use models::{JobRetryPolicy, JobTimeoutPolicy, SqlSystemTime};
 use ora_storage::{ScheduleTimeRange, Storage};
 use parking_lot::Mutex;
-use rusqlite::{named_params, params, params_from_iter, Connection};
+use rusqlite::{named_params, params, params_from_iter, Connection, OpenFlags};
 use uuid::Uuid;
 
 #[macro_use]
@@ -27,15 +27,156 @@ const DEFAULT_TEMP_TABLE_THRESHOLD: usize = 1000;
 /// A storage implementation backed by sqlite.
 #[derive(Debug, Clone)]
 pub struct SqliteStorage {
-    db: Arc<Mutex<Connection>>,
+    /// The sqlite connection pool.
+    pool: deadpool::unmanaged::Pool<Connection>,
+    /// A mutex that ensures that scheduler operations
+    /// are always ran sequentially.
+    scheduler_mutex: Arc<Mutex<()>>,
+}
+
+/// Configuration for the sqlite storage.
+#[must_use]
+pub struct SqliteStorageConfig {
+    /// The path to the sqlite database file.
+    ///
+    /// If not provided, a temporary in-memory database will be used.
+    path: Option<PathBuf>,
+    /// Flags that are used to configure the sqlite database.
+    flags: OpenFlags,
+    /// A function that is called whenever a new connection is created.
+    /// This can be used to set PRAGMA options on the connection.
+    #[allow(clippy::type_complexity)]
+    conn_init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()> + Send + Sync>>,
+    /// A function that is called whenever the first connection is created.
+    #[allow(clippy::type_complexity)]
+    init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()> + Send + Sync>>,
+    /// The size of the connection pool.
+    ///
+    /// If not provided, a default size of 1 will be used.
+    size: usize,
+}
+
+impl SqliteStorageConfig {
+    /// Create a new `SqliteStorageConfig` with the given path.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: Some(path.into()),
+            conn_init: None,
+            init: None,
+            flags: OpenFlags::default(),
+            size: 1,
+        }
+    }
+
+    /// Create a new `SqliteStorageConfig` with an in-memory database.
+    pub fn new_in_memory() -> Self {
+        Self {
+            path: None,
+            conn_init: None,
+            init: None,
+            flags: OpenFlags::default(),
+            size: 1,
+        }
+    }
+
+    /// Set the function that is called whenever the first connection is created.
+    ///
+    /// Note that only one function can be set at a time,
+    /// so this will overwrite any existing function.
+    ///
+    /// Useful for setting PRAGMA options that affect the entire database
+    /// and all connections.
+    pub fn with_init<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Connection) -> eyre::Result<()> + Send + Sync + 'static,
+    {
+        self.init = Some(Box::new(f));
+        self
+    }
+
+    /// Set the function that is called whenever a new connection is created.
+    ///
+    /// Note that only one function can be set at a time,
+    /// so this will overwrite any existing function.
+    pub fn with_connection_init<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&mut Connection) -> eyre::Result<()> + Send + Sync + 'static,
+    {
+        self.conn_init = Some(Box::new(f));
+        self
+    }
+
+    /// Set the flags that are used to configure the sqlite database.
+    pub fn with_flags(mut self, flags: OpenFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    /// Set the amount of connections to use to access the database.
+    ///
+    /// The connections are created eagerly when the storage is created.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the size is 0.
+    pub fn with_connection_count(mut self, size: usize) -> Self {
+        assert!(size > 0, "pool size must be greater than 0");
+        self.size = size;
+        self
+    }
+
+    /// Create a new connection.
+    fn new_connection(&self) -> rusqlite::Result<Connection> {
+        tracing::debug!("creating new sqlite connection");
+        if let Some(path) = &self.path {
+            Connection::open_with_flags(path, self.flags)
+        } else {
+            Connection::open_in_memory_with_flags(self.flags)
+        }
+    }
+}
+
+impl std::fmt::Debug for SqliteStorageConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SqliteStorageConfig")
+            .field("path", &self.path)
+            .finish_non_exhaustive()
+    }
 }
 
 impl SqliteStorage {
     /// Create a new sqlite storage instance with the given connection.
-    pub fn new(mut connection: Connection) -> eyre::Result<Self> {
-        run_migrations(&mut connection).wrap_err("failed to run migrations")?;
+    pub fn new(mut config: SqliteStorageConfig) -> eyre::Result<Self> {
+        if config.path.is_none() && config.size > 1 {
+            tracing::warn!("sqlite in-memory storage with multiple connections is not supported");
+            config.size = 1;
+        }
+
+        let pool = deadpool::unmanaged::Pool::new(config.size);
+
+        for i in 0..config.size {
+            let mut conn = config.new_connection()?;
+
+            if i == 0 {
+                if let Some(init) = &config.init {
+                    init(&mut conn).wrap_err("failed to initialize sqlite connection")?;
+                }
+
+                if let Some(conn_init) = &config.conn_init {
+                    conn_init(&mut conn).wrap_err("failed to initialize sqlite connection")?;
+                }
+
+                run_migrations(&mut conn).wrap_err("failed to run migrations")?;
+            } else if let Some(conn_init) = &config.conn_init {
+                conn_init(&mut conn).wrap_err("failed to initialize sqlite connection")?;
+            }
+
+            pool.try_add(conn).map_err(|(_, e)| e)?;
+        }
+
         Ok(Self {
-            db: Arc::new(Mutex::new(connection)),
+            pool,
+            scheduler_mutex: Arc::new(Mutex::new(())),
         })
     }
 
@@ -43,7 +184,7 @@ impl SqliteStorage {
     ///
     /// This should be called periodically (e.g. hourly).
     pub async fn optimize(&self) -> eyre::Result<()> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             db.execute_batch(
                 r#"--sql
                     PRAGMA optimize;
@@ -59,7 +200,7 @@ impl SqliteStorage {
     /// This should be called periodically depending
     /// on the amount of data generated and deleted (e.g. daily).
     pub async fn vacuum(&self) -> eyre::Result<()> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             db.execute_batch(
                 r#"--sql
                     VACUUM;
@@ -71,24 +212,42 @@ impl SqliteStorage {
     }
 
     /// Run a function on a separate thread
-    /// with a mutable reference to the sqlite connection.
-    async fn with_db<F, O>(&self, f: F) -> eyre::Result<O>
+    /// with a mutable reference to an sqlite connection.
+    async fn with_db_concurrent<F, O>(&self, f: F) -> eyre::Result<O>
     where
         F: FnOnce(&mut Connection) -> eyre::Result<O> + Send + 'static,
         O: Send + 'static,
     {
         let span = tracing::Span::current();
 
-        let db = self.db.clone();
+        tracing::trace!("acquiring database connection");
+        let mut conn = self.pool.get().await?;
+        tracing::trace!("acquired database connection");
+
         tokio::task::spawn_blocking(move || {
             let _guard = span.enter();
-            tracing::trace!("acquiring database lock");
-            let mut db = db.lock();
-            tracing::trace!("acquired database lock");
-            f(&mut db)
+            f(&mut conn)
         })
         .await
         .unwrap()
+    }
+
+    /// Run a function on a separate thread
+    /// with a mutable reference to an sqlite connection.
+    ///
+    /// This function is used to run scheduler operations
+    /// that need to be run sequentially.
+    async fn with_db<F, O>(&self, f: F) -> eyre::Result<O>
+    where
+        F: FnOnce(&mut Connection) -> eyre::Result<O> + Send + 'static,
+        O: Send + 'static,
+    {
+        let scheduler_mutex = self.scheduler_mutex.clone();
+        self.with_db_concurrent(move |conn| {
+            let _guard = scheduler_mutex.lock();
+            f(conn)
+        })
+        .await
     }
 }
 
@@ -937,7 +1096,7 @@ impl Storage for SqliteStorage {
             None => None,
         };
 
-        self.with_db(move |db| {
+        self.with_db_concurrent(move |db| {
             let mut tx = db.transaction()?;
             let res = job_query::query_job_details(&mut tx, cursor, limit, order, filters);
             tx.commit()?;
@@ -951,7 +1110,7 @@ impl Storage for SqliteStorage {
         &self,
         filters: ora_storage::JobQueryFilters,
     ) -> eyre::Result<Vec<Uuid>> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = job_query::job_ids(&mut tx, filters);
             tx.commit()?;
@@ -962,7 +1121,7 @@ impl Storage for SqliteStorage {
 
     #[tracing::instrument(skip_all)]
     async fn count_jobs(&self, filters: ora_storage::JobQueryFilters) -> eyre::Result<u64> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = job_query::count_jobs(&mut tx, filters);
             tx.commit()?;
@@ -973,7 +1132,7 @@ impl Storage for SqliteStorage {
 
     #[tracing::instrument(skip_all)]
     async fn query_job_types(&self) -> eyre::Result<Vec<ora_storage::JobType>> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut stmt = db.prepare_cached(
                 r#"--sql
                     SELECT
@@ -1005,7 +1164,7 @@ impl Storage for SqliteStorage {
 
     #[tracing::instrument(skip_all)]
     async fn delete_jobs(&self, filters: ora_storage::JobQueryFilters) -> eyre::Result<Vec<Uuid>> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = job_query::delete_jobs(&mut tx, filters);
             tx.commit()?;
@@ -1333,7 +1492,7 @@ impl Storage for SqliteStorage {
             None => None,
         };
 
-        self.with_db(move |db| {
+        self.with_db_concurrent(move |db| {
             let mut tx = db.transaction()?;
             let res =
                 schedule_query::query_schedule_details(&mut tx, cursor, limit, order, filters);
@@ -1348,7 +1507,7 @@ impl Storage for SqliteStorage {
         &self,
         filters: ora_storage::ScheduleQueryFilters,
     ) -> eyre::Result<Vec<Uuid>> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = schedule_query::schedule_ids(&mut tx, filters);
             tx.commit()?;
@@ -1362,7 +1521,7 @@ impl Storage for SqliteStorage {
         &self,
         filters: ora_storage::ScheduleQueryFilters,
     ) -> eyre::Result<u64> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = schedule_query::count_schedules(&mut tx, filters);
             tx.commit()?;
@@ -1376,7 +1535,7 @@ impl Storage for SqliteStorage {
         &self,
         filters: ora_storage::ScheduleQueryFilters,
     ) -> eyre::Result<Vec<Uuid>> {
-        self.with_db(|db| {
+        self.with_db_concurrent(|db| {
             let mut tx = db.transaction()?;
             let res = schedule_query::delete_schedules(&mut tx, filters);
             tx.commit()?;

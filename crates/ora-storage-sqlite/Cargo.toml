@@ -1,6 +1,6 @@
 [package]
 name = "ora-storage-sqlite"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -9,6 +9,9 @@ repository.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+deadpool = { version = "0.12.2", default-features = false, features = [
+    "unmanaged",
+] }
 eyre = "0.6.12"
 futures.workspace = true
 ora-proto = { version = "0.1.1", path = "../ora-proto" }
@@ -16,7 +19,10 @@ ora-storage = { version = "0.1.2", path = "../ora-storage" }
 parking_lot = "0.12.3"
 rkyv = { version = "0.8.9", features = ["indexmap-2", "unaligned", "uuid-1"] }
 rusqlite = { version = "0.34.0", features = ["bundled", "uuid"] }
-sea-query = { version = "0.32.1", default-features = false, features = ["backend-sqlite", "with-uuid"] }
+sea-query = { version = "0.32.1", default-features = false, features = [
+    "backend-sqlite",
+    "with-uuid",
+] }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.134"
 tokio = { version = "1.42.0", features = ["rt"] }

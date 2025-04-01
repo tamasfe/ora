@@ -1,9 +1,9 @@
 #![allow(missing_docs)]
 use ora_e2e::{tests::smoke, util::init_test};
-use ora_storage_sqlite::SqliteStorage;
+use ora_storage_sqlite::{SqliteStorage, SqliteStorageConfig};
 
 fn temp_storage_factory() -> impl Fn() -> SqliteStorage {
-    move || SqliteStorage::new(rusqlite::Connection::open_in_memory().unwrap()).unwrap()
+    move || SqliteStorage::new(SqliteStorageConfig::new_in_memory()).unwrap()
 }
 
 #[tokio::test]

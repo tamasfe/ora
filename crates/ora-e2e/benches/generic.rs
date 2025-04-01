@@ -5,8 +5,7 @@ use ora_e2e::{benches::GenericBenchResult, util::monitor_deadlocks};
 use ora_server::ServerOptions;
 use ora_storage_fjall::{FjallStorage, FjallStorageConfig};
 use ora_storage_memory::MemoryStorage;
-use ora_storage_sqlite::SqliteStorage;
-use rusqlite::Connection;
+use ora_storage_sqlite::{SqliteStorage, SqliteStorageConfig};
 
 fn main() {
     let job_counts = vec![5000];
@@ -107,7 +106,7 @@ async fn bench_sqlite_storage_memory(
     steps: usize,
 ) -> GenericBenchResult {
     ora_e2e::benches::bench_generic(
-        SqliteStorage::new(Connection::open_in_memory().unwrap()).unwrap(),
+        SqliteStorage::new(SqliteStorageConfig::new_in_memory()).unwrap(),
         server_options,
         job_count,
         bench_time,
@@ -127,23 +126,25 @@ async fn bench_sqlite_storage(
     std::fs::create_dir_all(".local.test_data").unwrap();
     let dir = tempfile::TempDir::new_in(".local.test_data").unwrap();
 
-    let conn = Connection::open(dir.path().join("app.db")).unwrap();
-
-    conn.execute_batch(
-        r#"--sql
-        PRAGMA main.page_size = 4096;
-        PRAGMA main.cache_size=10000;
-        PRAGMA main.locking_mode=EXCLUSIVE;
-        PRAGMA main.synchronous=NORMAL;
-        PRAGMA main.journal_mode=WAL;
-        PRAGMA main.cache_size=5000;
-        PRAGMA main.temp_store = MEMORY;
-        "#,
-    )
-    .unwrap();
-
     ora_e2e::benches::bench_generic(
-        SqliteStorage::new(conn).unwrap(),
+        SqliteStorage::new(
+            SqliteStorageConfig::new(dir.path().join("app.db"))
+                .with_init(|conn| {
+                    conn.execute_batch(
+                        r#"--sql
+                    PRAGMA main.page_size = 4096;
+                    PRAGMA main.cache_size=10000;
+                    PRAGMA main.synchronous=NORMAL;
+                    PRAGMA main.journal_mode=WAL;
+                    PRAGMA main.cache_size=5000;
+                    PRAGMA main.temp_store = MEMORY;
+                    "#,
+                    )?;
+                    Ok(())
+                })
+                .with_connection_count(4),
+        )
+        .unwrap(),
         server_options,
         job_count,
         bench_time,

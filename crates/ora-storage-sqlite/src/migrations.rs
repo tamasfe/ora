@@ -1,6 +1,9 @@
 use rusqlite::{Connection, OptionalExtension};
 
+#[tracing::instrument(skip(db))]
 pub(super) fn run_migrations(db: &mut Connection) -> rusqlite::Result<()> {
+    tracing::info!("running sqlite migrations");
+
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS ora_migrations (ver INTEGER PRIMARY KEY NOT NULL);",
     )?;
