@@ -46,10 +46,10 @@ pub struct SqliteStorageConfig {
     /// A function that is called whenever a new connection is created.
     /// This can be used to set PRAGMA options on the connection.
     #[allow(clippy::type_complexity)]
-    conn_init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()> + Send + Sync>>,
+    conn_init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()>>>,
     /// A function that is called whenever the first connection is created.
     #[allow(clippy::type_complexity)]
-    init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()> + Send + Sync>>,
+    init: Option<Box<dyn Fn(&mut Connection) -> eyre::Result<()>>>,
     /// The size of the connection pool.
     ///
     /// If not provided, a default size of 1 will be used.
