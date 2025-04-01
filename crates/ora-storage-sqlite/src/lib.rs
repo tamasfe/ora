@@ -88,7 +88,7 @@ impl SqliteStorageConfig {
     /// and all connections.
     pub fn with_init<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Connection) -> eyre::Result<()> + Send + Sync + 'static,
+        F: Fn(&mut Connection) -> eyre::Result<()> + 'static,
     {
         self.init = Some(Box::new(f));
         self
@@ -100,7 +100,7 @@ impl SqliteStorageConfig {
     /// so this will overwrite any existing function.
     pub fn with_connection_init<F>(mut self, f: F) -> Self
     where
-        F: Fn(&mut Connection) -> eyre::Result<()> + Send + Sync + 'static,
+        F: Fn(&mut Connection) -> eyre::Result<()> + 'static,
     {
         self.conn_init = Some(Box::new(f));
         self
