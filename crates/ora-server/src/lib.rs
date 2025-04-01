@@ -86,8 +86,8 @@ impl Default for ServerOptions {
         Self {
             timer: Default::default(),
             executor_heartbeat_timeout: Duration::from_secs(60),
-            timer_buffer_size: NonZeroUsize::new(10_1000).unwrap(),
-            event_buffer_size: NonZeroUsize::new(10_1000).unwrap(),
+            timer_buffer_size: NonZeroUsize::new(100_000).unwrap(),
+            event_buffer_size: NonZeroUsize::new(100_000).unwrap(),
             bookkeeping_interval: Duration::from_secs(5),
             executor_shutdown_timeout: Duration::from_secs(10),
             max_job_age: None,
