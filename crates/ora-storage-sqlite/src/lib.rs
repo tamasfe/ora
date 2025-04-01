@@ -1164,7 +1164,7 @@ impl Storage for SqliteStorage {
 
     #[tracing::instrument(skip_all)]
     async fn delete_jobs(&self, filters: ora_storage::JobQueryFilters) -> eyre::Result<Vec<Uuid>> {
-        self.with_db_concurrent(|db| {
+        self.with_db(|db| {
             let mut tx = db.transaction()?;
             let res = job_query::delete_jobs(&mut tx, filters);
             tx.commit()?;
@@ -1535,7 +1535,7 @@ impl Storage for SqliteStorage {
         &self,
         filters: ora_storage::ScheduleQueryFilters,
     ) -> eyre::Result<Vec<Uuid>> {
-        self.with_db_concurrent(|db| {
+        self.with_db(|db| {
             let mut tx = db.transaction()?;
             let res = schedule_query::delete_schedules(&mut tx, filters);
             tx.commit()?;
