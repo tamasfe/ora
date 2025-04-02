@@ -53,7 +53,7 @@ pub(super) fn delete_jobs(
     filters: JobQueryFilters,
 ) -> eyre::Result<Vec<Uuid>> {
     tx.execute(
-        "CREATE TEMP TABLE IF NOT EXISTS temp.query_jobs(id BLOB)",
+        "CREATE TEMP TABLE IF NOT EXISTS temp.query_jobs(id BLOB, PRIMARY KEY(id))",
         [],
     )?;
 
@@ -81,11 +81,13 @@ pub(super) fn delete_jobs(
         DELETE FROM
             "ora_job"
         WHERE
-            "id" IN (
+            EXISTS (
                 SELECT
-                    "id"
+                    1
                 FROM
                     temp.query_jobs
+                WHERE
+                    "ora_job"."id" = temp.query_jobs."id"
             )
         RETURNING
             "id"
@@ -99,11 +101,13 @@ pub(super) fn delete_jobs(
         DELETE FROM
             "ora_job_label"
         WHERE
-            "job_id" IN (
+            EXISTS (
                 SELECT
-                    "id"
+                    1
                 FROM
                     temp.query_jobs
+                WHERE
+                    "ora_job_label"."job_id" = temp.query_jobs."id"
             )
         "#,
         [],
@@ -114,11 +118,13 @@ pub(super) fn delete_jobs(
         DELETE FROM
             "ora_execution"
         WHERE
-            "job_id" IN (
+            EXISTS (
                 SELECT
-                    "id"
+                    1
                 FROM
                     temp.query_jobs
+                WHERE
+                    "ora_execution"."job_id" = temp.query_jobs."id"
             )
         "#,
         [],
@@ -142,7 +148,7 @@ pub(super) fn query_job_details(
     };
 
     tx.execute(
-        "CREATE TEMP TABLE IF NOT EXISTS temp.query_jobs(id BLOB)",
+        "CREATE TEMP TABLE IF NOT EXISTS temp.query_jobs(id BLOB, PRIMARY KEY(id))",
         [],
     )?;
 

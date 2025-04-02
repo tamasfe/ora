@@ -61,7 +61,7 @@ pub(super) fn delete_schedules(
     filters: ScheduleQueryFilters,
 ) -> eyre::Result<Vec<Uuid>> {
     tx.execute(
-        "CREATE TEMP TABLE IF NOT EXISTS temp.query_schedules(id BLOB)",
+        "CREATE TEMP TABLE IF NOT EXISTS temp.query_schedules(id BLOB, PRIMARY KEY(id))",
         [],
     )?;
 
@@ -89,11 +89,13 @@ pub(super) fn delete_schedules(
             DELETE FROM
                 "ora_schedule"
             WHERE
-                "id" IN (
+                EXISTS (
                     SELECT
-                        "id"
+                        1
                     FROM
                         temp.query_schedules
+                    WHERE
+                        "ora_schedule"."id" = temp.query_schedules."id"
                 )
             RETURNING "id"
         "#,
@@ -106,26 +108,13 @@ pub(super) fn delete_schedules(
         DELETE FROM
             "ora_schedule_label"
         WHERE
-            "schedule_id" IN (
+            EXISTS (
                 SELECT
-                    "id"
+                    1
                 FROM
                     temp.query_schedules
-            )
-        "#,
-        [],
-    )?;
-
-    tx.execute(
-        r#"--sql
-        DELETE FROM
-            "ora_job"
-        WHERE
-            "schedule_id" IN (
-                SELECT
-                    "id"
-                FROM
-                    temp.query_schedules
+                WHERE
+                    "ora_schedule_label"."schedule_id" = temp.query_schedules."id"
             )
         "#,
         [],
