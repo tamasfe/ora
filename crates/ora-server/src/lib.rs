@@ -69,6 +69,10 @@ pub struct ServerOptions {
     /// Even event-driven tasks are run periodically
     /// to ensure that they are not stuck.
     pub bookkeeping_interval: std::time::Duration,
+    /// Interval for cleaning up old jobs and schedules.
+    ///
+    /// If not provided, the bookkeeping interval is used.
+    pub cleanup_interval: Option<std::time::Duration>,
     /// Executor shutdown timeout.
     pub executor_shutdown_timeout: std::time::Duration,
     /// Delete inactive jobs after this duration.
@@ -89,6 +93,7 @@ impl Default for ServerOptions {
             timer_buffer_size: NonZeroUsize::new(100_000).unwrap(),
             event_buffer_size: NonZeroUsize::new(100_000).unwrap(),
             bookkeeping_interval: Duration::from_secs(5),
+            cleanup_interval: None,
             executor_shutdown_timeout: Duration::from_secs(10),
             max_job_age: None,
             max_schedule_age: None,
@@ -375,7 +380,12 @@ where
                         }
 
                         let Some(after) = SystemTime::now().checked_sub(max_job_age) else {
-                            sleep(options.bookkeeping_interval).await;
+                            sleep(
+                                options
+                                    .cleanup_interval
+                                    .unwrap_or(options.bookkeeping_interval),
+                            )
+                            .await;
                             continue;
                         };
 
@@ -390,7 +400,12 @@ where
                             tracing::error!(?error, "failed to clean up jobs");
                         }
 
-                        sleep(options.bookkeeping_interval).await;
+                        sleep(
+                            options
+                                .cleanup_interval
+                                .unwrap_or(options.bookkeeping_interval),
+                        )
+                        .await;
                     }
                 }
                 .instrument(tracing::info_span!("remove_old_jobs"))
@@ -411,7 +426,12 @@ where
                         }
 
                         let Some(after) = SystemTime::now().checked_sub(max_schedule_age) else {
-                            sleep(options.bookkeeping_interval).await;
+                            sleep(
+                                options
+                                    .cleanup_interval
+                                    .unwrap_or(options.bookkeeping_interval),
+                            )
+                            .await;
                             continue;
                         };
 
@@ -426,7 +446,12 @@ where
                             tracing::error!(?error, "failed to clean up schedules");
                         }
 
-                        sleep(options.bookkeeping_interval).await;
+                        sleep(
+                            options
+                                .cleanup_interval
+                                .unwrap_or(options.bookkeeping_interval),
+                        )
+                        .await;
                     }
                 }
                 .instrument(tracing::info_span!("remove_old_schedules"))
