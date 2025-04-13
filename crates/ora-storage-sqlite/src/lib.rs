@@ -184,7 +184,7 @@ impl SqliteStorage {
     ///
     /// This should be called periodically (e.g. hourly).
     pub async fn optimize(&self) -> eyre::Result<()> {
-        self.with_db_concurrent(|db| {
+        self.with_db(|db| {
             db.execute_batch(
                 r#"--sql
                     PRAGMA optimize;
@@ -200,7 +200,7 @@ impl SqliteStorage {
     /// This should be called periodically depending
     /// on the amount of data generated and deleted (e.g. daily).
     pub async fn vacuum(&self) -> eyre::Result<()> {
-        self.with_db_concurrent(|db| {
+        self.with_db(|db| {
             db.execute_batch(
                 r#"--sql
                     VACUUM;
