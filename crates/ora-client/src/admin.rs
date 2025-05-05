@@ -613,12 +613,30 @@ pub enum PersistentJob<J, C> {
     Exists(JobHandle<J, C>),
 }
 
+impl<J, C> PersistentJob<J, C> {
+    /// Get the job handle, no matter if it was added or already exists.
+    pub fn into_inner(self) -> JobHandle<J, C> {
+        match self {
+            Self::Added(handle) | Self::Exists(handle) => handle,
+        }
+    }
+}
+
 /// The result of a persistent schedule creation.
 pub enum PersistentSchedule<C> {
     /// The schedule was added successfully.
     Added(ScheduleHandle<C>),
     /// The schedule already exists and is active.
     Exists(ScheduleHandle<C>),
+}
+
+impl<C> PersistentSchedule<C> {
+    /// Get the schedule handle, no matter if it was added or already exists.
+    pub fn into_inner(self) -> ScheduleHandle<C> {
+        match self {
+            Self::Added(handle) | Self::Exists(handle) => handle,
+        }
+    }
 }
 
 /// Errors that can occur when interacting with the admin client.
