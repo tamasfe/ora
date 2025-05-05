@@ -1,6 +1,6 @@
 [package]
 name = "ora-storage"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -14,7 +14,7 @@ cronexpr = "1.1.2"
 eyre = "0.6.12"
 futures.workspace = true
 indexmap = { version = "2.7.0", features = ["serde"] }
-ora-proto = { version = "0.1.1", path = "../ora-proto" }
+ora-proto = { version = "0.2.0", path = "../ora-proto" }
 serde = { version = "1.0.216", features = ["derive"] }
 tonic.workspace = true
 uuid = { workspace = true, features = ["serde"] }

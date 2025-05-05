@@ -1,6 +1,6 @@
 [package]
 name = "ora-client"
-version = "0.10.3"
+version = "0.11.0"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -16,7 +16,7 @@ eyre = "0.6.12"
 flume = "0.11.1"
 futures.workspace = true
 indexmap = "2.7.0"
-ora-proto = { version = "0.1.1", path = "../ora-proto" }
+ora-proto = { version = "0.2.0", path = "../ora-proto" }
 parking_lot = "0.12.3"
 prost = "0.13.4"
 schemars = "0.8.21"
