@@ -22,7 +22,7 @@ ora-storage-memory = { version = "0.2.0", path = "../ora-storage-memory" }
 ora-storage-sqlite = { version = "0.4.0", path = "../ora-storage-sqlite" }
 parking_lot = { version = "0.12.3", features = ["deadlock_detection"] }
 rand = "0.8.5"
-rusqlite = "0.34.0"
+rusqlite = "0.35.0"
 schemars = "0.8.21"
 serde = "1.0.216"
 tempfile = "3.14.0"
