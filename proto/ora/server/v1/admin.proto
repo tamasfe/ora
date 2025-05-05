@@ -11,6 +11,14 @@ import "ora/common/v1/time_range.proto";
 service AdminService {
   // Add jobs to be executed.
   rpc AddJobs(AddJobsRequest) returns (AddJobsResponse);
+  // Add a job or return the first job that matches the given filter.
+  //
+  // This is semantically equivalent to sending a `CountJobs` request
+  // and adding the job if the count is 0.
+  // The difference is that this method is atomic thus it is
+  // not possible for another client to add the same job
+  // between the `CountJobs` and `AddJobs` calls.
+  rpc AddJobIfNotExists(AddJobIfNotExistsRequest) returns (AddJobIfNotExistsResponse);
   // List jobs.
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   // Count the number of jobs.
@@ -24,7 +32,21 @@ service AdminService {
   // Get information about the executors.
   rpc ListExecutors(ListExecutorsRequest) returns (ListExecutorsResponse);
   // Create schedules.
-  rpc CreateSchedules(CreateSchedulesRequest) returns (CreateSchedulesResponse);
+  //
+  // Deprecated: use `AddSchedules` instead.
+  rpc CreateSchedules(CreateSchedulesRequest) returns (CreateSchedulesResponse) {
+    option deprecated = true;
+  }
+  // Add schedules.
+  rpc AddSchedules(AddSchedulesRequest) returns (AddSchedulesResponse);
+  // Add a schedule or return the first schedule that matches the given filter.
+  //
+  // This is semantically equivalent to sending a `CountSchedules` request
+  // and adding the schedule if the count is 0.
+  // The difference is that this method is atomic thus it is
+  // not possible for another client to add the same schedule
+  // between the `CountSchedules` and `CreateSchedules` calls.
+  rpc AddScheduleIfNotExists(AddScheduleIfNotExistsRequest) returns (AddScheduleIfNotExistsResponse);
   // List schedules.
   rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
   // Count the number of schedules.
@@ -45,6 +67,26 @@ message AddJobsRequest {
 message AddJobsResponse {
   // The IDs of the added jobs.
   repeated string job_ids = 1;
+}
+
+// Request for `AddJobIfNotExists`.
+message AddJobIfNotExistsRequest {
+  // The job to add.
+  ora.common.v1.JobDefinition job = 1;
+  // The filter to select the job to return if it already exists.
+  //
+  // The filter is not tied to the job being added in any way.
+  // It is possible to select jobs with different job types
+  // or different labels.
+  JobQueryFilter filter = 2;
+}
+
+// Response for `AddJobIfNotExists`.
+message AddJobIfNotExistsResponse {
+  // The ID of the job either added or found.
+  string job_id = 1;
+  // Whether the job was added.
+  bool added = 2;
 }
 
 // Request for `ListJobs`.
@@ -145,6 +187,38 @@ message CreateSchedulesRequest {
 message CreateSchedulesResponse {
   // The IDs of the created schedules.
   repeated string schedule_ids = 1;
+}
+
+// Request for `AddSchedules`.
+message AddSchedulesRequest {
+  // The schedules to add.
+  repeated ora.common.v1.ScheduleDefinition schedules = 1;
+}
+
+// Response for `AddSchedules`.
+message AddSchedulesResponse {
+  // The IDs of the added schedules.
+  repeated string schedule_ids = 1;
+}
+
+// Request for `AddScheduleIfNotExists`.
+message AddScheduleIfNotExistsRequest {
+  // The schedule to add.
+  ora.common.v1.ScheduleDefinition schedule = 1;
+  // The filter to select the schedule to return if it already exists.
+  //
+  // The filter is not tied to the schedule being added in any way.
+  // It is possible to select schedules with different job types
+  // or different labels.
+  ScheduleQueryFilter filter = 2;
+}
+
+// Response for `AddScheduleIfNotExists`.
+message AddScheduleIfNotExistsResponse {
+  // The ID of the schedule either added or found.
+  string schedule_id = 1;
+  // Whether the schedule was added.
+  bool added = 2;
 }
 
 // Request for `ListSchedules`.

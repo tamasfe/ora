@@ -2,7 +2,7 @@
 # sources: ora/server/v1/admin.proto, ora/server/v1/executor.proto
 # plugin: python-betterproto
 # This file has been @generated
-
+import warnings
 from dataclasses import dataclass
 from datetime import (
     datetime,
@@ -111,6 +111,34 @@ class AddJobsResponse(betterproto.Message):
 
     job_ids: List[str] = betterproto.string_field(1)
     """The IDs of the added jobs."""
+
+
+@dataclass(eq=False, repr=False)
+class AddJobIfNotExistsRequest(betterproto.Message):
+    """Request for `AddJobIfNotExists`."""
+
+    job: "__common_v1__.JobDefinition" = betterproto.message_field(1)
+    """The job to add."""
+
+    filter: "JobQueryFilter" = betterproto.message_field(2)
+    """
+    The filter to select the job to return if it already exists.
+    
+     The filter is not tied to the job being added in any way.
+     It is possible to select jobs with different job types
+     or different labels.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class AddJobIfNotExistsResponse(betterproto.Message):
+    """Response for `AddJobIfNotExists`."""
+
+    job_id: str = betterproto.string_field(1)
+    """The ID of the job either added or found."""
+
+    added: bool = betterproto.bool_field(2)
+    """Whether the job was added."""
 
 
 @dataclass(eq=False, repr=False)
@@ -254,6 +282,50 @@ class CreateSchedulesResponse(betterproto.Message):
 
     schedule_ids: List[str] = betterproto.string_field(1)
     """The IDs of the created schedules."""
+
+
+@dataclass(eq=False, repr=False)
+class AddSchedulesRequest(betterproto.Message):
+    """Request for `AddSchedules`."""
+
+    schedules: List["__common_v1__.ScheduleDefinition"] = betterproto.message_field(1)
+    """The schedules to add."""
+
+
+@dataclass(eq=False, repr=False)
+class AddSchedulesResponse(betterproto.Message):
+    """Response for `AddSchedules`."""
+
+    schedule_ids: List[str] = betterproto.string_field(1)
+    """The IDs of the added schedules."""
+
+
+@dataclass(eq=False, repr=False)
+class AddScheduleIfNotExistsRequest(betterproto.Message):
+    """Request for `AddScheduleIfNotExists`."""
+
+    schedule: "__common_v1__.ScheduleDefinition" = betterproto.message_field(1)
+    """The schedule to add."""
+
+    filter: "ScheduleQueryFilter" = betterproto.message_field(2)
+    """
+    The filter to select the schedule to return if it already exists.
+    
+     The filter is not tied to the schedule being added in any way.
+     It is possible to select schedules with different job types
+     or different labels.
+    """
+
+
+@dataclass(eq=False, repr=False)
+class AddScheduleIfNotExistsResponse(betterproto.Message):
+    """Response for `AddScheduleIfNotExists`."""
+
+    schedule_id: str = betterproto.string_field(1)
+    """The ID of the schedule either added or found."""
+
+    added: bool = betterproto.bool_field(2)
+    """Whether the schedule was added."""
 
 
 @dataclass(eq=False, repr=False)
@@ -849,6 +921,23 @@ class AdminServiceStub(betterproto.ServiceStub):
             metadata=metadata,
         )
 
+    async def add_job_if_not_exists(
+        self,
+        add_job_if_not_exists_request: "AddJobIfNotExistsRequest",
+        *,
+        timeout: Optional[float] = None,
+        deadline: Optional["Deadline"] = None,
+        metadata: Optional["MetadataLike"] = None
+    ) -> "AddJobIfNotExistsResponse":
+        return await self._unary_unary(
+            "/ora.server.v1.AdminService/AddJobIfNotExists",
+            add_job_if_not_exists_request,
+            AddJobIfNotExistsResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
     async def list_jobs(
         self,
         list_jobs_request: "ListJobsRequest",
@@ -959,10 +1048,46 @@ class AdminServiceStub(betterproto.ServiceStub):
         deadline: Optional["Deadline"] = None,
         metadata: Optional["MetadataLike"] = None
     ) -> "CreateSchedulesResponse":
+        warnings.warn("AdminService.create_schedules is deprecated", DeprecationWarning)
+
         return await self._unary_unary(
             "/ora.server.v1.AdminService/CreateSchedules",
             create_schedules_request,
             CreateSchedulesResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def add_schedules(
+        self,
+        add_schedules_request: "AddSchedulesRequest",
+        *,
+        timeout: Optional[float] = None,
+        deadline: Optional["Deadline"] = None,
+        metadata: Optional["MetadataLike"] = None
+    ) -> "AddSchedulesResponse":
+        return await self._unary_unary(
+            "/ora.server.v1.AdminService/AddSchedules",
+            add_schedules_request,
+            AddSchedulesResponse,
+            timeout=timeout,
+            deadline=deadline,
+            metadata=metadata,
+        )
+
+    async def add_schedule_if_not_exists(
+        self,
+        add_schedule_if_not_exists_request: "AddScheduleIfNotExistsRequest",
+        *,
+        timeout: Optional[float] = None,
+        deadline: Optional["Deadline"] = None,
+        metadata: Optional["MetadataLike"] = None
+    ) -> "AddScheduleIfNotExistsResponse":
+        return await self._unary_unary(
+            "/ora.server.v1.AdminService/AddScheduleIfNotExists",
+            add_schedule_if_not_exists_request,
+            AddScheduleIfNotExistsResponse,
             timeout=timeout,
             deadline=deadline,
             metadata=metadata,
@@ -1066,6 +1191,11 @@ class AdminServiceBase(ServiceBase):
     async def add_jobs(self, add_jobs_request: "AddJobsRequest") -> "AddJobsResponse":
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def add_job_if_not_exists(
+        self, add_job_if_not_exists_request: "AddJobIfNotExistsRequest"
+    ) -> "AddJobIfNotExistsResponse":
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def list_jobs(
         self, list_jobs_request: "ListJobsRequest"
     ) -> "ListJobsResponse":
@@ -1101,6 +1231,16 @@ class AdminServiceBase(ServiceBase):
     ) -> "CreateSchedulesResponse":
         raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
 
+    async def add_schedules(
+        self, add_schedules_request: "AddSchedulesRequest"
+    ) -> "AddSchedulesResponse":
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
+    async def add_schedule_if_not_exists(
+        self, add_schedule_if_not_exists_request: "AddScheduleIfNotExistsRequest"
+    ) -> "AddScheduleIfNotExistsResponse":
+        raise grpclib.GRPCError(grpclib.const.Status.UNIMPLEMENTED)
+
     async def list_schedules(
         self, list_schedules_request: "ListSchedulesRequest"
     ) -> "ListSchedulesResponse":
@@ -1126,6 +1266,14 @@ class AdminServiceBase(ServiceBase):
     ) -> None:
         request = await stream.recv_message()
         response = await self.add_jobs(request)
+        await stream.send_message(response)
+
+    async def __rpc_add_job_if_not_exists(
+        self,
+        stream: "grpclib.server.Stream[AddJobIfNotExistsRequest, AddJobIfNotExistsResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        response = await self.add_job_if_not_exists(request)
         await stream.send_message(response)
 
     async def __rpc_list_jobs(
@@ -1180,6 +1328,21 @@ class AdminServiceBase(ServiceBase):
         response = await self.create_schedules(request)
         await stream.send_message(response)
 
+    async def __rpc_add_schedules(
+        self, stream: "grpclib.server.Stream[AddSchedulesRequest, AddSchedulesResponse]"
+    ) -> None:
+        request = await stream.recv_message()
+        response = await self.add_schedules(request)
+        await stream.send_message(response)
+
+    async def __rpc_add_schedule_if_not_exists(
+        self,
+        stream: "grpclib.server.Stream[AddScheduleIfNotExistsRequest, AddScheduleIfNotExistsResponse]",
+    ) -> None:
+        request = await stream.recv_message()
+        response = await self.add_schedule_if_not_exists(request)
+        await stream.send_message(response)
+
     async def __rpc_list_schedules(
         self,
         stream: "grpclib.server.Stream[ListSchedulesRequest, ListSchedulesResponse]",
@@ -1219,6 +1382,12 @@ class AdminServiceBase(ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 AddJobsRequest,
                 AddJobsResponse,
+            ),
+            "/ora.server.v1.AdminService/AddJobIfNotExists": grpclib.const.Handler(
+                self.__rpc_add_job_if_not_exists,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                AddJobIfNotExistsRequest,
+                AddJobIfNotExistsResponse,
             ),
             "/ora.server.v1.AdminService/ListJobs": grpclib.const.Handler(
                 self.__rpc_list_jobs,
@@ -1261,6 +1430,18 @@ class AdminServiceBase(ServiceBase):
                 grpclib.const.Cardinality.UNARY_UNARY,
                 CreateSchedulesRequest,
                 CreateSchedulesResponse,
+            ),
+            "/ora.server.v1.AdminService/AddSchedules": grpclib.const.Handler(
+                self.__rpc_add_schedules,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                AddSchedulesRequest,
+                AddSchedulesResponse,
+            ),
+            "/ora.server.v1.AdminService/AddScheduleIfNotExists": grpclib.const.Handler(
+                self.__rpc_add_schedule_if_not_exists,
+                grpclib.const.Cardinality.UNARY_UNARY,
+                AddScheduleIfNotExistsRequest,
+                AddScheduleIfNotExistsResponse,
             ),
             "/ora.server.v1.AdminService/ListSchedules": grpclib.const.Handler(
                 self.__rpc_list_schedules,

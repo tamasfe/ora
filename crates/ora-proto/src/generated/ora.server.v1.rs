@@ -629,6 +629,50 @@ impl ::prost::Name for AddJobsResponse {
         "/ora.server.v1.AddJobsResponse".into()
     }
 }
+/// Request for `AddJobIfNotExists`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddJobIfNotExistsRequest {
+    /// The job to add.
+    #[prost(message, optional, tag = "1")]
+    pub job: ::core::option::Option<super::super::common::v1::JobDefinition>,
+    /// The filter to select the job to return if it already exists.
+    ///
+    /// The filter is not tied to the job being added in any way.
+    /// It is possible to select jobs with different job types
+    /// or different labels.
+    #[prost(message, optional, tag = "2")]
+    pub filter: ::core::option::Option<JobQueryFilter>,
+}
+impl ::prost::Name for AddJobIfNotExistsRequest {
+    const NAME: &'static str = "AddJobIfNotExistsRequest";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddJobIfNotExistsRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddJobIfNotExistsRequest".into()
+    }
+}
+/// Response for `AddJobIfNotExists`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddJobIfNotExistsResponse {
+    /// The ID of the job either added or found.
+    #[prost(string, tag = "1")]
+    pub job_id: ::prost::alloc::string::String,
+    /// Whether the job was added.
+    #[prost(bool, tag = "2")]
+    pub added: bool,
+}
+impl ::prost::Name for AddJobIfNotExistsResponse {
+    const NAME: &'static str = "AddJobIfNotExistsResponse";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddJobIfNotExistsResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddJobIfNotExistsResponse".into()
+    }
+}
 /// Request for `ListJobs`.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListJobsRequest {
@@ -884,6 +928,84 @@ impl ::prost::Name for CreateSchedulesResponse {
     }
     fn type_url() -> ::prost::alloc::string::String {
         "/ora.server.v1.CreateSchedulesResponse".into()
+    }
+}
+/// Request for `AddSchedules`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddSchedulesRequest {
+    /// The schedules to add.
+    #[prost(message, repeated, tag = "1")]
+    pub schedules: ::prost::alloc::vec::Vec<super::super::common::v1::ScheduleDefinition>,
+}
+impl ::prost::Name for AddSchedulesRequest {
+    const NAME: &'static str = "AddSchedulesRequest";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddSchedulesRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddSchedulesRequest".into()
+    }
+}
+/// Response for `AddSchedules`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddSchedulesResponse {
+    /// The IDs of the added schedules.
+    #[prost(string, repeated, tag = "1")]
+    pub schedule_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for AddSchedulesResponse {
+    const NAME: &'static str = "AddSchedulesResponse";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddSchedulesResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddSchedulesResponse".into()
+    }
+}
+/// Request for `AddScheduleIfNotExists`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddScheduleIfNotExistsRequest {
+    /// The schedule to add.
+    #[prost(message, optional, tag = "1")]
+    pub schedule: ::core::option::Option<super::super::common::v1::ScheduleDefinition>,
+    /// The filter to select the schedule to return if it already exists.
+    ///
+    /// The filter is not tied to the schedule being added in any way.
+    /// It is possible to select schedules with different job types
+    /// or different labels.
+    #[prost(message, optional, tag = "2")]
+    pub filter: ::core::option::Option<ScheduleQueryFilter>,
+}
+impl ::prost::Name for AddScheduleIfNotExistsRequest {
+    const NAME: &'static str = "AddScheduleIfNotExistsRequest";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddScheduleIfNotExistsRequest".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddScheduleIfNotExistsRequest".into()
+    }
+}
+/// Response for `AddScheduleIfNotExists`.
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AddScheduleIfNotExistsResponse {
+    /// The ID of the schedule either added or found.
+    #[prost(string, tag = "1")]
+    pub schedule_id: ::prost::alloc::string::String,
+    /// Whether the schedule was added.
+    #[prost(bool, tag = "2")]
+    pub added: bool,
+}
+impl ::prost::Name for AddScheduleIfNotExistsResponse {
+    const NAME: &'static str = "AddScheduleIfNotExistsResponse";
+    const PACKAGE: &'static str = "ora.server.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.server.v1.AddScheduleIfNotExistsResponse".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.server.v1.AddScheduleIfNotExistsResponse".into()
     }
 }
 /// Request for `ListSchedules`.
@@ -1640,6 +1762,32 @@ pub mod admin_service_client {
                 .insert(GrpcMethod::new("ora.server.v1.AdminService", "AddJobs"));
             self.inner.unary(req, path, codec).await
         }
+        /// Add a job or return the first job that matches the given filter.
+        ///
+        /// This is semantically equivalent to sending a `CountJobs` request
+        /// and adding the job if the count is 0.
+        /// The difference is that this method is atomic thus it is
+        /// not possible for another client to add the same job
+        /// between the `CountJobs` and `AddJobs` calls.
+        pub async fn add_job_if_not_exists(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AddJobIfNotExistsRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddJobIfNotExistsResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/AddJobIfNotExists",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "ora.server.v1.AdminService",
+                "AddJobIfNotExists",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
         /// List jobs.
         pub async fn list_jobs(
             &mut self,
@@ -1747,6 +1895,9 @@ pub mod admin_service_client {
             self.inner.unary(req, path, codec).await
         }
         /// Create schedules.
+        ///
+        /// Deprecated: use `AddSchedules` instead.
+        #[deprecated]
         pub async fn create_schedules(
             &mut self,
             request: impl tonic::IntoRequest<super::CreateSchedulesRequest>,
@@ -1762,6 +1913,53 @@ pub mod admin_service_client {
             req.extensions_mut().insert(GrpcMethod::new(
                 "ora.server.v1.AdminService",
                 "CreateSchedules",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Add schedules.
+        pub async fn add_schedules(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AddSchedulesRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddSchedulesResponse>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/ora.server.v1.AdminService/AddSchedules");
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "ora.server.v1.AdminService",
+                "AddSchedules",
+            ));
+            self.inner.unary(req, path, codec).await
+        }
+        /// Add a schedule or return the first schedule that matches the given filter.
+        ///
+        /// This is semantically equivalent to sending a `CountSchedules` request
+        /// and adding the schedule if the count is 0.
+        /// The difference is that this method is atomic thus it is
+        /// not possible for another client to add the same schedule
+        /// between the `CountSchedules` and `CreateSchedules` calls.
+        pub async fn add_schedule_if_not_exists(
+            &mut self,
+            request: impl tonic::IntoRequest<super::AddScheduleIfNotExistsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AddScheduleIfNotExistsResponse>,
+            tonic::Status,
+        > {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/ora.server.v1.AdminService/AddScheduleIfNotExists",
+            );
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(
+                "ora.server.v1.AdminService",
+                "AddScheduleIfNotExists",
             ));
             self.inner.unary(req, path, codec).await
         }
@@ -1866,6 +2064,20 @@ pub mod admin_service_server {
         ) -> std::result::Result<tonic::Response<super::AddJobsResponse>, tonic::Status> {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
+        /// Add a job or return the first job that matches the given filter.
+        ///
+        /// This is semantically equivalent to sending a `CountJobs` request
+        /// and adding the job if the count is 0.
+        /// The difference is that this method is atomic thus it is
+        /// not possible for another client to add the same job
+        /// between the `CountJobs` and `AddJobs` calls.
+        async fn add_job_if_not_exists(
+            &self,
+            request: tonic::Request<super::AddJobIfNotExistsRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddJobIfNotExistsResponse>, tonic::Status>
+        {
+            Err(tonic::Status::unimplemented("Not yet implemented"))
+        }
         /// List jobs.
         async fn list_jobs(
             &self,
@@ -1913,11 +2125,37 @@ pub mod admin_service_server {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Create schedules.
+        ///
+        /// Deprecated: use `AddSchedules` instead.
         async fn create_schedules(
             &self,
             request: tonic::Request<super::CreateSchedulesRequest>,
         ) -> std::result::Result<tonic::Response<super::CreateSchedulesResponse>, tonic::Status>
         {
+            Err(tonic::Status::unimplemented("Not yet implemented"))
+        }
+        /// Add schedules.
+        async fn add_schedules(
+            &self,
+            request: tonic::Request<super::AddSchedulesRequest>,
+        ) -> std::result::Result<tonic::Response<super::AddSchedulesResponse>, tonic::Status>
+        {
+            Err(tonic::Status::unimplemented("Not yet implemented"))
+        }
+        /// Add a schedule or return the first schedule that matches the given filter.
+        ///
+        /// This is semantically equivalent to sending a `CountSchedules` request
+        /// and adding the schedule if the count is 0.
+        /// The difference is that this method is atomic thus it is
+        /// not possible for another client to add the same schedule
+        /// between the `CountSchedules` and `CreateSchedules` calls.
+        async fn add_schedule_if_not_exists(
+            &self,
+            request: tonic::Request<super::AddScheduleIfNotExistsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<super::AddScheduleIfNotExistsResponse>,
+            tonic::Status,
+        > {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List schedules.
@@ -2052,6 +2290,48 @@ pub mod admin_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = AddJobsSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ora.server.v1.AdminService/AddJobIfNotExists" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddJobIfNotExistsSvc<T: AdminService>(pub Arc<T>);
+                    impl<T: AdminService>
+                        tonic::server::UnaryService<super::AddJobIfNotExistsRequest>
+                        for AddJobIfNotExistsSvc<T>
+                    {
+                        type Response = super::AddJobIfNotExistsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AddJobIfNotExistsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AdminService>::add_job_if_not_exists(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddJobIfNotExistsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -2334,6 +2614,90 @@ pub mod admin_service_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = CreateSchedulesSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ora.server.v1.AdminService/AddSchedules" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddSchedulesSvc<T: AdminService>(pub Arc<T>);
+                    impl<T: AdminService> tonic::server::UnaryService<super::AddSchedulesRequest>
+                        for AddSchedulesSvc<T>
+                    {
+                        type Response = super::AddSchedulesResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AddSchedulesRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AdminService>::add_schedules(&inner, request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddSchedulesSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec)
+                            .apply_compression_config(
+                                accept_compression_encodings,
+                                send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
+                            );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/ora.server.v1.AdminService/AddScheduleIfNotExists" => {
+                    #[allow(non_camel_case_types)]
+                    struct AddScheduleIfNotExistsSvc<T: AdminService>(pub Arc<T>);
+                    impl<T: AdminService>
+                        tonic::server::UnaryService<super::AddScheduleIfNotExistsRequest>
+                        for AddScheduleIfNotExistsSvc<T>
+                    {
+                        type Response = super::AddScheduleIfNotExistsResponse;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::AddScheduleIfNotExistsRequest>,
+                        ) -> Self::Future {
+                            let inner = Arc::clone(&self.0);
+                            let fut = async move {
+                                <T as AdminService>::add_schedule_if_not_exists(&inner, request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let method = AddScheduleIfNotExistsSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(

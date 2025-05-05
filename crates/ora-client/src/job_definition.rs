@@ -358,11 +358,8 @@ impl TryFrom<Job> for JobDetails {
                 .into_iter()
                 .map(|job_label| (job_label.key, job_label.value))
                 .collect(),
-            timeout_policy: definition
-                .timeout_policy
-                .map(Into::into)
-                .unwrap_or_default(),
-            retry_policy: definition.retry_policy.map(Into::into).unwrap_or_default(),
+            timeout_policy: definition.timeout_policy.unwrap_or_default(),
+            retry_policy: definition.retry_policy.unwrap_or_default(),
             created_at: value
                 .created_at
                 .map(TryInto::try_into)

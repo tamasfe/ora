@@ -8,9 +8,9 @@ use ora_proto::{
     },
     server::v1::{
         self, admin_service_server::AdminService, AddJobsRequest, AddJobsResponse,
-        CancelJobsRequest, CancelJobsResponse, CountJobsRequest, CountJobsResponse,
-        CreateSchedulesResponse, ListJobTypesRequest, ListJobTypesResponse, ListJobsRequest,
-        ListJobsResponse, ListSchedulesResponse,
+        AddSchedulesRequest, AddSchedulesResponse, CancelJobsRequest, CancelJobsResponse,
+        CountJobsRequest, CountJobsResponse, CreateSchedulesResponse, ListJobTypesRequest,
+        ListJobTypesResponse, ListJobsRequest, ListJobsResponse, ListSchedulesResponse,
     },
 };
 use tonic::{async_trait, Request, Response, Status};
@@ -85,6 +85,58 @@ where
 
         Ok(Response::new(AddJobsResponse {
             job_ids: job_ids.into_iter().map(Into::into).collect(),
+        }))
+    }
+
+    async fn add_job_if_not_exists(
+        &self,
+        request: Request<v1::AddJobIfNotExistsRequest>,
+    ) -> std::result::Result<Response<v1::AddJobIfNotExistsResponse>, Status> {
+        if self.wg.is_waiting() {
+            return Err(Status::unavailable("server is shutting down"));
+        }
+
+        let request = request.into_inner();
+
+        let Some(job) = request.job else {
+            return Err(Status::invalid_argument("missing job"));
+        };
+
+        let Some(filters) = request.filter else {
+            return Err(Status::invalid_argument("missing filter"));
+        };
+
+        let job_id = Uuid::now_v7();
+
+        let filters = JobQueryFilters::try_from(filters)?;
+
+        let now = SystemTime::now();
+
+        let new_job = create_job(now, job, job_id);
+
+        let res = self
+            .storage
+            .job_added_conditionally(new_job, filters)
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, "failed to create jobs");
+                error
+                    .downcast()
+                    .unwrap_or_else(|_| Status::internal("internal error"))
+            })?;
+
+        let (job_id, added) = match res {
+            ora_storage::ConditionalJobResult::Added => {
+                self.event_bus
+                    .emit_job_event(crate::events::JobEvent::JobsCreated);
+                (job_id, true)
+            }
+            ora_storage::ConditionalJobResult::AlreadyExists { job_id } => (job_id, false),
+        };
+
+        Ok(Response::new(v1::AddJobIfNotExistsResponse {
+            job_id: job_id.to_string(),
+            added,
         }))
     }
 
@@ -205,8 +257,8 @@ where
 
     async fn delete_inactive_jobs(
         &self,
-        request: tonic::Request<v1::DeleteInactiveJobsRequest>,
-    ) -> std::result::Result<tonic::Response<v1::DeleteInactiveJobsResponse>, tonic::Status> {
+        request: Request<v1::DeleteInactiveJobsRequest>,
+    ) -> std::result::Result<Response<v1::DeleteInactiveJobsResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -234,8 +286,8 @@ where
 
     async fn list_executors(
         &self,
-        _request: tonic::Request<v1::ListExecutorsRequest>,
-    ) -> std::result::Result<tonic::Response<v1::ListExecutorsResponse>, tonic::Status> {
+        _request: Request<v1::ListExecutorsRequest>,
+    ) -> std::result::Result<Response<v1::ListExecutorsResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -247,16 +299,34 @@ where
 
     async fn create_schedules(
         &self,
-        request: tonic::Request<v1::CreateSchedulesRequest>,
-    ) -> std::result::Result<tonic::Response<CreateSchedulesResponse>, tonic::Status> {
+        request: Request<v1::CreateSchedulesRequest>,
+    ) -> std::result::Result<Response<CreateSchedulesResponse>, Status> {
+        let request = request.into_inner();
+
+        let res = self
+            .add_schedules(Request::new(AddSchedulesRequest {
+                schedules: request.schedules,
+            }))
+            .await?
+            .into_inner();
+
+        Ok(Response::new(CreateSchedulesResponse {
+            schedule_ids: res.schedule_ids,
+        }))
+    }
+
+    async fn add_schedules(
+        &self,
+        request: Request<v1::AddSchedulesRequest>,
+    ) -> Result<Response<v1::AddSchedulesResponse>, Status> {
         if self.wg.is_waiting() {
-            return Err(tonic::Status::unavailable("server is shutting down"));
+            return Err(Status::unavailable("server is shutting down"));
         }
 
         let request = request.into_inner();
 
         if request.schedules.is_empty() {
-            return Ok(tonic::Response::new(CreateSchedulesResponse {
+            return Ok(Response::new(AddSchedulesResponse {
                 schedule_ids: Vec::new(),
             }));
         }
@@ -267,21 +337,79 @@ where
                 tracing::error!(?error, "failed to create schedules");
                 error
                     .downcast()
-                    .unwrap_or_else(|_| tonic::Status::internal("internal error"))
+                    .unwrap_or_else(|_| Status::internal("internal error"))
             })?;
 
         self.event_bus
             .emit_schedule_event(crate::events::ScheduleEvent::SchedulesAdded);
 
-        Ok(Response::new(CreateSchedulesResponse {
+        Ok(Response::new(AddSchedulesResponse {
             schedule_ids: schedule_ids.into_iter().map(Into::into).collect(),
+        }))
+    }
+
+    async fn add_schedule_if_not_exists(
+        &self,
+        request: Request<v1::AddScheduleIfNotExistsRequest>,
+    ) -> std::result::Result<Response<v1::AddScheduleIfNotExistsResponse>, Status> {
+        if self.wg.is_waiting() {
+            return Err(Status::unavailable("server is shutting down"));
+        }
+        let request = request.into_inner();
+
+        let Some(schedule) = request.schedule else {
+            return Err(Status::invalid_argument("missing schedule"));
+        };
+
+        let Some(filters) = request.filter else {
+            return Err(Status::invalid_argument("missing filter"));
+        };
+
+        let schedule_id = Uuid::now_v7();
+
+        let filters = ScheduleQueryFilters::try_from(filters)?;
+
+        let now = SystemTime::now();
+
+        let new_schedule = create_schedule(now, schedule, schedule_id).map_err(|error| {
+            tracing::error!(?error, "failed to create schedules");
+            error
+                .downcast()
+                .unwrap_or_else(|_| Status::internal("internal error"))
+        })?;
+
+        let res = self
+            .storage
+            .schedule_added_conditionally(new_schedule, filters)
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, "failed to create schedule");
+                error
+                    .downcast()
+                    .unwrap_or_else(|_| Status::internal("internal error"))
+            })?;
+
+        let (schedule_id, added) = match res {
+            ora_storage::ConditionalScheduleResult::Added => {
+                self.event_bus
+                    .emit_schedule_event(crate::events::ScheduleEvent::SchedulesAdded);
+                (schedule_id, true)
+            }
+            ora_storage::ConditionalScheduleResult::AlreadyExists { schedule_id } => {
+                (schedule_id, false)
+            }
+        };
+
+        Ok(Response::new(v1::AddScheduleIfNotExistsResponse {
+            schedule_id: schedule_id.to_string(),
+            added,
         }))
     }
 
     async fn list_schedules(
         &self,
-        request: tonic::Request<v1::ListSchedulesRequest>,
-    ) -> std::result::Result<tonic::Response<v1::ListSchedulesResponse>, tonic::Status> {
+        request: Request<v1::ListSchedulesRequest>,
+    ) -> std::result::Result<Response<v1::ListSchedulesResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -317,8 +445,8 @@ where
 
     async fn count_schedules(
         &self,
-        request: tonic::Request<v1::CountSchedulesRequest>,
-    ) -> std::result::Result<tonic::Response<v1::CountSchedulesResponse>, tonic::Status> {
+        request: Request<v1::CountSchedulesRequest>,
+    ) -> std::result::Result<Response<v1::CountSchedulesResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -342,8 +470,8 @@ where
 
     async fn cancel_schedules(
         &self,
-        request: tonic::Request<v1::CancelSchedulesRequest>,
-    ) -> std::result::Result<tonic::Response<v1::CancelSchedulesResponse>, tonic::Status> {
+        request: Request<v1::CancelSchedulesRequest>,
+    ) -> std::result::Result<Response<v1::CancelSchedulesResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -415,9 +543,8 @@ where
 
     async fn delete_inactive_schedules(
         &self,
-        request: tonic::Request<v1::DeleteInactiveSchedulesRequest>,
-    ) -> std::result::Result<tonic::Response<v1::DeleteInactiveSchedulesResponse>, tonic::Status>
-    {
+        request: Request<v1::DeleteInactiveSchedulesRequest>,
+    ) -> std::result::Result<Response<v1::DeleteInactiveSchedulesResponse>, Status> {
         if self.wg.is_waiting() {
             return Err(Status::unavailable("server is shutting down"));
         }
@@ -463,28 +590,7 @@ async fn create_jobs(
         let job_id = Uuid::now_v7();
         new_job_ids.push(job_id);
 
-        let job = NewJob {
-            created_at: now,
-            id: job_id,
-            schedule_id: None,
-            job_type_id: definition.job_type_id,
-            input_payload_json: definition.input_payload_json,
-            target_execution_time: definition
-                .target_execution_time
-                .and_then(|t| SystemTime::try_from(t).ok())
-                .unwrap_or(now),
-            retry_policy: definition.retry_policy.map(Into::into).unwrap_or_default(),
-            timeout_policy: definition
-                .timeout_policy
-                .map(Into::into)
-                .unwrap_or_default(),
-            labels: definition
-                .labels
-                .into_iter()
-                .map(|label| (label.key, label.value))
-                .collect(),
-            metadata_json: definition.metadata_json,
-        };
+        let job = create_job(now, definition, job_id);
         new_jobs.push(job);
     }
 
@@ -494,6 +600,31 @@ async fn create_jobs(
         .wrap_err("failed to persist jobs")?;
 
     Ok(new_job_ids)
+}
+
+fn create_job(now: SystemTime, definition: JobDefinition, job_id: Uuid) -> NewJob {
+    NewJob {
+        created_at: now,
+        id: job_id,
+        schedule_id: None,
+        job_type_id: definition.job_type_id,
+        input_payload_json: definition.input_payload_json,
+        target_execution_time: definition
+            .target_execution_time
+            .and_then(|t| SystemTime::try_from(t).ok())
+            .unwrap_or(now),
+        retry_policy: definition.retry_policy.map(Into::into).unwrap_or_default(),
+        timeout_policy: definition
+            .timeout_policy
+            .map(Into::into)
+            .unwrap_or_default(),
+        labels: definition
+            .labels
+            .into_iter()
+            .map(|label| (label.key, label.value))
+            .collect(),
+        metadata_json: definition.metadata_json,
+    }
 }
 
 async fn create_schedules(
@@ -509,41 +640,57 @@ async fn create_schedules(
         let schedule_id = Uuid::now_v7();
         new_schedule_ids.push(schedule_id);
 
-        let new_schedule = NewSchedule {
-            created_at: now,
-            id: schedule_id,
-            labels: schedule
-                .labels
-                .into_iter()
-                .map(|label| (label.key, label.value))
-                .collect(),
-            job_timing_policy: {
-                let job_timing = schedule
-                    .job_timing_policy
-                    .ok_or_else(|| Status::invalid_argument("missing job timing policy"))?
-                    .job_timing
-                    .ok_or_else(|| Status::invalid_argument("missing job timing policy"))?;
+        let new_schedule = create_schedule(now, schedule, schedule_id)?;
+        new_schedules.push(new_schedule);
+    }
 
-                match job_timing {
-                    schedule_job_timing_policy::JobTiming::Repeat(
-                        schedule_job_timing_policy_repeat,
-                    ) => ScheduleJobTimingPolicy::Repeat(SchedulingPolicyRepeat {
-                        interval: schedule_job_timing_policy_repeat
-                            .interval
-                            .ok_or_else(|| {
-                                Status::invalid_argument("missing interval in repeat policy")
-                            })?
-                            .try_into()
-                            .wrap_err("invalid duration")?,
+    backend
+        .schedules_added(new_schedules)
+        .await
+        .wrap_err("failed to persist schedules")?;
 
-                        immediate: schedule_job_timing_policy_repeat.immediate,
-                        missed_policy: schedule_job_timing_policy_repeat
-                            .missed_time_policy()
-                            .into(),
-                    }),
-                    schedule_job_timing_policy::JobTiming::Cron(
-                        schedule_job_timing_policy_cron,
-                    ) => ScheduleJobTimingPolicy::Cron(SchedulingPolicyCron {
+    Ok(new_schedule_ids)
+}
+
+fn create_schedule(
+    now: SystemTime,
+    schedule: ScheduleDefinition,
+    schedule_id: Uuid,
+) -> Result<NewSchedule, eyre::Error> {
+    Ok(NewSchedule {
+        created_at: now,
+        id: schedule_id,
+        labels: schedule
+            .labels
+            .into_iter()
+            .map(|label| (label.key, label.value))
+            .collect(),
+        job_timing_policy: {
+            let job_timing = schedule
+                .job_timing_policy
+                .ok_or_else(|| Status::invalid_argument("missing job timing policy"))?
+                .job_timing
+                .ok_or_else(|| Status::invalid_argument("missing job timing policy"))?;
+
+            match job_timing {
+                schedule_job_timing_policy::JobTiming::Repeat(
+                    schedule_job_timing_policy_repeat,
+                ) => ScheduleJobTimingPolicy::Repeat(SchedulingPolicyRepeat {
+                    interval: schedule_job_timing_policy_repeat
+                        .interval
+                        .ok_or_else(|| {
+                            Status::invalid_argument("missing interval in repeat policy")
+                        })?
+                        .try_into()
+                        .wrap_err("invalid duration")?,
+
+                    immediate: schedule_job_timing_policy_repeat.immediate,
+                    missed_policy: schedule_job_timing_policy_repeat
+                        .missed_time_policy()
+                        .into(),
+                }),
+                schedule_job_timing_policy::JobTiming::Cron(schedule_job_timing_policy_cron) => {
+                    ScheduleJobTimingPolicy::Cron(SchedulingPolicyCron {
                         missed_policy: schedule_job_timing_policy_cron.missed_time_policy().into(),
                         immediate: schedule_job_timing_policy_cron.immediate,
                         cron_expression: {
@@ -562,42 +709,44 @@ async fn create_schedules(
 
                             schedule_job_timing_policy_cron.cron_expression
                         },
-                    }),
+                    })
                 }
-            },
-            job_creation_policy: {
-                let policy = schedule
-                    .job_creation_policy
-                    .ok_or_else(|| Status::invalid_argument("missing job creation policy"))?
-                    .job_creation
-                    .ok_or_else(|| Status::invalid_argument("missing job creation policy"))?;
+            }
+        },
+        job_creation_policy: {
+            let policy = schedule
+                .job_creation_policy
+                .ok_or_else(|| Status::invalid_argument("missing job creation policy"))?
+                .job_creation
+                .ok_or_else(|| Status::invalid_argument("missing job creation policy"))?;
 
-                match policy {
-                    JobCreation::JobDefinition(job_definition) => {
-                        ScheduleJobCreationPolicy::JobDefinition(ScheduleNewJobDefinition {
-                            job_type_id: job_definition.job_type_id,
-                            input_payload_json: job_definition.input_payload_json,
-                            timeout_policy: job_definition
-                                .timeout_policy
-                                .map(Into::into)
-                                .unwrap_or_default(),
-                            retry_policy: job_definition
-                                .retry_policy
-                                .map(Into::into)
-                                .unwrap_or_default(),
-                            labels: job_definition
-                                .labels
-                                .into_iter()
-                                .map(|label| (label.key, label.value))
-                                .collect(),
-                        })
-                    }
+            match policy {
+                JobCreation::JobDefinition(job_definition) => {
+                    ScheduleJobCreationPolicy::JobDefinition(ScheduleNewJobDefinition {
+                        job_type_id: job_definition.job_type_id,
+                        input_payload_json: job_definition.input_payload_json,
+                        timeout_policy: job_definition
+                            .timeout_policy
+                            .map(Into::into)
+                            .unwrap_or_default(),
+                        retry_policy: job_definition
+                            .retry_policy
+                            .map(Into::into)
+                            .unwrap_or_default(),
+                        labels: job_definition
+                            .labels
+                            .into_iter()
+                            .map(|label| (label.key, label.value))
+                            .collect(),
+                    })
                 }
-            },
-            time_range: schedule
-                .time_range
-                .map(|range| {
-                    let range = ScheduleTimeRange {
+            }
+        },
+        time_range: schedule
+            .time_range
+            .map(|range| {
+                let range =
+                    ScheduleTimeRange {
                         start: range.start.map(SystemTime::try_from).transpose().map_err(
                             |error| {
                                 Status::invalid_argument(format!("unsupported timestamp: {error}"))
@@ -612,24 +761,15 @@ async fn create_schedules(
                             })?,
                     };
 
-                    if !range.is_valid() {
-                        return Err(Status::invalid_argument("invalid time range"));
-                    }
+                if !range.is_valid() {
+                    return Err(Status::invalid_argument("invalid time range"));
+                }
 
-                    Ok(range)
-                })
-                .transpose()?,
-            metadata_json: schedule.metadata_json,
-        };
-        new_schedules.push(new_schedule);
-    }
-
-    backend
-        .schedules_added(new_schedules)
-        .await
-        .wrap_err("failed to persist schedules")?;
-
-    Ok(new_schedule_ids)
+                Ok(range)
+            })
+            .transpose()?,
+        metadata_json: schedule.metadata_json,
+    })
 }
 
 async fn cancel_jobs(

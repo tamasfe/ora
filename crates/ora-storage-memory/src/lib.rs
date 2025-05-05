@@ -91,6 +91,15 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
+    async fn job_added_conditionally(
+        &self,
+        _job: NewJob,
+        _filters: JobQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalJobResult> {
+        // FIXME: we'd need to add a lock to make this atomic.
+        bail!("not supported");
+    }
+
     async fn jobs_cancelled(
         &self,
         job_ids: &[Uuid],
@@ -613,6 +622,15 @@ impl Storage for MemoryStorage {
         Ok(())
     }
 
+    async fn schedule_added_conditionally(
+        &self,
+        _schedule: NewSchedule,
+        _filters: ScheduleQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalScheduleResult> {
+        // FIXME: we'd need to add a lock to make this atomic.
+        bail!("not supported");
+    }
+
     async fn schedules_cancelled(
         &self,
         schedule_ids: &[Uuid],
@@ -641,6 +659,29 @@ impl Storage for MemoryStorage {
         }
 
         Ok(cancelled_schedules)
+    }
+
+    async fn schedules_unschedulable(
+        &self,
+        schedule_ids: &[Uuid],
+        timestamp: SystemTime,
+    ) -> eyre::Result<()> {
+        for schedule_id in schedule_ids {
+            let schedule = self.schedulable_schedules.write().swap_remove(schedule_id);
+
+            if let Some(mut schedule) = schedule {
+                debug_assert!(schedule.marked_unschedulable_at.is_none());
+                schedule.marked_unschedulable_at = Some(timestamp);
+
+                let schedule_id = schedule.id;
+
+                self.unschedulable_schedules
+                    .write()
+                    .insert(schedule_id, schedule);
+            }
+        }
+
+        Ok(())
     }
 
     async fn pending_schedules(&self, after: Option<Uuid>) -> eyre::Result<Vec<PendingSchedule>> {
@@ -696,29 +737,6 @@ impl Storage for MemoryStorage {
 
     async fn count_schedules(&self, filters: ScheduleQueryFilters) -> eyre::Result<u64> {
         Ok(self.count_schedules_impl(filters))
-    }
-
-    async fn schedules_unschedulable(
-        &self,
-        schedule_ids: &[Uuid],
-        timestamp: SystemTime,
-    ) -> eyre::Result<()> {
-        for schedule_id in schedule_ids {
-            let schedule = self.schedulable_schedules.write().swap_remove(schedule_id);
-
-            if let Some(mut schedule) = schedule {
-                debug_assert!(schedule.marked_unschedulable_at.is_none());
-                schedule.marked_unschedulable_at = Some(timestamp);
-
-                let schedule_id = schedule.id;
-
-                self.unschedulable_schedules
-                    .write()
-                    .insert(schedule_id, schedule);
-            }
-        }
-
-        Ok(())
     }
 
     async fn delete_schedules(&self, filters: ScheduleQueryFilters) -> eyre::Result<Vec<Uuid>> {

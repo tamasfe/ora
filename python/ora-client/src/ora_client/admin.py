@@ -27,13 +27,15 @@ from ora_client.proto.ora.common.v1 import (
     ScheduleDefinition as ScheduleDefinitionProto,
 )
 from ora_client.proto.ora.server.v1 import (
+    AddJobIfNotExistsRequest,
     AddJobsRequest,
+    AddScheduleIfNotExistsRequest,
+    AddSchedulesRequest,
     AdminServiceStub,
     CancelJobsRequest,
     CancelSchedulesRequest,
     CountJobsRequest,
     CountSchedulesRequest,
-    CreateSchedulesRequest,
     DeleteInactiveJobsRequest,
     DeleteInactiveSchedulesRequest,
     Job,
@@ -277,7 +279,7 @@ class AdminClient:
         await self._channel.__aenter__()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any):
         await self._channel.__aexit__(exc_type, exc, tb)
 
     async def add_jobs(
@@ -295,35 +297,39 @@ class AdminClient:
                 jobs_flat.append(job)
 
         res = await self._client.add_jobs(
-            AddJobsRequest(
-                jobs=[
-                    JobDefinitionProto(
-                        job_type_id=job.job_type_id,
-                        target_execution_time=job.target_execution_time,
-                        input_payload_json=job.input_payload_json,
-                        labels=[
-                            JobLabel(
-                                key=label[0],
-                                value=label[1],
-                            )
-                            for label in job.labels.items()
-                        ],
-                        timeout_policy=JobTimeoutPolicy(
-                            timeout=job.timeout_policy.timeout,
-                            base_time=JobTimeoutBaseTime(job.timeout_policy.base_time),
-                        ),
-                        retry_policy=JobRetryPolicy(job.retry_policy.retries),
-                        metadata_json=job.metadata_json,
-                    )
-                    for job in jobs_flat
-                ]
-            )
+            AddJobsRequest(jobs=[_job_to_proto(job) for job in jobs_flat])
         )
 
         if len(res.job_ids) != len(jobs_flat):
             raise RuntimeError("failed to create all jobs")
 
         return [JobHandle(job_id=job_id, client=self._client) for job_id in res.job_ids]
+
+    async def add_job_persistent(
+        self,
+        job: JobDefinition,
+    ) -> JobHandle:
+        """
+        Add a job to the job queue.
+
+        If an active job of the same type and labels exists, it will be returned instead.
+        """
+
+        filter = JobQueryFilter()
+        filter.active = True
+        filter.job_type_ids = [job.job_type_id]
+
+        for key, value in job.labels.items():
+            filter.labels.append(JobLabelFilter(key=key, equals=value))
+
+        res = await self._client.add_job_if_not_exists(
+            AddJobIfNotExistsRequest(
+                job=_job_to_proto(job),
+                filter=filter,
+            )
+        )
+
+        return JobHandle(job_id=res.job_id, client=self._client)
 
     def job(self, job_id: str) -> JobHandle:
         """
@@ -630,72 +636,10 @@ class AdminClient:
                     if label[0] not in schedule.job_definition.labels:
                         schedule.job_definition.labels[label[0]] = label[1]
 
-            proto_schedules.append(
-                ScheduleDefinitionProto(
-                    metadata_json=schedule.metadata_json,
-                    time_range=TimeRange(
-                        start=schedule.after
-                        if schedule.after is not None
-                        else datetime.fromtimestamp(0, UTC),
-                        end=schedule.before
-                        if schedule.before is not None
-                        else datetime.fromtimestamp(0, UTC),
-                    ),
-                    job_creation_policy=ScheduleJobCreationPolicy(
-                        job_definition=JobDefinitionProto(
-                            job_type_id=schedule.job_definition.job_type_id,
-                            target_execution_time=schedule.job_definition.target_execution_time,
-                            input_payload_json=schedule.job_definition.input_payload_json,
-                            labels=[
-                                JobLabel(
-                                    key=label[0],
-                                    value=label[1],
-                                )
-                                for label in schedule.job_definition.labels.items()
-                            ],
-                            timeout_policy=JobTimeoutPolicy(
-                                timeout=schedule.job_definition.timeout_policy.timeout,
-                                base_time=JobTimeoutBaseTime(
-                                    schedule.job_definition.timeout_policy.base_time
-                                ),
-                            ),
-                            retry_policy=JobRetryPolicy(
-                                schedule.job_definition.retry_policy.retries
-                            ),
-                            metadata_json=schedule.job_definition.metadata_json,
-                        ),
-                    ),
-                    job_timing_policy=ScheduleJobTimingPolicy(
-                        cron=ScheduleJobTimingPolicyCron(
-                            cron_expression=schedule.cron_expression,
-                            immediate=schedule.immediate_job,
-                            missed_time_policy=ScheduleMissedTimePolicy.SKIP
-                            if schedule.on_missed == "skip"
-                            else ScheduleMissedTimePolicy.CREATE,
-                        )
-                    )
-                    if schedule.cron_expression is not None
-                    else ScheduleJobTimingPolicy(
-                        repeat=ScheduleJobTimingPolicyRepeat(
-                            interval=cast(Any, schedule.repeat_every),
-                            immediate=schedule.immediate_job,
-                            missed_time_policy=ScheduleMissedTimePolicy.SKIP
-                            if schedule.on_missed == "skip"
-                            else ScheduleMissedTimePolicy.CREATE,
-                        )
-                    ),
-                    labels=[
-                        ScheduleLabel(
-                            key=label[0],
-                            value=label[1],
-                        )
-                        for label in schedule.labels.items()
-                    ],
-                )
-            )
+            proto_schedules.append(_schedule_to_proto(schedule))
 
-        res = await self._client.create_schedules(
-            CreateSchedulesRequest(
+        res = await self._client.add_schedules(
+            AddSchedulesRequest(
                 schedules=proto_schedules,
             )
         )
@@ -707,6 +651,32 @@ class AdminClient:
             ScheduleHandle(schedule_id=schedule_id, client=self._client)
             for schedule_id in res.schedule_ids
         ]
+
+    async def add_schedule_persistent(
+        self,
+        schedule: ScheduleDefinition,
+    ) -> ScheduleHandle:
+        """
+        Add a schedule to the scheduler.
+
+        If an active schedule of the same type and labels exists, it will be returned instead.
+        """
+
+        filter = ScheduleQueryFilter()
+        filter.active = True
+        filter.job_type_ids = [schedule.job_definition.job_type_id]
+
+        for key, value in schedule.labels.items():
+            filter.labels.append(ScheduleLabelFilter(key=key, equals=value))
+
+        res = await self._client.add_schedule_if_not_exists(
+            AddScheduleIfNotExistsRequest(
+                schedule=_schedule_to_proto(schedule),
+                filter=filter,
+            )
+        )
+
+        return ScheduleHandle(schedule_id=res.schedule_id, client=self._client)
 
     def schedule(self, schedule_id: str) -> ScheduleHandle:
         """
@@ -1053,3 +1023,88 @@ class AdminClient:
 
     def inner(self):
         return self._client
+
+
+def _job_to_proto(job: JobDefinition):
+    return JobDefinitionProto(
+        job_type_id=job.job_type_id,
+        target_execution_time=job.target_execution_time,
+        input_payload_json=job.input_payload_json,
+        labels=[
+            JobLabel(
+                key=label[0],
+                value=label[1],
+            )
+            for label in job.labels.items()
+        ],
+        timeout_policy=JobTimeoutPolicy(
+            timeout=job.timeout_policy.timeout,
+            base_time=JobTimeoutBaseTime(job.timeout_policy.base_time),
+        ),
+        retry_policy=JobRetryPolicy(job.retry_policy.retries),
+        metadata_json=job.metadata_json,
+    )
+
+
+def _schedule_to_proto(schedule: ScheduleDefinition):
+    return ScheduleDefinitionProto(
+        metadata_json=schedule.metadata_json,
+        time_range=TimeRange(
+            start=schedule.after
+            if schedule.after is not None
+            else datetime.fromtimestamp(0, UTC),
+            end=schedule.before
+            if schedule.before is not None
+            else datetime.fromtimestamp(0, UTC),
+        ),
+        job_creation_policy=ScheduleJobCreationPolicy(
+            job_definition=JobDefinitionProto(
+                job_type_id=schedule.job_definition.job_type_id,
+                target_execution_time=schedule.job_definition.target_execution_time,
+                input_payload_json=schedule.job_definition.input_payload_json,
+                labels=[
+                    JobLabel(
+                        key=label[0],
+                        value=label[1],
+                    )
+                    for label in schedule.job_definition.labels.items()
+                ],
+                timeout_policy=JobTimeoutPolicy(
+                    timeout=schedule.job_definition.timeout_policy.timeout,
+                    base_time=JobTimeoutBaseTime(
+                        schedule.job_definition.timeout_policy.base_time
+                    ),
+                ),
+                retry_policy=JobRetryPolicy(
+                    schedule.job_definition.retry_policy.retries
+                ),
+                metadata_json=schedule.job_definition.metadata_json,
+            ),
+        ),
+        job_timing_policy=ScheduleJobTimingPolicy(
+            cron=ScheduleJobTimingPolicyCron(
+                cron_expression=schedule.cron_expression,
+                immediate=schedule.immediate_job,
+                missed_time_policy=ScheduleMissedTimePolicy.SKIP
+                if schedule.on_missed == "skip"
+                else ScheduleMissedTimePolicy.CREATE,
+            )
+        )
+        if schedule.cron_expression is not None
+        else ScheduleJobTimingPolicy(
+            repeat=ScheduleJobTimingPolicyRepeat(
+                interval=cast(Any, schedule.repeat_every),
+                immediate=schedule.immediate_job,
+                missed_time_policy=ScheduleMissedTimePolicy.SKIP
+                if schedule.on_missed == "skip"
+                else ScheduleMissedTimePolicy.CREATE,
+            )
+        ),
+        labels=[
+            ScheduleLabel(
+                key=label[0],
+                value=label[1],
+            )
+            for label in schedule.labels.items()
+        ],
+    )

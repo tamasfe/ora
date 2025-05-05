@@ -1,2 +1,17 @@
 [tool.uv.workspace]
 members = ["python/*"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
+enableReachabilityAnalysis = true
+
+include = ["src"]
+exclude = [
+    "**/src/ora_client/proto/**/*.py",
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    ".ruff_cache",
+    ".vscode",
+    "**/build.py",
+]

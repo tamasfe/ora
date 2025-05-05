@@ -3,8 +3,9 @@ use std::sync::Arc;
 use tonic::async_trait;
 
 use ora_storage::{
-    CancelledJob, JobQueryFilters, JobQueryOrder, JobQueryResult, PendingSchedule,
-    ScheduleQueryFilters, ScheduleQueryOrder, ScheduleQueryResult, Storage, StorageSnapshot,
+    CancelledJob, ConditionalJobResult, JobQueryFilters, JobQueryOrder, JobQueryResult,
+    PendingSchedule, ScheduleQueryFilters, ScheduleQueryOrder, ScheduleQueryResult, Storage,
+    StorageSnapshot,
 };
 use uuid::Uuid;
 
@@ -59,6 +60,28 @@ where
             self.event_bus.emit_audit_event(|| event);
         }
         Ok(())
+    }
+
+    async fn job_added_conditionally(
+        &self,
+        job: ora_storage::NewJob,
+        filter: JobQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalJobResult> {
+        let job_id = job.id;
+        let job_type_id = job.job_type_id.clone();
+
+        let res = self.inner.job_added_conditionally(job, filter).await?;
+
+        if self.event_bus.audit_events_enabled() {
+            if let ConditionalJobResult::Added = res {
+                self.event_bus
+                    .emit_audit_event(|| AuditEventKind::JobAdded {
+                        job_id,
+                        job_type_id,
+                    });
+            }
+        }
+        Ok(res)
     }
 
     async fn jobs_cancelled(
@@ -304,6 +327,27 @@ where
         }
 
         Ok(())
+    }
+
+    async fn schedule_added_conditionally(
+        &self,
+        schedule: ora_storage::NewSchedule,
+        filter: ScheduleQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalScheduleResult> {
+        let schedule_id = schedule.id;
+
+        let res = self
+            .inner
+            .schedule_added_conditionally(schedule, filter)
+            .await?;
+
+        if self.event_bus.audit_events_enabled() {
+            if let ora_storage::ConditionalScheduleResult::Added = res {
+                self.event_bus
+                    .emit_audit_event(|| AuditEventKind::ScheduleAdded { schedule_id });
+            }
+        }
+        Ok(res)
     }
 
     async fn schedules_cancelled(

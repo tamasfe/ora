@@ -3,7 +3,7 @@
 use std::{mem, time::SystemTime};
 
 use async_trait::async_trait;
-use eyre::Context;
+use eyre::{bail, Context};
 use fjall::{PersistMode, ReadTransaction, TxKeyspace, WriteTransaction};
 use models::{ExecutionData, JobData, JobTypeData, ScheduleData};
 use ora_storage::IndexSet;
@@ -636,7 +636,7 @@ impl Storage for FjallStorage {
                         break;
                     }
                 }
-            };
+            }
 
             Ok(ready_executions)
         })
@@ -1063,6 +1063,22 @@ impl Storage for FjallStorage {
         })
         .await
     }
+
+    async fn job_added_conditionally(
+        &self,
+        _job: ora_storage::NewJob,
+        _filters: ora_storage::JobQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalJobResult> {
+        bail!("not supported")
+    }
+
+    async fn schedule_added_conditionally(
+        &self,
+        _schedule: ora_storage::NewSchedule,
+        _filters: ora_storage::ScheduleQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalScheduleResult> {
+        bail!("not supported")
+    }
 }
 
 fn delete_job<'a>(
@@ -1173,7 +1189,7 @@ fn job_unschedulable<'a>(
         }
 
         partitions.idx_pending_jobs.write(tx).remove(&job_id);
-    };
+    }
     Ok(())
 }
 
@@ -1212,6 +1228,6 @@ fn schedule_unschedulable<'a>(
             .idx_pending_schedules
             .write(tx)
             .remove(&schedule_id);
-    };
+    }
     Ok(())
 }

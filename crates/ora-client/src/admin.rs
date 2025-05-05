@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use futures::{Stream, StreamExt};
 use ora_proto::server::v1::{
-    admin_service_client::AdminServiceClient, AddJobsRequest, CountJobsRequest, JobQueryOrder,
-    ListJobsRequest, ListSchedulesRequest, ScheduleQueryOrder,
+    admin_service_client::AdminServiceClient, AddJobIfNotExistsRequest, AddJobsRequest,
+    AddScheduleIfNotExistsRequest, CountJobsRequest, JobQueryOrder, ListJobsRequest,
+    ListSchedulesRequest, ScheduleQueryOrder,
 };
 use thiserror::Error;
 use tonic::{transport::Channel, Request};
@@ -70,6 +71,47 @@ where
             .parse()?;
 
         Ok(JobHandle::new(job_id, self.client.clone()))
+    }
+
+    /// Add a new job to be executed.
+    ///
+    /// If an active job with the same job type and
+    /// labels already exists, it will be returned instead.
+    pub async fn add_job_persistent<J>(
+        &self,
+        definition: TypedJobDefinition<J>,
+    ) -> Result<PersistentJob<J, C>, AdminClientError> {
+        let mut filters = JobFilter::default()
+            .with_job_type_id(definition.inner.job_type_id.to_string())
+            .active_only();
+
+        for (key, value) in &definition.inner.labels {
+            filters = filters.with_label_value(key, value);
+        }
+
+        let res = self
+            .client
+            .clone()
+            .add_job_if_not_exists(Request::new(AddJobIfNotExistsRequest {
+                job: Some(definition.into_inner().into()),
+                filter: Some(filters.into()),
+            }))
+            .await?
+            .into_inner();
+
+        let job_id: Uuid = res.job_id.parse()?;
+
+        if res.added {
+            Ok(PersistentJob::Added(JobHandle::new(
+                job_id,
+                self.client.clone(),
+            )))
+        } else {
+            Ok(PersistentJob::Exists(JobHandle::new(
+                job_id,
+                self.client.clone(),
+            )))
+        }
     }
 
     /// Add multiple new jobs to be executed.
@@ -308,11 +350,9 @@ where
         let res = self
             .client
             .clone()
-            .create_schedules(Request::new(
-                ora_proto::server::v1::CreateSchedulesRequest {
-                    schedules: vec![schedule.into()],
-                },
-            ))
+            .add_schedules(Request::new(ora_proto::server::v1::AddSchedulesRequest {
+                schedules: vec![schedule.into()],
+            }))
             .await?
             .into_inner();
 
@@ -327,6 +367,69 @@ where
             .parse()?;
 
         Ok(ScheduleHandle::new(schedule_id, self.client.clone()))
+    }
+
+    /// Add a new schedule.
+    ///
+    /// If an active schedule with the same job type and
+    /// labels already exists, it will be returned instead.
+    pub async fn add_schedule_persistent(
+        &self,
+        mut schedule: ScheduleDefinition,
+    ) -> Result<PersistentSchedule<C>, AdminClientError> {
+        if schedule.propagate_labels_to_jobs {
+            match &mut schedule.job_creation_policy {
+                crate::schedule_definition::ScheduleJobCreationPolicy::JobDefinition(
+                    job_definition,
+                ) => {
+                    for (key, value) in &schedule.labels {
+                        if job_definition.labels.contains_key(key) {
+                            continue;
+                        }
+
+                        job_definition.labels.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+
+        let job_type_id = match schedule.job_creation_policy {
+            crate::schedule_definition::ScheduleJobCreationPolicy::JobDefinition(
+                ref job_definition,
+            ) => job_definition.job_type_id.to_string(),
+        };
+
+        let mut filters = ScheduleFilter::default()
+            .with_job_type_id(job_type_id)
+            .active_only();
+
+        for (key, value) in &schedule.labels {
+            filters = filters.with_label_value(key, value);
+        }
+
+        let res = self
+            .client
+            .clone()
+            .add_schedule_if_not_exists(Request::new(AddScheduleIfNotExistsRequest {
+                schedule: Some(schedule.into()),
+                filter: Some(filters.into()),
+            }))
+            .await?
+            .into_inner();
+
+        let schedule_id: Uuid = res.schedule_id.parse()?;
+
+        if res.added {
+            Ok(PersistentSchedule::Added(ScheduleHandle::new(
+                schedule_id,
+                self.client.clone(),
+            )))
+        } else {
+            Ok(PersistentSchedule::Exists(ScheduleHandle::new(
+                schedule_id,
+                self.client.clone(),
+            )))
+        }
     }
 
     /// Add multiple new schedules.
@@ -363,9 +466,9 @@ where
         let res = self
             .client
             .clone()
-            .create_schedules(Request::new(
-                ora_proto::server::v1::CreateSchedulesRequest { schedules },
-            ))
+            .add_schedules(Request::new(ora_proto::server::v1::AddSchedulesRequest {
+                schedules,
+            }))
             .await?
             .into_inner();
 
@@ -500,6 +603,22 @@ impl From<AdminServiceClient<Channel>> for AdminClient {
     fn from(client: AdminServiceClient<Channel>) -> Self {
         Self { client }
     }
+}
+
+/// The result of a persistent job creation.
+pub enum PersistentJob<J, C> {
+    /// The job was added successfully.
+    Added(JobHandle<J, C>),
+    /// The job already exists and is active.
+    Exists(JobHandle<J, C>),
+}
+
+/// The result of a persistent schedule creation.
+pub enum PersistentSchedule<C> {
+    /// The schedule was added successfully.
+    Added(ScheduleHandle<C>),
+    /// The schedule already exists and is active.
+    Exists(ScheduleHandle<C>),
 }
 
 /// Errors that can occur when interacting with the admin client.

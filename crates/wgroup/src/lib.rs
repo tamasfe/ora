@@ -59,7 +59,7 @@ impl WaitGroup {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn is_done(&self) -> bool {
-        self.inner.guards.lock().unwrap().len() == 0
+        self.inner.guards.lock().unwrap().is_empty()
     }
 
     /// A future that resolves when the wait

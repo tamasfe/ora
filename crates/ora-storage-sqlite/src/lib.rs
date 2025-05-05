@@ -1,12 +1,12 @@
 //! Storage implementation for `ora` backed by sqlite.
 
-use std::{path::PathBuf, sync::Arc};
+use std::{iter, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use eyre::Context;
 use migrations::run_migrations;
 use models::{JobRetryPolicy, JobTimeoutPolicy, SqlSystemTime};
-use ora_storage::{ScheduleTimeRange, Storage};
+use ora_storage::{NewJob, NewSchedule, ScheduleTimeRange, Storage};
 use parking_lot::Mutex;
 use rusqlite::{named_params, params, params_from_iter, Connection, OpenFlags};
 use uuid::Uuid;
@@ -313,72 +313,32 @@ impl Storage for SqliteStorage {
 
         self.with_db(|db| {
             let tx = db.transaction()?;
-
-            {
-                let mut insert_stmt = tx.prepare_cached(
-                    r#"--sql
-                        INSERT INTO ora_job (
-                            id,
-                            schedule_id,
-                            created_at_unix_ns,
-                            job_type_id,
-                            target_execution_time_unix_ns,
-                            retry_policy,
-                            timeout_policy,
-                            input_payload_json,
-                            metadata_json
-                        )
-                        VALUES (
-                            :id,
-                            :schedule_id,
-                            :created_at_unix_ns,
-                            :job_type_id,
-                            :target_execution_time_unix_ns,
-                            :retry_policy,
-                            :timeout_policy,
-                            :input_payload_json,
-                            :metadata_json
-                        );
-                    "#,
-                )?;
-
-                let mut insert_label_stmt = tx.prepare_cached(
-                    r#"--sql
-                        INSERT INTO ora_job_label (
-                            job_id,
-                            key,
-                            value
-                        )
-                        VALUES (
-                            :job_id,
-                            :key,
-                            :value
-                        );
-                    "#,
-                )?;
-
-                for job in jobs {
-                    insert_stmt.execute(params![
-                        job.id,
-                        job.schedule_id,
-                        SqlSystemTime(job.created_at),
-                        job.job_type_id,
-                        SqlSystemTime(job.target_execution_time),
-                        JobRetryPolicy::from(job.retry_policy),
-                        JobTimeoutPolicy::from(job.timeout_policy),
-                        job.input_payload_json,
-                        job.metadata_json
-                    ])?;
-
-                    for (key, value) in job.labels {
-                        insert_label_stmt.execute(params![job.id, key, value])?;
-                    }
-                }
-            }
-
+            add_jobs(&tx, jobs)?;
             tx.commit()?;
 
             Ok(())
+        })
+        .await
+    }
+
+    async fn job_added_conditionally(
+        &self,
+        job: ora_storage::NewJob,
+        filters: ora_storage::JobQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalJobResult> {
+        self.with_db(move |db| {
+            let mut tx = db.transaction()?;
+            let res = job_query::job_ids(&mut tx, filters)?;
+
+            if let Some(job_id) = res.first() {
+                tx.commit()?;
+                return Ok(ora_storage::ConditionalJobResult::AlreadyExists { job_id: *job_id });
+            }
+
+            add_jobs(&tx, iter::once(job))?;
+            tx.commit()?;
+
+            Ok(ora_storage::ConditionalJobResult::Added)
         })
         .await
     }
@@ -1181,80 +1141,34 @@ impl Storage for SqliteStorage {
 
         self.with_db(|db| {
             let tx = db.transaction()?;
-
-            {
-                let mut insert_stmt = tx.prepare_cached(
-                    r#"--sql
-                        INSERT INTO ora_schedule (
-                            id,
-                            created_at_unix_ns,
-                            job_type_id,
-                            job_timing_policy,
-                            job_creation_policy,
-                            start_after_unix_ns,
-                            end_before_unix_ns,
-                            metadata_json
-                        )
-                        VALUES (
-                            :id,
-                            :created_at_unix_ns,
-                            :job_type_id,
-                            :job_timing_policy,
-                            :job_creation_policy,
-                            :start_after_unix_ns,
-                            :end_before_unix_ns,
-                            :metadata_json
-                        );
-                    "#,
-                )?;
-
-                for schedule in schedules {
-                    let job_type_id = match &schedule.job_creation_policy {
-                        ora_storage::ScheduleJobCreationPolicy::JobDefinition(
-                            schedule_new_job_definition,
-                        ) => schedule_new_job_definition.job_type_id.clone(),
-                    };
-
-                    let start_after = schedule.time_range.as_ref().and_then(|r| r.start);
-                    let end_before = schedule.time_range.as_ref().and_then(|r| r.end);
-
-                    insert_stmt.execute(params![
-                        schedule.id,
-                        SqlSystemTime(schedule.created_at),
-                        job_type_id,
-                        crate::models::ScheduleJobTimingPolicy::from(schedule.job_timing_policy),
-                        crate::models::ScheduleJobCreationPolicy::from(
-                            schedule.job_creation_policy
-                        ),
-                        start_after.map(SqlSystemTime),
-                        end_before.map(SqlSystemTime),
-                        schedule.metadata_json
-                    ])?;
-
-                    let mut insert_label_stmt = tx.prepare_cached(
-                        r#"--sql
-                            INSERT INTO ora_schedule_label (
-                                schedule_id,
-                                key,
-                                value
-                            )
-                            VALUES (
-                                :schedule_id,
-                                :key,
-                                :value
-                            );
-                        "#,
-                    )?;
-
-                    for (key, value) in schedule.labels {
-                        insert_label_stmt.execute(params![schedule.id, key, value])?;
-                    }
-                }
-            }
-
+            add_schedules(&tx, schedules)?;
             tx.commit()?;
 
             Ok(())
+        })
+        .await
+    }
+
+    async fn schedule_added_conditionally(
+        &self,
+        schedule: ora_storage::NewSchedule,
+        filter: ora_storage::ScheduleQueryFilters,
+    ) -> eyre::Result<ora_storage::ConditionalScheduleResult> {
+        self.with_db(move |db| {
+            let mut tx = db.transaction()?;
+            let res = schedule_query::schedule_ids(&mut tx, filter)?;
+
+            if let Some(schedule_id) = res.first() {
+                tx.commit()?;
+                return Ok(ora_storage::ConditionalScheduleResult::AlreadyExists {
+                    schedule_id: *schedule_id,
+                });
+            }
+
+            add_schedules(&tx, iter::once(schedule))?;
+            tx.commit()?;
+
+            Ok(ora_storage::ConditionalScheduleResult::Added)
         })
         .await
     }
@@ -1543,4 +1457,145 @@ impl Storage for SqliteStorage {
         })
         .await
     }
+}
+
+fn add_jobs(
+    tx: &rusqlite::Transaction,
+    jobs: impl IntoIterator<Item = NewJob>,
+) -> eyre::Result<()> {
+    {
+        let mut insert_stmt = tx.prepare_cached(
+            r#"--sql
+                INSERT INTO ora_job (
+                    id,
+                    schedule_id,
+                    created_at_unix_ns,
+                    job_type_id,
+                    target_execution_time_unix_ns,
+                    retry_policy,
+                    timeout_policy,
+                    input_payload_json,
+                    metadata_json
+                )
+                VALUES (
+                    :id,
+                    :schedule_id,
+                    :created_at_unix_ns,
+                    :job_type_id,
+                    :target_execution_time_unix_ns,
+                    :retry_policy,
+                    :timeout_policy,
+                    :input_payload_json,
+                    :metadata_json
+                );
+            "#,
+        )?;
+
+        let mut insert_label_stmt = tx.prepare_cached(
+            r#"--sql
+                INSERT INTO ora_job_label (
+                    job_id,
+                    key,
+                    value
+                )
+                VALUES (
+                    :job_id,
+                    :key,
+                    :value
+                );
+            "#,
+        )?;
+
+        for job in jobs {
+            insert_stmt.execute(params![
+                job.id,
+                job.schedule_id,
+                SqlSystemTime(job.created_at),
+                job.job_type_id,
+                SqlSystemTime(job.target_execution_time),
+                JobRetryPolicy::from(job.retry_policy),
+                JobTimeoutPolicy::from(job.timeout_policy),
+                job.input_payload_json,
+                job.metadata_json
+            ])?;
+
+            for (key, value) in job.labels {
+                insert_label_stmt.execute(params![job.id, key, value])?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn add_schedules(
+    tx: &rusqlite::Transaction,
+    schedules: impl IntoIterator<Item = NewSchedule>,
+) -> eyre::Result<()> {
+    let mut insert_stmt = tx.prepare_cached(
+        r#"--sql
+                INSERT INTO ora_schedule (
+                    id,
+                    created_at_unix_ns,
+                    job_type_id,
+                    job_timing_policy,
+                    job_creation_policy,
+                    start_after_unix_ns,
+                    end_before_unix_ns,
+                    metadata_json
+                )
+                VALUES (
+                    :id,
+                    :created_at_unix_ns,
+                    :job_type_id,
+                    :job_timing_policy,
+                    :job_creation_policy,
+                    :start_after_unix_ns,
+                    :end_before_unix_ns,
+                    :metadata_json
+                );
+            "#,
+    )?;
+
+    for schedule in schedules {
+        let job_type_id = match &schedule.job_creation_policy {
+            ora_storage::ScheduleJobCreationPolicy::JobDefinition(schedule_new_job_definition) => {
+                schedule_new_job_definition.job_type_id.clone()
+            }
+        };
+
+        let start_after = schedule.time_range.as_ref().and_then(|r| r.start);
+        let end_before = schedule.time_range.as_ref().and_then(|r| r.end);
+
+        insert_stmt.execute(params![
+            schedule.id,
+            SqlSystemTime(schedule.created_at),
+            job_type_id,
+            crate::models::ScheduleJobTimingPolicy::from(schedule.job_timing_policy),
+            crate::models::ScheduleJobCreationPolicy::from(schedule.job_creation_policy),
+            start_after.map(SqlSystemTime),
+            end_before.map(SqlSystemTime),
+            schedule.metadata_json
+        ])?;
+
+        let mut insert_label_stmt = tx.prepare_cached(
+            r#"--sql
+                    INSERT INTO ora_schedule_label (
+                        schedule_id,
+                        key,
+                        value
+                    )
+                    VALUES (
+                        :schedule_id,
+                        :key,
+                        :value
+                    );
+                "#,
+        )?;
+
+        for (key, value) in schedule.labels {
+            insert_label_stmt.execute(params![schedule.id, key, value])?;
+        }
+    }
+
+    Ok(())
 }

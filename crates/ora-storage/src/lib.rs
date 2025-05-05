@@ -31,6 +31,15 @@ pub trait Storage: Send + Sync + 'static + Clone {
     async fn job_types_added(&self, job_types: Vec<JobType>) -> eyre::Result<()>;
     /// Persist the given new jobs.
     async fn jobs_added(&self, jobs: Vec<NewJob>) -> eyre::Result<()>;
+    /// Persist the given job if no jobs match the filter.
+    ///
+    /// If any jobs match the filter,
+    /// return the first one in arbitrary order.
+    async fn job_added_conditionally(
+        &self,
+        job: NewJob,
+        filters: JobQueryFilters,
+    ) -> eyre::Result<ConditionalJobResult>;
     /// Cancel the given jobs.
     ///
     /// - Mark the job as cancelled.
@@ -163,6 +172,16 @@ pub trait Storage: Send + Sync + 'static + Clone {
     /// Persist the given new schedules.
     async fn schedules_added(&self, schedules: Vec<NewSchedule>) -> eyre::Result<()>;
 
+    /// Persist the given schedule if no schedules match the filter.
+    ///
+    /// If any schedules match the filter,
+    /// return the first one in arbitrary order.
+    async fn schedule_added_conditionally(
+        &self,
+        schedule: NewSchedule,
+        filters: ScheduleQueryFilters,
+    ) -> eyre::Result<ConditionalScheduleResult>;
+
     /// Cancel the given schedules.
     ///
     /// - Mark the schedule as cancelled.
@@ -263,6 +282,17 @@ pub struct NewJob {
     pub labels: IndexMap<String, String>,
     /// Arbitrary metadata in JSON format.
     pub metadata_json: Option<String>,
+}
+
+/// A job that was added conditionally.
+pub enum ConditionalJobResult {
+    /// The job was added successfully.
+    Added,
+    /// A matching job already exists.
+    AlreadyExists {
+        /// The ID of the existing job.
+        job_id: Uuid,
+    },
 }
 
 /// A pending job.
@@ -592,6 +622,17 @@ pub struct NewSchedule {
     pub time_range: Option<ScheduleTimeRange>,
     /// Arbitrary metadata in JSON format.
     pub metadata_json: Option<String>,
+}
+
+/// Conditionally added schedule result.
+pub enum ConditionalScheduleResult {
+    /// The schedule was added successfully.
+    Added,
+    /// A matching schedule already exists.
+    AlreadyExists {
+        /// The ID of the existing schedule.
+        schedule_id: Uuid,
+    },
 }
 
 /// Scheduling policy for a schedule.

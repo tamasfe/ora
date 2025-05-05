@@ -106,7 +106,7 @@ where
 #[derive(Debug, Clone)]
 #[must_use]
 pub struct TypedJobDefinition<J = ()> {
-    inner: JobDefinition,
+    pub(crate) inner: JobDefinition,
     _job_type: std::marker::PhantomData<fn() -> J>,
 }
 
