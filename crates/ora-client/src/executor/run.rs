@@ -19,7 +19,10 @@ use wgroup::WaitGroup;
 #[allow(clippy::wildcard_imports)]
 use tonic::codegen::*;
 
-use crate::{executor::ExecutionContext, IndexMap};
+use crate::{
+    executor::{ExecutionContext, ExecutionFailedCb},
+    IndexMap,
+};
 
 use super::{ExecutionHandlerRaw, Executor, ExecutorOptions};
 
@@ -44,6 +47,8 @@ where
         executor_span.record("executor_name", &self.options.name);
 
         let (executor_requests, recv) = flume::bounded(0);
+
+        let on_execution_failed = self.on_execution_failed.clone();
 
         let mut state = ExecutorState {
             executor_id: None,
@@ -134,7 +139,7 @@ where
                 server_msg = server_messages.message() => {
                     match server_msg {
                         Ok(Some(server_msg)) => {
-                            handle_server_response(&mut state, &executor_span, server_msg).await?;
+                            handle_server_response(&mut state, &executor_span, server_msg, on_execution_failed.clone()).await?;
                         }
                         Ok(None) => {
                             tracing::info!("incoming stream closed by the server");
@@ -191,6 +196,7 @@ async fn handle_server_response(
     state: &mut ExecutorState<'_>,
     executor_span: &tracing::Span,
     response: ExecutorConnectionResponse,
+    on_execution_failed: Option<ExecutionFailedCb>,
 ) -> eyre::Result<()> {
     let Some(message) = response.message else {
         tracing::warn!("received empty message from the server");
@@ -220,7 +226,7 @@ async fn handle_server_response(
             tracing::info!("received executor properties");
         }
         ServerMessageKind::ExecutionReady(execution_ready) => {
-            spawn_execution(state, execution_ready).await?;
+            spawn_execution(state, execution_ready, on_execution_failed.clone()).await?;
         }
         ServerMessageKind::ExecutionCancelled(execution_cancelled) => {
             let execution_id: Uuid = execution_cancelled
@@ -278,6 +284,7 @@ async fn cancel_execution(mut execution_state: ExecutionState, grace_period: std
 async fn spawn_execution(
     state: &ExecutorState<'_>,
     execution_ready: ora_proto::server::v1::ExecutionReady,
+    on_execution_failed: Option<ExecutionFailedCb>,
 ) -> eyre::Result<()> {
     let execution_span = tracing::Span::current();
 
@@ -354,7 +361,7 @@ async fn spawn_execution(
             let mut warn_bomb = ExecutionDropWarnBomb::new(tracing::Span::current());
 
             let handler_fut = async move {
-                match AssertUnwindSafe(handler.execute(ctx, &execution_ready.input_payload_json))
+                match AssertUnwindSafe(handler.execute(ctx.clone(), &execution_ready.input_payload_json))
                     .catch_unwind()
                     .await
                 {
@@ -384,6 +391,11 @@ async fn spawn_execution(
                         }
                         Err(error) => {
                             tracing::debug!(error, "execution failed");
+
+                            if let Some(on_execution_failed) = &on_execution_failed {
+                                on_execution_failed(ctx, &error);
+                            }
+
                             let now = std::time::SystemTime::now();
 
                             if let Err(error) = executor_requests
@@ -417,6 +429,10 @@ async fn spawn_execution(
                         } else {
                             "handler panicked".to_string()
                         };
+
+                        if let Some(on_execution_failed) = &on_execution_failed {
+                            on_execution_failed(ctx, &error_message);
+                        }
 
                         if let Err(error) = executor_requests
                             .send_async(ExecutorConnectionRequest {

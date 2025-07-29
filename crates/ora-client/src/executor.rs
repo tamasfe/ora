@@ -39,11 +39,14 @@ impl Default for ExecutorOptions {
     }
 }
 
+type ExecutionFailedCb = Arc<dyn Fn(ExecutionContext, &str) + Send + Sync>;
+
 /// An executor for running jobs.
 pub struct Executor<C = Channel> {
     options: ExecutorOptions,
     client: ExecutorServiceClient<C>,
     handlers: Vec<Arc<dyn ExecutionHandlerRaw + Send + Sync>>,
+    on_execution_failed: Option<ExecutionFailedCb>,
 }
 
 impl<C> Executor<C> {
@@ -58,7 +61,19 @@ impl<C> Executor<C> {
             client,
             options,
             handlers: Vec::new(),
+            on_execution_failed: None,
         }
+    }
+
+    /// Set a callback to be called when an execution fails.
+    ///
+    /// Only one callback can be set at a time,
+    /// the previous one will be replaced.
+    pub fn on_execution_failed(
+        &mut self,
+        callback: impl Fn(ExecutionContext, &str) + Send + Sync + 'static,
+    ) {
+        self.on_execution_failed = Some(Arc::new(callback));
     }
 
     /// Get the options of the executor.
