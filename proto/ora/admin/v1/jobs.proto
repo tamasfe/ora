@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ora/admin/v1/executions.proto";
+import "ora/common/v1/label.proto";
+import "ora/common/v1/time_range.proto";
+import "ora/jobs/v1/job.proto";
+
+// Details of a job.
+message Job {
+  // The unique ID of the job.
+  string id = 1;
+  // The job definition.
+  ora.jobs.v1.Job job = 2;
+  // A schedule associated with the job (if any).
+  optional string schedule_id = 3;
+  // The timestamp when the job was created.
+  google.protobuf.Timestamp created_at = 4;
+  // The executions of the job.
+  repeated Execution executions = 5;
+}
+
+// Filters for listing jobs.
+message JobFilters {
+  // Filter by job IDs.
+  repeated string job_ids = 1;
+  // Filter by job type IDs.
+  repeated string job_type_ids = 2;
+  // Filter by schedule IDs.
+  repeated string schedule_ids = 3;
+  // Filter by executor IDs.
+  repeated string executor_ids = 4;
+  // Filter by execution IDs.
+  repeated string execution_ids = 5;
+  // Filter by the status of the last execution.
+  repeated ExecutionStatus execution_statuses = 6;
+  // Filter by target execution times.
+  //
+  // The range can be open-ended in either direction.
+  optional ora.common.v1.TimeRange target_execution_time = 7;
+  // Filter by creation time.
+  //
+  // The range can be open-ended in either direction.
+  optional ora.common.v1.TimeRange created_at = 8;
+  // Filter by labels.
+  repeated ora.common.v1.LabelFilter labels = 9;
+}
+
+// Ordering options for listing jobs.
+enum JobOrderBy {
+  // Default ordering (by creation time descending).
+  JOB_ORDER_BY_UNSPECIFIED = 0;
+  // Order by creation time ascending.
+  JOB_ORDER_BY_CREATED_AT_ASC = 1;
+  // Order by creation time descending.
+  JOB_ORDER_BY_CREATED_AT_DESC = 2;
+  // Order by target execution time ascending.
+  JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC = 3;
+  // Order by target execution time descending.
+  JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC = 4;
+}

@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::{fs::create_dir_all, path::Path};
+
+use walkdir::WalkDir;
 
 pub(crate) fn generate_proto() {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -6,30 +8,62 @@ pub(crate) fn generate_proto() {
         .canonicalize()
         .unwrap();
     let proto_root = workspace_root.join("proto");
-    let out_dir = workspace_root.join("crates/ora-proto/src/generated");
 
-    let proto_paths = [
-        proto_root.join("ora/common/v1/job.proto"),
-        proto_root.join("ora/common/v1/schedule.proto"),
-        proto_root.join("ora/common/v1/time_range.proto"),
-        //
-        proto_root.join("ora/server/v1/executor.proto"),
-        proto_root.join("ora/server/v1/admin.proto"),
-        //
-        proto_root.join("ora/snapshot/v1/service.proto"),
-    ];
+    let proto_paths: Vec<_> = WalkDir::new(&proto_root)
+        .sort_by_file_name()
+        .into_iter()
+        .filter_map(|e| {
+            let e = e.ok()?;
 
-    let mut config = prost_build::Config::new();
-    config.enable_type_names();
+            if e.file_type().is_dir() {
+                return None;
+            }
 
-    tonic_build::configure()
-        .build_transport(true)
-        .build_client(true)
-        .build_server(true)
-        .emit_rerun_if_changed(false)
-        .generate_default_stubs(true)
-        .bytes(["."])
-        .out_dir(out_dir)
-        .compile_protos_with_config(config, &proto_paths, &[&proto_root])
-        .unwrap();
+            if e.path().extension()? != "proto" {
+                return None;
+            }
+
+            Some(e.into_path())
+        })
+        .collect();
+
+    let includes = &[proto_root];
+
+    {
+        let out_dir = workspace_root.join("crates/ora-server/src/proto/generated");
+        create_dir_all(&out_dir).unwrap();
+
+        let mut config = tonic_prost_build::Config::new();
+        config.enable_type_names();
+
+        tonic_prost_build::configure()
+            .build_transport(false)
+            .build_client(false)
+            .build_server(true)
+            .emit_rerun_if_changed(false)
+            .generate_default_stubs(true)
+            .bytes(".")
+            .out_dir(out_dir)
+            .compile_with_config(config, &proto_paths, includes)
+            .unwrap();
+    }
+
+    {
+        let out_dir = workspace_root.join("crates/ora/src/proto/generated");
+
+        create_dir_all(&out_dir).unwrap();
+
+        let mut config = tonic_prost_build::Config::new();
+        config.enable_type_names();
+
+        tonic_prost_build::configure()
+            .build_transport(false)
+            .build_client(true)
+            .build_server(false)
+            .emit_rerun_if_changed(false)
+            .bytes(".")
+            .out_dir(out_dir)
+            .compile_with_config(config, &proto_paths, includes)
+            .unwrap();
+    }
 }

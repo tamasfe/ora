@@ -1,20 +1,71 @@
 [package]
 name = "ora"
-version = "0.11.2"
-edition = "2021"
+version = "0.1.0"
+edition = "2024"
 publish.workspace = true
 description.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-ora-client = { version = "0.11.2", path = "../ora-client" }
-ora-client-macros = { version = "0.8.1", path = "../ora-client-macros", optional = true }
+prost.workspace = true
+prost-types.workspace = true
+tonic-prost.workspace = true
+tonic = { version = "0.14.2", default-features = false, features = [
+    "codegen",
+] }
+schemars = "1.2.0"
+serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.18"
+serde_json = "1.0.149"
+eyre = "0.6.12"
+uuid = { version = "1.19.0", features = ["serde"] }
+futures.workspace = true
+ora-server = { version = "0.1.0", path = "../ora-server", optional = true }
+hyper-util = { version = "0.1.19", optional = true }
+tokio = { version = "1.49.0", features = [
+    "rt",
+    "macros",
+    "time",
+], optional = true }
+tracing.workspace = true
+tokio-stream = { version = "0.1.18", optional = true }
+tower = { version = "0.5.3", optional = true }
+tokio-util = { version = "0.7.18", optional = true }
+flume = { version = "0.12.0", optional = true }
+async-stream = "0.3.6"
+http-body = "1.0.1"
+bytes = "1.11.0"
+cronexpr = "1.4.0"
+ora-macros = { version = "0.1.0", path = "../ora-macros" }
+
+# All targets other than wasm
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1.49.0", features = ["rt", "macros", "time"] }
 
 [features]
-default = ["macros"]
+default = []
+server = [
+    "dep:ora-server",
+    "tonic/transport",
+    "tonic/router",
+    "dep:hyper-util",
+    "dep:tokio",
+    "dep:tokio-stream",
+    "dep:tower",
+]
+executor = ["dep:tokio-util", "dep:flume", "dep:tokio", "tokio/rt"]
 
-macros = ["dep:ora-client-macros"]
+[[example]]
+name = "server"
+required-features = ["server", "executor"]
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+deadpool-postgres = "0.14.1"
+ora-backend-postgres = { path = "../ora-backend-postgres" }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+tracing-flame = "0.2.0"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

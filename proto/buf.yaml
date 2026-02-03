@@ -2,7 +2,7 @@ version: v2
 lint:
   use:
     - COMMENTS
-    - DEFAULT
+    - STANDARD
     - ENUM_FIRST_VALUE_ZERO
   except:
     - FIELD_NOT_REQUIRED

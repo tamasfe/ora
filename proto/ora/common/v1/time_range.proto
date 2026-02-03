@@ -19,19 +19,3 @@ message TimeRange {
   // If not provided, the time range is open-ended.
   google.protobuf.Timestamp end = 2;
 }
-
-// An inclusive time range.
-//
-// An inclusive time range is a range of time between two points.
-//
-// The time range is inclusive of the start time and the end time.
-message InclusiveTimeRange {
-  // The start time of the time range.
-  //
-  // If not provided, the time range is open-ended.
-  google.protobuf.Timestamp start = 1;
-  // The end time of the time range.
-  //
-  // If not provided, the time range is open-ended.
-  google.protobuf.Timestamp end = 2;
-}

@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ora/jobs/v1/job.proto";
+
+// An executor connected to the Ora server.
+message Executor {
+  // The ID of the executor.
+  string id = 1;
+  // The name of the executor.
+  optional string name = 2;
+  // The time the executor was last seen.
+  google.protobuf.Timestamp last_seen_at = 3;
+  // Job queues of the executor.
+  repeated ExecutorJobQueue queues = 4;
+}
+
+// The job queue of an executor for a specific job type.
+message ExecutorJobQueue {
+  // The job type the queue is for.
+  ora.jobs.v1.JobType job_type = 1;
+  // The maximum amount of concurrent executions allowed for this job type.
+  uint64 max_concurrent_executions = 2;
+  // The amount of active executions in the queue.
+  uint64 active_executions = 3;
+}

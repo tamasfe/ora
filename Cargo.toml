@@ -9,11 +9,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/tamasfe/ora/tree/master"
 
 [workspace.dependencies]
-tonic = "0.12.3"
+prost = "0.14.3"
+prost-types = "0.14.3"
+tonic-prost = "0.14.2"
 futures = "0.3.31"
 tracing = "0.1.41"
-uuid = { version = "1.11.0", features = ["v4", "v7"] }
-async-trait = "0.1.83"
+uuid = { version = "1.19.0", features = ["v4", "v7", "serde"] }
 
 [workspace.lints.rust]
 missing_docs = "warn"

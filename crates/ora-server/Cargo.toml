@@ -1,47 +1,33 @@
 [package]
 name = "ora-server"
-version = "0.2.0"
-edition = "2021"
+version = "0.1.0"
+edition = "2024"
 publish.workspace = true
 description.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-ora-proto = { version = "0.2.0", path = "../ora-proto" }
-ora-timer = { version = "0.2.0", path = "../ora-timer" }
-tokio = { version = "1.40.0", features = ["sync"] }
-tonic.workspace = true
+flume = "0.12.0"
 futures.workspace = true
-tracing.workspace = true
-uuid = { workspace = true, features = ["serde"] }
-async-trait.workspace = true
-flume = "0.11.0"
+ora-backend = { version = "0.1.0", path = "../ora-backend" }
 wgroup = { version = "0.1.0", path = "../wgroup" }
-async-stream = "0.3.5"
-ahash = "0.8.11"
-indexmap = { version = "2.5.0", features = ["serde"] }
-arc-swap = "1.7.1"
-parking_lot = "0.12.3"
-eyre = "0.6.12"
-atomic = "0.6.0"
-bytemuck = { version = "1.20.0", features = ["derive"] }
-trait-variant = "0.1.2"
-rtrb = "0.3.1"
-tokio-stream = { version = "0.1.17", features = ["sync"] }
-paste = "1.0.15"
-tower = { version = "0.5.2", features = ["util"] }
-hyper-util = { version = "0.1.10", features = ["tokio"] }
-serde = { version = "1.0.216", features = ["derive"] }
-serde_json = "1.0.134"
-cronexpr = "1.2.0"
-jiff = "0.2.1"
-ora-storage = { version = "0.2.0", path = "../ora-storage" }
-metrics = { version = "0.24.1", optional = true }
-
-[features]
-default = ["metrics"]
-metrics = ["dep:metrics"]
+prost.workspace = true
+prost-types.workspace = true
+tonic-prost.workspace = true
+tonic = { version = "0.14.2", default-features = false, features = ["codegen"] }
+uuid.workspace = true
+tokio = { version = "1.49.0", features = ["rt", "macros"] }
+tracing.workspace = true
+rand = "0.9.2"
+serde = "1.0.228"
+serde_json = "1.0.148"
+tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+async-broadcast = "0.7.2"
+async-stream = "0.3.6"
+jiff = "0.2.18"
+cronexpr = "1.4.0"
+either = "1.15.0"
 
 [lints]
 workspace = true

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ora.common.v1;
+
+// A label for categorizing and grouping entities.
+message Label {
+  // The key of the label.
+  string key = 1;
+  // The value of the label.
+  string value = 2;
+}
+
+// A filter for labels.
+message LabelFilter {
+  // The key of the label to filter by.
+  string key = 1;
+  // An optional value of the label to filter by,
+  // if not specified, entities with
+  // the given key and any value will match.
+  optional string value = 2;
+}

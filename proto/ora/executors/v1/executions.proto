@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package ora.executors.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "ora/jobs/v1/job.proto";
+
+// Endpoint on the server for executors to connect to.
+service ExecutionService {
+  // Long-lived bidirectional stream for the executor.
+  rpc ExecutorConnection(stream ExecutorConnectionRequest) returns (stream ExecutorConnectionResponse);
+}
+
+// Request for `ExecutorConnection`.
+message ExecutorConnectionRequest {
+  // A message sent from the executor.
+  ExecutorMessage message = 1;
+}
+
+// Response for `ExecutorConnection`.
+message ExecutorConnectionResponse {
+  // A message sent from the server.
+  ServerMessage message = 1;
+}
+
+// A message sent from the executor.
+message ExecutorMessage {
+  // The message.
+  oneof executor_message_kind {
+    // The capabilities of the executor.
+    //
+    // The executor must send the capabilities
+    // as the first message in the stream
+    // before any heartbeats, subsequent capabilities
+    // messages might be ignored.
+    ExecutorCapabilities capabilities = 1;
+    // The heartbeat request.
+    ExecutorHeartbeat heartbeat = 2;
+    // The execution has succeeded.
+    ExecutionSucceeded execution_succeeded = 3;
+    // The execution has failed.
+    ExecutionFailed execution_failed = 4;
+  }
+}
+
+// Capabilities of the executor and other information
+// that the server needs to know about the executor.
+message ExecutorCapabilities {
+  // The name of the executor.
+  string name = 1;
+  // The job queue configurations of the executor.
+  repeated ExecutorJobQueue job_queues = 2;
+}
+
+// A job queue configuration of the executor.
+message ExecutorJobQueue {
+  // The job type of the queue.
+  ora.jobs.v1.JobType job_type = 1;
+  // The maximum amount of concurrent executions allowed for this job type.
+  uint64 max_concurrent_executions = 2;
+}
+
+// The heartbeat content.
+message ExecutorHeartbeat {}
+
+// A job execution has succeeded.
+message ExecutionSucceeded {
+  // The ID of the job execution.
+  string execution_id = 1;
+  // The time when the job execution succeeded.
+  google.protobuf.Timestamp timestamp = 2;
+  // The output payload of the job.
+  string output_payload_json = 3;
+}
+
+// The job execution has failed.
+message ExecutionFailed {
+  // The ID of the job execution.
+  string execution_id = 1;
+  // The time when the job execution failed.
+  google.protobuf.Timestamp timestamp = 2;
+  // The error message of the job.
+  string failure_reason = 3;
+}
+
+// A message sent from the server.
+message ServerMessage {
+  // The message.
+  oneof server_message_kind {
+    // The properties of the executor.
+    ExecutorProperties properties = 1;
+    // A job execution is ready to be executed by the executor.
+    ExecutionReady execution_ready = 2;
+    // The job execution was cancelled and should be dropped by the executor.
+    ExecutionCancelled execution_cancelled = 3;
+  }
+}
+
+// Properties of the executor assigned by the server.
+message ExecutorProperties {
+  // The ID given to the executor.
+  string executor_id = 1;
+  // The maximum interval between heartbeats.
+  //
+  // Executors should repeat the executor ping
+  // request at least every `max_heartbeat_interval`.
+  //
+  // Note that delays in the network or the server
+  // may cause the executor to miss the deadline,
+  // so the executor should send the heartbeat
+  // before the deadline to account for this.
+  google.protobuf.Duration max_heartbeat_interval = 2;
+}
+
+// A job execution is ready to be executed by the executor.
+message ExecutionReady {
+  // The ID of the job.
+  string job_id = 1;
+  // The execution ID of the job.
+  string execution_id = 2;
+  // The job type ID.
+  string job_type_id = 3;
+  // The attempt number of the job execution.
+  //
+  // The first attempt is 1.
+  uint64 attempt_number = 4;
+  // The input payload of the job.
+  string input_payload_json = 5;
+  // The target execution time of the job.
+  google.protobuf.Timestamp target_execution_time = 6;
+}
+
+// The job execution was cancelled and should be dropped by the executor.
+message ExecutionCancelled {
+  // The ID of the job execution.
+  string execution_id = 1;
+}

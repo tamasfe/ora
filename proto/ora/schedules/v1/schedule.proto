@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package ora.schedules.v1;
+
+import "google/protobuf/duration.proto";
+import "ora/common/v1/label.proto";
+import "ora/common/v1/time_range.proto";
+import "ora/jobs/v1/job.proto";
+
+// A schedule is a tool for executing jobs at a specific times.
+//
+// Schedules create new jobs based on various criteria.
+message Schedule {
+  // The repeat policy for the schedule.
+  SchedulingPolicy scheduling = 1;
+  // The job to be used as a template
+  // when creating new jobs.
+  ora.jobs.v1.Job job_template = 2;
+  // The labels of the schedule.
+  repeated ora.common.v1.Label labels = 3;
+  // The time range for the schedule.
+  //
+  // The schedule will not create jobs outside of the time range.
+  // If the time range is not provided, the schedule will create jobs
+  // indefinitely.
+  ora.common.v1.TimeRange time_range = 4;
+}
+
+message SchedulingPolicy {
+  // The policy for repeating jobs.
+  oneof policy {
+    // Repeat jobs with a given interval.
+    SchedulingPolicyInterval interval = 1;
+    // Repeat jobs according to a cron expression.
+    SchedulingPolicyCron cron = 2;
+  }
+}
+
+// Repeat jobs with a given interval.
+message SchedulingPolicyInterval {
+  // The interval between each job.
+  google.protobuf.Duration interval = 1;
+  // Whether to immediately create a job
+  // when the schedule is created.
+  bool immediate = 2;
+  // The policy for missed jobs.
+  MissedTimePolicy missed_time_policy = 3;
+}
+
+// Repeat jobs according to a cron expression.
+message SchedulingPolicyCron {
+  // The cron expression for the schedule.
+  //
+  // The reference implementation uses the cron expression
+  // format supported by the `cronexpr` Rust crate (<https://docs.rs/cronexpr/latest/cronexpr/>).
+  string cron_expression = 1;
+  // Whether to immediately create a job
+  // when the schedule is created.
+  bool immediate = 2;
+  // The policy for missed jobs.
+  MissedTimePolicy missed_time_policy = 3;
+}
+
+enum MissedTimePolicy {
+  // The policy is unspecified.
+  MISSED_TIME_POLICY_UNSPECIFIED = 0;
+  // Skip the missed times.
+  MISSED_TIME_POLICY_SKIP = 1;
+  // Create a job for each missed time.
+  MISSED_TIME_POLICY_CREATE = 2;
+}

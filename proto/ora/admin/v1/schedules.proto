@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ora/common/v1/label.proto";
+import "ora/common/v1/time_range.proto";
+import "ora/schedules/v1/schedule.proto";
+
+// Schedule details.
+message Schedule {
+  // The unique ID of the schedule.
+  string id = 1;
+  // The schedule definition.
+  ora.schedules.v1.Schedule schedule = 2;
+  // The timestamp when the schedule was created.
+  google.protobuf.Timestamp created_at = 3;
+  // The status of the schedule.
+  ScheduleStatus status = 4;
+  // The timestamp when the schedule was stopped (if any).
+  optional google.protobuf.Timestamp stopped_at = 5;
+}
+
+// The status of a schedule.
+enum ScheduleStatus {
+  // Unknown status.
+  SCHEDULE_STATUS_UNSPECIFIED = 0;
+  // The schedule is active.
+  SCHEDULE_STATUS_ACTIVE = 1;
+  // The schedule was stopped.
+  //
+  // Once a schedule is stopped, it cannot be re-activated.
+  SCHEDULE_STATUS_STOPPED = 2;
+}
+
+// Filters for listing schedules.
+message ScheduleFilters {
+  // Filter by schedule IDs.
+  repeated string schedule_ids = 1;
+  // Filter by job type IDs.
+  repeated string job_type_ids = 2;
+  // Filter by status.
+  repeated ScheduleStatus statuses = 3;
+  // Filter by creation time.
+  //
+  // The range can be open-ended in either direction.
+  optional ora.common.v1.TimeRange created_at = 4;
+  // Filter by labels.
+  repeated ora.common.v1.LabelFilter labels = 5;
+}
+
+// Ordering options for listing schedules.
+enum ScheduleOrderBy {
+  // Unspecified ordering.
+  SCHEDULE_ORDER_BY_UNSPECIFIED = 0;
+  // Order by creation time.
+  SCHEDULE_ORDER_BY_CREATED_AT_ASC = 1;
+  // Order by creation time, descending.
+  SCHEDULE_ORDER_BY_CREATED_AT_DESC = 2;
+}

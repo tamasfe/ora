@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// A job execution.
+message Execution {
+  // The unique ID of the execution.
+  string id = 1;
+  // The ID of the executor handling the execution.
+  optional string executor_id = 2;
+  // The status of the execution.
+  ExecutionStatus status = 3;
+  // The timestamp when the execution was created.
+  google.protobuf.Timestamp created_at = 4;
+  // The timestamp when the execution started.
+  optional google.protobuf.Timestamp started_at = 5;
+  // The timestamp when the execution successfully completed.
+  optional google.protobuf.Timestamp succeeded_at = 6;
+  // The timestamp when the execution failed.
+  optional google.protobuf.Timestamp failed_at = 7;
+  // The timestamp when the execution was cancelled.
+  optional google.protobuf.Timestamp cancelled_at = 8;
+  // The output or result of the execution.
+  optional string output_json = 9;
+  // The error message if the execution failed or was cancelled.
+  optional string failure_reason = 10;
+}
+
+// Status of a job execution.
+enum ExecutionStatus {
+  // Unknown status.
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  // The execution is pending.
+  EXECUTION_STATUS_PENDING = 1;
+  // The execution is in progress.
+  EXECUTION_STATUS_IN_PROGRESS = 2;
+  // The execution has completed successfully.
+  EXECUTION_STATUS_SUCCEEDED = 3;
+  // The execution has failed.
+  EXECUTION_STATUS_FAILED = 4;
+  // The execution was cancelled.
+  EXECUTION_STATUS_CANCELLED = 5;
+}

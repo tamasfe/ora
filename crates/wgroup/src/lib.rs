@@ -4,13 +4,13 @@ use std::{
     collections::BTreeMap,
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Poll},
 };
 
-use futures::{future::pending, task::AtomicWaker, Future, Stream};
+use futures::{Future, Stream, future::pending, task::AtomicWaker};
 use tokio_util::sync::CancellationToken;
 
 /// A wait group that keeps track a set of tasks.
@@ -289,8 +289,6 @@ impl Stream for AllDone {
             let count = guards.len();
             self.inner.waker.register(cx.waker());
 
-            // FIXME: This will miss the case where a guard is added
-            //        and removed in the same poll cycle.
             let ret = if self.last_count == count {
                 Poll::Pending
             } else {

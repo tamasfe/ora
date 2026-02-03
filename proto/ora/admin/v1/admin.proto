@@ -1,0 +1,194 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "ora/admin/v1/executors.proto";
+import "ora/admin/v1/jobs.proto";
+import "ora/admin/v1/pagination.proto";
+import "ora/admin/v1/schedules.proto";
+import "ora/jobs/v1/job.proto";
+import "ora/schedules/v1/schedule.proto";
+
+// Administrative service for managing the Ora server.
+service AdminService {
+  // List all supported job types.
+  rpc ListJobTypes(ListJobTypesRequest) returns (ListJobTypesResponse);
+
+  // Add jobs to be executed.
+  rpc AddJobs(AddJobsRequest) returns (AddJobsResponse);
+  // List jobs.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  // Count jobs.
+  rpc CountJobs(CountJobsRequest) returns (CountJobsResponse);
+  // Cancel jobs.
+  rpc CancelJobs(CancelJobsRequest) returns (CancelJobsResponse);
+
+  // Add schedules.
+  rpc AddSchedules(AddSchedulesRequest) returns (AddSchedulesResponse);
+  // List schedules.
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse);
+  // Count schedules.
+  rpc CountSchedules(CountSchedulesRequest) returns (CountSchedulesResponse);
+  // Stop schedules.
+  rpc StopSchedules(StopSchedulesRequest) returns (StopSchedulesResponse);
+
+  // List executors.
+  rpc ListExecutors(ListExecutorsRequest) returns (ListExecutorsResponse);
+
+  // Delete historical data.
+  //
+  // - Inactive jobs.
+  // - Inactive schedules.
+  // - Job types that are no longer used.
+  rpc DeleteHistoricalData(DeleteHistoricalDataRequest) returns (DeleteHistoricalDataResponse);
+}
+
+// Request for `ListJobTypes`.
+message ListJobTypesRequest {}
+
+// Response for `ListJobTypes`.
+message ListJobTypesResponse {
+  // The list of job types.
+  repeated ora.jobs.v1.JobType job_types = 1;
+}
+
+// Request for `AddJobs`.
+message AddJobsRequest {
+  // The jobs to be added.
+  repeated ora.jobs.v1.Job jobs = 1;
+  // Optional filters to prevent adding jobs.
+  //
+  // If any jobs exist that match the filters, no new jobs will be added.
+  optional JobFilters if_not_exists = 2;
+}
+
+// Response for `AddJobs`.
+message AddJobsResponse {
+  // The IDs of the added jobs.
+  repeated string job_ids = 1;
+}
+
+// Request for `ListJobs`.
+message ListJobsRequest {
+  // The filters to apply when listing jobs.
+  JobFilters filters = 1;
+  // The ordering options.
+  JobOrderBy order_by = 2;
+  // Pagination options.
+  PaginationOptions pagination = 3;
+}
+
+// Response for `ListJobs`.
+message ListJobsResponse {
+  // The list of jobs.
+  repeated Job jobs = 1;
+  // The token for the next page of results (if any).
+  optional string next_page_token = 2;
+}
+
+// Request for `CountJobs`.
+message CountJobsRequest {
+  // The filters to apply when counting jobs.
+  JobFilters filters = 1;
+}
+
+// Response for `CountJobs`.
+message CountJobsResponse {
+  // The number of jobs.
+  uint64 count = 1;
+}
+
+// Request for `CancelJobs`.
+message CancelJobsRequest {
+  // The filters to apply when cancelling jobs.
+  JobFilters filters = 1;
+}
+
+// Response for `CancelJobs`.
+message CancelJobsResponse {
+  // The list of cancelled job IDs.
+  repeated string cancelled_job_ids = 1;
+}
+
+// Request for `AddSchedules`.
+message AddSchedulesRequest {
+  // The schedules to be added.
+  repeated ora.schedules.v1.Schedule schedules = 1;
+  // Optional filters to prevent adding schedules.
+  //
+  // If any schedules exist that match the filters, no new schedules will be added.
+  optional ScheduleFilters if_not_exists = 2;
+  // Whether to inherit labels from the schedules when creating jobs.
+  //
+  // By default, labels are inherited.
+  optional bool inherit_labels = 3;
+}
+
+// Response for `AddSchedules`.
+message AddSchedulesResponse {
+  // The IDs of the added schedules.
+  repeated string schedule_ids = 1;
+}
+
+// Request for `ListSchedules`.
+message ListSchedulesRequest {
+  // The filters to apply when listing schedules.
+  ScheduleFilters filters = 1;
+  // The ordering options.
+  ScheduleOrderBy order_by = 2;
+  // Pagination options.
+  PaginationOptions pagination = 3;
+}
+
+// Response for `ListSchedules`.
+message ListSchedulesResponse {
+  // The list of schedules.
+  repeated Schedule schedules = 1;
+  // The token for the next page of results (if any).
+  optional string next_page_token = 2;
+}
+
+// Request for `CountSchedules`.
+message CountSchedulesRequest {
+  // The filters to apply when counting schedules.
+  ScheduleFilters filters = 1;
+}
+
+// Response for `CountSchedules`.
+message CountSchedulesResponse {
+  // The number of schedules.
+  uint64 count = 1;
+}
+
+// Request for `StopSchedules`.
+message StopSchedulesRequest {
+  // The filters to find schedules to stop.
+  ScheduleFilters filters = 1;
+  // Whether to also cancel active jobs of the stopped schedules.
+  bool cancel_active_jobs = 2;
+}
+
+// Response for `StopSchedules`.
+message StopSchedulesResponse {
+  // The list of cancelled schedule IDs.
+  repeated string cancelled_schedule_ids = 1;
+}
+
+// Request for `ListExecutors`.
+message ListExecutorsRequest {}
+
+// Response for `ListExecutors`.
+message ListExecutorsResponse {
+  // The list of executors.
+  repeated Executor executors = 1;
+}
+
+// Request for `DeleteHistoricalData`.
+message DeleteHistoricalDataRequest {
+  // The cutoff time. Data older than this time will be deleted.
+  google.protobuf.Timestamp before = 1;
+}
+
+// Response for `DeleteHistoricalData`.
+message DeleteHistoricalDataResponse {}

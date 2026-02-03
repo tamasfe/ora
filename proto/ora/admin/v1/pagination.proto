@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package ora.admin.v1;
+
+// Pagination options for listing requests.
+message PaginationOptions {
+  // The maximum number of items to return.
+  uint32 page_size = 1;
+  // The token for the next page of results
+  // from a previous request (if any).
+  //
+  // Any filters and ordering applied
+  // in the previous request must be identical
+  // to those in the current request.
+  // In case of mismatch the behavior is unspecified.
+  optional string next_page_token = 2;
+}
