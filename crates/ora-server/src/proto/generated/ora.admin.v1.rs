@@ -191,9 +191,7 @@ pub struct JobFilters {
     ///
     /// The range can be open-ended in either direction.
     #[prost(message, optional, tag = "7")]
-    pub target_execution_time: ::core::option::Option<
-        super::super::common::v1::TimeRange,
-    >,
+    pub target_execution_time: ::core::option::Option<super::super::common::v1::TimeRange>,
     /// Filter by creation time.
     ///
     /// The range can be open-ended in either direction.
@@ -248,12 +246,8 @@ impl JobOrderBy {
             "JOB_ORDER_BY_UNSPECIFIED" => Some(Self::Unspecified),
             "JOB_ORDER_BY_CREATED_AT_ASC" => Some(Self::CreatedAtAsc),
             "JOB_ORDER_BY_CREATED_AT_DESC" => Some(Self::CreatedAtDesc),
-            "JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC" => {
-                Some(Self::TargetExecutionTimeAsc)
-            }
-            "JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC" => {
-                Some(Self::TargetExecutionTimeDesc)
-            }
+            "JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC" => Some(Self::TargetExecutionTimeAsc),
+            "JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC" => Some(Self::TargetExecutionTimeDesc),
             _ => None,
         }
     }
@@ -817,7 +811,7 @@ pub mod admin_service_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with AdminServiceServer.
@@ -827,100 +821,77 @@ pub mod admin_service_server {
         async fn list_job_types(
             &self,
             request: tonic::Request<super::ListJobTypesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListJobTypesResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::ListJobTypesResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Add jobs to be executed.
         async fn add_jobs(
             &self,
             request: tonic::Request<super::AddJobsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AddJobsResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::AddJobsResponse>, tonic::Status> {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List jobs.
         async fn list_jobs(
             &self,
             request: tonic::Request<super::ListJobsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListJobsResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::ListJobsResponse>, tonic::Status> {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Count jobs.
         async fn count_jobs(
             &self,
             request: tonic::Request<super::CountJobsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CountJobsResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::CountJobsResponse>, tonic::Status> {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Cancel jobs.
         async fn cancel_jobs(
             &self,
             request: tonic::Request<super::CancelJobsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CancelJobsResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::CancelJobsResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Add schedules.
         async fn add_schedules(
             &self,
             request: tonic::Request<super::AddSchedulesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::AddSchedulesResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::AddSchedulesResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List schedules.
         async fn list_schedules(
             &self,
             request: tonic::Request<super::ListSchedulesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListSchedulesResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::ListSchedulesResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Count schedules.
         async fn count_schedules(
             &self,
             request: tonic::Request<super::CountSchedulesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::CountSchedulesResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::CountSchedulesResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Stop schedules.
         async fn stop_schedules(
             &self,
             request: tonic::Request<super::StopSchedulesRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::StopSchedulesResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::StopSchedulesResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// List executors.
         async fn list_executors(
             &self,
             request: tonic::Request<super::ListExecutorsRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::ListExecutorsResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::ListExecutorsResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
         /// Delete historical data.
@@ -931,10 +902,8 @@ pub mod admin_service_server {
         async fn delete_historical_data(
             &self,
             request: tonic::Request<super::DeleteHistoricalDataRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::DeleteHistoricalDataResponse>,
-            tonic::Status,
-        > {
+        ) -> std::result::Result<tonic::Response<super::DeleteHistoricalDataResponse>, tonic::Status>
+        {
             Err(tonic::Status::unimplemented("Not yet implemented"))
         }
     }
@@ -960,10 +929,7 @@ pub mod admin_service_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -1018,15 +984,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/ListJobTypes" => {
                     #[allow(non_camel_case_types)]
                     struct ListJobTypesSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::ListJobTypesRequest>
-                    for ListJobTypesSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::ListJobTypesRequest>
+                        for ListJobTypesSvc<T>
+                    {
                         type Response = super::ListJobTypesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListJobTypesRequest>,
@@ -1063,23 +1025,16 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/AddJobs" => {
                     #[allow(non_camel_case_types)]
                     struct AddJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::AddJobsRequest>
-                    for AddJobsSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::AddJobsRequest> for AddJobsSvc<T> {
                         type Response = super::AddJobsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddJobsRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as AdminService>::add_jobs(&inner, request).await
-                            };
+                            let fut =
+                                async move { <T as AdminService>::add_jobs(&inner, request).await };
                             Box::pin(fut)
                         }
                     }
@@ -1108,15 +1063,9 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/ListJobs" => {
                     #[allow(non_camel_case_types)]
                     struct ListJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::ListJobsRequest>
-                    for ListJobsSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::ListJobsRequest> for ListJobsSvc<T> {
                         type Response = super::ListJobsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListJobsRequest>,
@@ -1153,15 +1102,9 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/CountJobs" => {
                     #[allow(non_camel_case_types)]
                     struct CountJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::CountJobsRequest>
-                    for CountJobsSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::CountJobsRequest> for CountJobsSvc<T> {
                         type Response = super::CountJobsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CountJobsRequest>,
@@ -1198,15 +1141,9 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/CancelJobs" => {
                     #[allow(non_camel_case_types)]
                     struct CancelJobsSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::CancelJobsRequest>
-                    for CancelJobsSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::CancelJobsRequest> for CancelJobsSvc<T> {
                         type Response = super::CancelJobsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CancelJobsRequest>,
@@ -1243,15 +1180,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/AddSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct AddSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::AddSchedulesRequest>
-                    for AddSchedulesSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::AddSchedulesRequest>
+                        for AddSchedulesSvc<T>
+                    {
                         type Response = super::AddSchedulesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::AddSchedulesRequest>,
@@ -1288,15 +1221,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/ListSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct ListSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::ListSchedulesRequest>
-                    for ListSchedulesSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::ListSchedulesRequest>
+                        for ListSchedulesSvc<T>
+                    {
                         type Response = super::ListSchedulesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListSchedulesRequest>,
@@ -1333,15 +1262,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/CountSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct CountSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::CountSchedulesRequest>
-                    for CountSchedulesSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::CountSchedulesRequest>
+                        for CountSchedulesSvc<T>
+                    {
                         type Response = super::CountSchedulesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::CountSchedulesRequest>,
@@ -1378,15 +1303,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/StopSchedules" => {
                     #[allow(non_camel_case_types)]
                     struct StopSchedulesSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::StopSchedulesRequest>
-                    for StopSchedulesSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::StopSchedulesRequest>
+                        for StopSchedulesSvc<T>
+                    {
                         type Response = super::StopSchedulesResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::StopSchedulesRequest>,
@@ -1423,15 +1344,11 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/ListExecutors" => {
                     #[allow(non_camel_case_types)]
                     struct ListExecutorsSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::ListExecutorsRequest>
-                    for ListExecutorsSvc<T> {
+                    impl<T: AdminService> tonic::server::UnaryService<super::ListExecutorsRequest>
+                        for ListExecutorsSvc<T>
+                    {
                         type Response = super::ListExecutorsResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::ListExecutorsRequest>,
@@ -1468,23 +1385,19 @@ pub mod admin_service_server {
                 "/ora.admin.v1.AdminService/DeleteHistoricalData" => {
                     #[allow(non_camel_case_types)]
                     struct DeleteHistoricalDataSvc<T: AdminService>(pub Arc<T>);
-                    impl<
-                        T: AdminService,
-                    > tonic::server::UnaryService<super::DeleteHistoricalDataRequest>
-                    for DeleteHistoricalDataSvc<T> {
+                    impl<T: AdminService>
+                        tonic::server::UnaryService<super::DeleteHistoricalDataRequest>
+                        for DeleteHistoricalDataSvc<T>
+                    {
                         type Response = super::DeleteHistoricalDataResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::DeleteHistoricalDataRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as AdminService>::delete_historical_data(&inner, request)
-                                    .await
+                                <T as AdminService>::delete_historical_data(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -1511,25 +1424,19 @@ pub mod admin_service_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }

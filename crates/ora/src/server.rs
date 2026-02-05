@@ -1,6 +1,9 @@
 //! Server implementation and utilities.
 
-use ora_server::proto::{admin::v1::admin_service_server::AdminServiceServer, executors::v1::execution_service_server::ExecutionServiceServer};
+use ora_server::proto::{
+    admin::v1::admin_service_server::AdminServiceServer,
+    executors::v1::execution_service_server::ExecutionServiceServer,
+};
 use tonic::transport::Channel;
 
 use crate::proto::{
@@ -87,7 +90,9 @@ where
 
         tokio::spawn(async move {
             let srv = tonic::transport::Server::builder()
-                .add_service(ExecutionServiceServer::new(admin).max_decoding_message_size(usize::MAX))
+                .add_service(
+                    ExecutionServiceServer::new(admin).max_decoding_message_size(usize::MAX),
+                )
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)));
 
             let waiting = wg.waiting();

@@ -29,8 +29,6 @@ pub(crate) struct DbPool(pub(crate) deadpool_postgres::Pool);
 
 impl DbPool {
     pub(crate) async fn get(&self) -> Result<DbConnection, deadpool_postgres::PoolError> {
-        
-
         Ok(DbConnection {
             conn: self.0.get().await?,
             span: tracing::info_span!("connection"),

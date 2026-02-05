@@ -38,9 +38,7 @@ impl ::prost::Name for ExecutorConnectionResponse {
 pub struct ExecutorMessage {
     /// The message.
     #[prost(oneof = "executor_message::ExecutorMessageKind", tags = "1, 2, 3, 4")]
-    pub executor_message_kind: ::core::option::Option<
-        executor_message::ExecutorMessageKind,
-    >,
+    pub executor_message_kind: ::core::option::Option<executor_message::ExecutorMessageKind>,
 }
 /// Nested message and enum types in `ExecutorMessage`.
 pub mod executor_message {
@@ -295,7 +293,7 @@ pub mod execution_service_server {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ExecutionServiceServer.
@@ -334,10 +332,7 @@ pub mod execution_service_server {
                 max_encoding_message_size: None,
             }
         }
-        pub fn with_interceptor<F>(
-            inner: T,
-            interceptor: F,
-        ) -> InterceptedService<Self, F>
+        pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
         where
             F: tonic::service::Interceptor,
         {
@@ -392,18 +387,14 @@ pub mod execution_service_server {
                 "/ora.executors.v1.ExecutionService/ExecutorConnection" => {
                     #[allow(non_camel_case_types)]
                     struct ExecutorConnectionSvc<T: ExecutionService>(pub Arc<T>);
-                    impl<
-                        T: ExecutionService,
-                    > tonic::server::StreamingService<super::ExecutorConnectionRequest>
-                    for ExecutorConnectionSvc<T> {
+                    impl<T: ExecutionService>
+                        tonic::server::StreamingService<super::ExecutorConnectionRequest>
+                        for ExecutorConnectionSvc<T>
+                    {
                         type Response = super::ExecutorConnectionResponse;
-                        type ResponseStream = BoxStream<
-                            super::ExecutorConnectionResponse,
-                        >;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
+                        type ResponseStream = BoxStream<super::ExecutorConnectionResponse>;
+                        type Future =
+                            BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
                         fn call(
                             &mut self,
                             request: tonic::Request<
@@ -412,11 +403,7 @@ pub mod execution_service_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                <T as ExecutionService>::executor_connection(
-                                        &inner,
-                                        request,
-                                    )
-                                    .await
+                                <T as ExecutionService>::executor_connection(&inner, request).await
                             };
                             Box::pin(fut)
                         }
@@ -443,25 +430,19 @@ pub mod execution_service_server {
                     };
                     Box::pin(fut)
                 }
-                _ => {
-                    Box::pin(async move {
-                        let mut response = http::Response::new(
-                            tonic::body::Body::default(),
-                        );
-                        let headers = response.headers_mut();
-                        headers
-                            .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
-                            );
-                        headers
-                            .insert(
-                                http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
-                            );
-                        Ok(response)
-                    })
-                }
+                _ => Box::pin(async move {
+                    let mut response = http::Response::new(tonic::body::Body::default());
+                    let headers = response.headers_mut();
+                    headers.insert(
+                        tonic::Status::GRPC_STATUS,
+                        (tonic::Code::Unimplemented as i32).into(),
+                    );
+                    headers.insert(
+                        http::header::CONTENT_TYPE,
+                        tonic::metadata::GRPC_CONTENT_TYPE,
+                    );
+                    Ok(response)
+                }),
             }
         }
     }

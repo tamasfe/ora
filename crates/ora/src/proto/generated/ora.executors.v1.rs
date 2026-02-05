@@ -38,9 +38,7 @@ impl ::prost::Name for ExecutorConnectionResponse {
 pub struct ExecutorMessage {
     /// The message.
     #[prost(oneof = "executor_message::ExecutorMessageKind", tags = "1, 2, 3, 4")]
-    pub executor_message_kind: ::core::option::Option<
-        executor_message::ExecutorMessageKind,
-    >,
+    pub executor_message_kind: ::core::option::Option<executor_message::ExecutorMessageKind>,
 }
 /// Nested message and enum types in `ExecutorMessage`.
 pub mod executor_message {
@@ -295,10 +293,10 @@ pub mod execution_service_client {
         dead_code,
         missing_docs,
         clippy::wildcard_imports,
-        clippy::let_unit_value,
+        clippy::let_unit_value
     )]
-    use tonic::codegen::*;
     use tonic::codegen::http::Uri;
+    use tonic::codegen::*;
     /// Endpoint on the server for executors to connect to.
     #[derive(Debug, Clone)]
     pub struct ExecutionServiceClient<T> {
@@ -327,14 +325,13 @@ pub mod execution_service_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    http::Request<tonic::body::Body>,
+                    Response = http::Response<
+                        <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    >,
                 >,
-            >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
-            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+            <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error:
+                Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ExecutionServiceClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -372,33 +369,23 @@ pub mod execution_service_client {
         /// Long-lived bidirectional stream for the executor.
         pub async fn executor_connection(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<
-                Message = super::ExecutorConnectionRequest,
-            >,
+            request: impl tonic::IntoStreamingRequest<Message = super::ExecutorConnectionRequest>,
         ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::ExecutorConnectionResponse>>,
             tonic::Status,
         > {
-            self.inner
-                .ready()
-                .await
-                .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
-                })?;
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+            })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/ora.executors.v1.ExecutionService/ExecutorConnection",
             );
             let mut req = request.into_streaming_request();
-            req.extensions_mut()
-                .insert(
-                    GrpcMethod::new(
-                        "ora.executors.v1.ExecutionService",
-                        "ExecutorConnection",
-                    ),
-                );
+            req.extensions_mut().insert(GrpcMethod::new(
+                "ora.executors.v1.ExecutionService",
+                "ExecutorConnection",
+            ));
             self.inner.streaming(req, path, codec).await
         }
     }

@@ -148,7 +148,7 @@ where
     ) -> tonic::Result<Response<ListExecutorsResponse>> {
         AdminServiceClient::<T>::list_executors(&mut self.clone(), request).await
     }
-    
+
     async fn delete_historical_data(
         &self,
         request: Request<DeleteHistoricalDataRequest>,

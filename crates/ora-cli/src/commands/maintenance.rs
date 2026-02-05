@@ -1,4 +1,3 @@
-
 use clap::Subcommand;
 use eyre::Context;
 use jiff::{Timestamp, civil::Time};

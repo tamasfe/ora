@@ -28,9 +28,9 @@ pub(crate) async fn stop_schedules(
         .table(("ora", "schedule"))
         .value("stopped_at", Expr::cust("NOW()"))
         .and_where(Expr::col(("ora", "schedule", "id")).in_subquery(select_schedule_ids(&filters)))
-        .returning(sea_query::ReturningClause::Columns(
-            vec![("ora", "schedule", "id").into()],
-        ))
+        .returning(sea_query::ReturningClause::Columns(vec![
+            ("ora", "schedule", "id").into(),
+        ]))
         .build_postgres(PostgresQueryBuilder);
 
     let stmt = tx.prepare_owned(query).await?;

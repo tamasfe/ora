@@ -25,7 +25,7 @@ pub struct LabelFilter {
 }
 
 /// A time range that can be open-ended on either side.
-/// 
+///
 /// The end of the range is exclusive.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct TimeRange {
