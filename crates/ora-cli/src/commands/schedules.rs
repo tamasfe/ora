@@ -15,7 +15,7 @@ use ora::{
 use serde_json::Value;
 use tempfile::NamedTempFile;
 
-use crate::completions::{complete_active_schedule_id, complete_job_type};
+use crate::completions::complete_job_type;
 
 #[derive(Subcommand)]
 pub(crate) enum Schedules {
@@ -69,13 +69,13 @@ pub(crate) enum Schedules {
         /// Repeat jobs with a given interval.
         ///
         /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
-        #[arg(long = "repeat", conflicts_with = "cron")]
+        #[arg(long = "repeat", conflicts_with = "cron_expression")]
         repeat_interval: Option<String>,
         /// Repeat jobs according to a cron expression.
         ///
         /// The expression should be in standard cron format with
         /// an optional timezone suffix, e.g., `0 0 * * * UTC`.
-        #[arg(long = "cron", conflicts_with = "repeat")]
+        #[arg(long = "cron", conflicts_with = "repeat_interval")]
         cron_expression: Option<String>,
         /// Whether to spawn a job immediately upon adding the schedule.
         #[arg(long)]
@@ -99,14 +99,6 @@ pub(crate) enum Schedules {
     },
     /// Stop schedules.
     Stop {
-        /// Filter by schedule IDs.
-        ///
-        /// Can be specified multiple times,
-        /// comma-separated values are also supported.
-        #[arg(long = "id", value_delimiter = ',')]
-        #[arg(add = ArgValueCompleter::new(complete_active_schedule_id))]
-        schedule_ids: Vec<String>,
-
         /// Whether to ignore the jobs
         /// of the stopped schedules.
         ///
@@ -596,26 +588,9 @@ impl Schedules {
             }
             Schedules::Stop {
                 filters,
-                schedule_ids,
                 ignore_jobs,
             } => {
-                let schedule_ids = if schedule_ids.is_empty() {
-                    None
-                } else {
-                    Some(
-                        schedule_ids
-                            .into_iter()
-                            .map(|i| {
-                                Result::<_, eyre::Report>::Ok(ScheduleId(
-                                    i.parse().wrap_err("invalid schedule ID")?,
-                                ))
-                            })
-                            .collect::<Result<_, _>>()?,
-                    )
-                };
-
-                let mut schedule_filters: ScheduleFilters = filters.try_into()?;
-                schedule_filters.schedule_ids = schedule_ids;
+                let schedule_filters: ScheduleFilters = filters.try_into()?;
 
                 let schedules = client
                     .stop_schedules(

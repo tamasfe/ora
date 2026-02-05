@@ -91,14 +91,6 @@ pub(crate) enum Jobs {
     },
     /// Cancel jobs.
     Cancel {
-        /// Filter by job IDs.
-        ///
-        /// Can be specified multiple times,
-        /// comma-separated values are also supported.
-        #[arg(long = "id", value_delimiter = ',')]
-        #[arg(add = ArgValueCompleter::new(complete_active_job_id))]
-        job_ids: Vec<String>,
-
         #[command(flatten)]
         filters: JobFilterArgs,
     },
@@ -712,24 +704,8 @@ impl Jobs {
 
                 Ok(())
             }
-            Jobs::Cancel { filters, job_ids } => {
-                let job_ids = if job_ids.is_empty() {
-                    None
-                } else {
-                    Some(
-                        job_ids
-                            .into_iter()
-                            .map(|i| {
-                                Result::<_, eyre::Report>::Ok(JobId(
-                                    i.parse().wrap_err("invalid job ID")?,
-                                ))
-                            })
-                            .collect::<Result<_, _>>()?,
-                    )
-                };
-
-                let mut job_filters: JobFilters = filters.try_into()?;
-                job_filters.job_ids = job_ids;
+            Jobs::Cancel { filters } => {
+                let job_filters: JobFilters = filters.try_into()?;
 
                 let jobs = client.cancel_jobs(job_filters).await?;
 

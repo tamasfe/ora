@@ -115,10 +115,6 @@ fn job_id_completions(active_only: bool) -> Vec<CompletionCandidate> {
         })
 }
 
-pub(crate) fn complete_active_schedule_id(_: &OsStr) -> Vec<CompletionCandidate> {
-    schedule_id_completions(true)
-}
-
 pub(crate) fn complete_any_schedule_id(_: &OsStr) -> Vec<CompletionCandidate> {
     schedule_id_completions(false)
 }

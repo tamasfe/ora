@@ -20,11 +20,11 @@ pub(crate) struct Cli {
     pub(crate) url: Option<String>,
 
     #[command(subcommand)]
-    pub(crate) command: Command,
+    pub(crate) command: Option<Command>,
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Subcommand)]
+#[derive(Subcommand, Default)]
 pub(crate) enum Command {
     /// Job type commands.
     #[command(subcommand)]
@@ -41,6 +41,9 @@ pub(crate) enum Command {
     // Maintenance commands.
     #[command(subcommand)]
     Maintenance(Maintenance),
+    // Start a tui application.
+    #[default]
+    Tui,
 }
 
 impl Command {
@@ -51,6 +54,7 @@ impl Command {
             Command::Schedules(schedules) => schedules.execute(client).await,
             Command::Executors(executors) => executors.execute(client).await,
             Command::Maintenance(maintenance) => maintenance.execute(client).await,
+            Command::Tui => crate::tui::run(client).await,
         }
     }
 }

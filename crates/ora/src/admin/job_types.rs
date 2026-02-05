@@ -5,6 +5,7 @@ use tonic::Request;
 use crate::{AdminClient, JobTypeId, proto::admin::v1::ListJobTypesRequest};
 
 /// Information about a registered job type.
+#[derive(Debug, Clone)]
 pub struct JobTypeInfo {
     /// The unique identifier of the job type.
     pub id: JobTypeId,

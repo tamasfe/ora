@@ -16,12 +16,15 @@ clap = { version = "4.5.56", features = ["derive"] }
 clap_complete = { version = "4.5.65", features = ["unstable-dynamic"] }
 comfy-table = "7.2.2"
 cronexpr = "1.4.0"
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 eyre = "0.6.12"
+flume = "0.12.0"
 futures.workspace = true
 humantime = "2.3.0"
 jiff = "0.2.18"
 jsonschema = "0.41.0"
 ora = { version = "1.0.0-rc.1", path = "../ora" }
+ratatui = "0.30.0"
 serde_json = "1.0.149"
 tempfile = "3.24.0"
 tokio = { version = "1.49.0", features = ["macros", "rt"] }

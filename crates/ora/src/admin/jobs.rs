@@ -358,7 +358,7 @@ impl JobFilters {
 }
 
 /// The ordering options for listing jobs.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub enum JobOrderBy {
     /// Order by target execution time ascending.
     #[default]
@@ -401,6 +401,13 @@ impl<J> Job<J> {
     #[must_use]
     pub fn raw_cached(&self) -> Option<&proto::admin::v1::Job> {
         self.raw.as_ref()
+    }
+
+    /// Turn this job into its raw representation,
+    /// if it was cached.
+    #[must_use]
+    pub fn into_raw(self) -> Option<proto::admin::v1::Job> {
+        self.raw
     }
 
     /// Cancel the job.

@@ -6,12 +6,12 @@ use crate::{
     admin::inner::AdminClientInner, proto::admin::v1::admin_service_client::AdminServiceClient,
 };
 
-mod inner;
-pub mod jobs;
-pub mod schedules;
-pub mod job_types;
 pub mod executors;
+mod inner;
+pub mod job_types;
+pub mod jobs;
 pub mod maintenance;
+pub mod schedules;
 
 /// An ergonomic client that wraps
 /// an underlying gRPC admin client.
@@ -21,6 +21,15 @@ pub struct AdminClient {
     inner: Arc<dyn AdminClientInner>,
     poll_interval: Duration,
     caching_strategy: CachingStrategy,
+}
+
+impl std::fmt::Debug for AdminClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AdminClient")
+            .field("poll_interval", &self.poll_interval)
+            .field("caching_strategy", &self.caching_strategy)
+            .finish_non_exhaustive()
+    }
 }
 
 impl AdminClient {
