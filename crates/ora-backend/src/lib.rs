@@ -7,7 +7,8 @@ use futures::Stream;
 use crate::{
     common::NextPageToken,
     executions::{
-        FailedExecution, InProgressExecution, ReadyExecution, StartedExecution, SucceededExecution,
+        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, StartedExecution,
+        SucceededExecution,
     },
     jobs::{CancelledJob, JobDetails, JobFilters, JobId, JobOrderBy, JobType, NewJob},
     schedules::{
@@ -120,7 +121,12 @@ pub trait Backend: Send + Sync + 'static {
     ) -> impl Stream<Item = Result<Vec<ReadyExecution>, Self::Error>> + Send;
 
     /// Wait for executions to be ready.
-    fn wait_for_ready_executions(&self) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ///
+    /// This function should ignore the provided execution IDs.
+    fn wait_for_ready_executions(
+        &self,
+        ignore: &[ExecutionId],
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Return a stream of in-progress executions.
     ///

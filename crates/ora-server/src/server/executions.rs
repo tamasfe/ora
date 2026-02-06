@@ -25,6 +25,12 @@ pub(super) async fn ready_executions_loop(
     'main_loop: loop {
         let mut stream = pin!(backend.ready_executions());
 
+        // We keep track of executions we could not schedule
+        // otherwise `wait_for_ready_executions` would
+        // keep immediately returning as they are still ready,
+        // causing a busy loop.
+        let mut unassigned_execution_ids = Vec::new();
+
         while let Some(ready_executions) = stream.next().await {
             if wg.is_waiting() {
                 tracing::debug!("shutting down");
@@ -42,8 +48,15 @@ pub(super) async fn ready_executions_loop(
 
             let ready_count = ready_executions.len();
 
-            let assigned_executions = executor_pool.try_assign(ready_executions);
+            let (assigned_executions, unassigned_executions) =
+                executor_pool.try_assign(ready_executions);
             let assigned_count = assigned_executions.len();
+
+            unassigned_execution_ids.extend(
+                unassigned_executions
+                    .into_iter()
+                    .map(|execution| execution.execution_id),
+            );
 
             tracing::debug!(
                 %ready_count,
@@ -71,7 +84,7 @@ pub(super) async fn ready_executions_loop(
             _ = check_delay => {
                 tracing::trace!("periodic check for ready executions");
             },
-            _ = backend.wait_for_ready_executions() => {},
+            _ = backend.wait_for_ready_executions(&unassigned_execution_ids) => {},
             _ = wg.waiting() => {
                 tracing::debug!("shutting down");
                 break 'main_loop;

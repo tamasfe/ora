@@ -585,7 +585,9 @@ impl Backend for PostgresBackend {
         })
     }
 
-    async fn wait_for_ready_executions(&self) -> crate::Result<()> {
+    async fn wait_for_ready_executions(&self, ignore: &[ExecutionId]) -> crate::Result<()> {
+        let ignored_executions = ignore.iter().map(|id| id.0).collect::<Vec<_>>();
+
         loop {
             let mut conn = self.pool.get().await?;
 
@@ -603,6 +605,7 @@ impl Backend for PostgresBackend {
                             ora.execution.job_id = ora.job.id
                         WHERE
                             ora.execution.status = 0
+                            AND NOT (ora.execution.id = ANY($1::UUID[]))
                         ORDER BY
                             ora.job.target_execution_time ASC
                         LIMIT 1
@@ -610,7 +613,7 @@ impl Backend for PostgresBackend {
                     )
                     .await?;
 
-                let row = tx.query_opt(&stmt, &[]).await?;
+                let row = tx.query_opt(&stmt, &[&ignored_executions]).await?;
 
                 tx.commit().await?;
 

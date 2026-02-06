@@ -29,7 +29,7 @@ impl Widget for &mut JobTable {
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Length(36), Constraint::Fill(1)]);
+        let layout = Layout::horizontal([Constraint::Length(44), Constraint::Fill(1)]);
         let [left, right] = layout.areas(area);
 
         let block = Block::new()
@@ -65,7 +65,7 @@ impl Widget for &mut JobTable {
                 };
 
                 Some(Row::new([
-                    Cell::new(target_time.to_string()),
+                    Cell::new(target_time.strftime("%Y-%m-%d %H:%M:%S%:z").to_string()),
                     Cell::new(status).style(match status {
                         "succeeded" => Style::new().fg(tailwind::GREEN.c400),
                         "failed" | "cancelled" => Style::new().fg(tailwind::RED.c400),
@@ -77,7 +77,7 @@ impl Widget for &mut JobTable {
             })
             .collect::<Vec<_>>();
 
-        let table = Table::new(rows, [Constraint::Length(20), Constraint::Length(10)])
+        let table = Table::new(rows, [Constraint::Length(26), Constraint::Length(12)])
             .block(block)
             .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
             .highlight_symbol("> ")
@@ -113,7 +113,7 @@ impl Widget for JobDetails<'_> {
         };
 
         let layout = Layout::horizontal([
-            Constraint::Length(38),
+            Constraint::Length(48),
             Constraint::Fill(1),
             Constraint::Fill(1),
         ])
@@ -148,14 +148,16 @@ impl Widget for JobDetails<'_> {
             })
             .unwrap_or_default();
 
-        Paragraph::new(Line::from(created_at.to_string()))
-            .block(
-                Block::new()
-                    .title("Created")
-                    .title_style(Style::new().bold())
-                    .borders(Borders::NONE),
-            )
-            .render(created_area, buf);
+        Paragraph::new(Line::from(
+            created_at.strftime("%Y-%m-%d %H:%M:%S%:z").to_string(),
+        ))
+        .block(
+            Block::new()
+                .title("Created")
+                .title_style(Style::new().bold())
+                .borders(Borders::NONE),
+        )
+        .render(created_area, buf);
 
         let target_time = job
             .job
@@ -181,7 +183,8 @@ impl Widget for JobDetails<'_> {
 
                 let ts = ts
                     .round(TimestampRound::new().smallest(jiff::Unit::Second))
-                    .unwrap_or(ts);
+                    .unwrap_or(ts)
+                    .strftime("%Y-%m-%d %H:%M:%S%:z");
 
                 format!("{ts} ({duration:#})")
             }

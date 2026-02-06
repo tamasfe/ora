@@ -13,6 +13,7 @@ use ora_server::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tonic::transport::Server;
+use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Return the character count in the given string.
 #[derive(Debug, JobType, Serialize, Deserialize, JsonSchema)]
@@ -47,8 +48,9 @@ struct RunUntil {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::filter::EnvFilter::from_default_env())
+    Registry::default()
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::filter::EnvFilter::from_default_env())
         .init();
 
     let server = ServerBuilder::new(create_backend().await, ServerOptions::default()).spawn();

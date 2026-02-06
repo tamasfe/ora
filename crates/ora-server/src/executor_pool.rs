@@ -114,12 +114,19 @@ impl ExecutorPool {
     }
 
     /// Try to schedule ready executions to available executors.
-    pub(crate) fn try_assign(&self, executions: Vec<ReadyExecution>) -> Vec<StartedExecution> {
+    ///
+    /// Returns both the assigned executions
+    /// and the IDs of executions that could not be assigned.
+    pub(crate) fn try_assign(
+        &self,
+        executions: Vec<ReadyExecution>,
+    ) -> (Vec<StartedExecution>, Vec<ReadyExecution>) {
         let mut scheduled_executions = Vec::new();
+        let mut unscheduled_executions = Vec::new();
 
         if executions.is_empty() {
             tracing::debug!("no ready executions to schedule");
-            return scheduled_executions;
+            return (scheduled_executions, unscheduled_executions);
         }
 
         let mut executors = self.executors.lock().unwrap();
@@ -175,9 +182,11 @@ impl ExecutorPool {
 
                 continue 'executions_loop;
             }
+
+            unscheduled_executions.push(execution);
         }
 
-        scheduled_executions
+        (scheduled_executions, unscheduled_executions)
     }
 
     /// List all executors in the pool.

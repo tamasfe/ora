@@ -144,9 +144,12 @@ impl App {
                 }
                 _ => {}
             },
-            (KeyModifiers::NONE, KeyCode::Char('q'), KeyEventKind::Press)
+            (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'), KeyEventKind::Press)
             | (KeyModifiers::CONTROL, KeyCode::Char('c'), KeyEventKind::Press) => {
                 self.quit();
+            }
+            (KeyModifiers::NONE, KeyCode::Char('r' | 'R'), KeyEventKind::Press) => {
+                _ = self.events.sender().send(AppEvent::Refresh);
             }
             (KeyModifiers::NONE, KeyCode::Char('a' | 'A'), KeyEventKind::Press) => {
                 self.active_only = !self.active_only;
