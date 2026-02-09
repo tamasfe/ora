@@ -1,6 +1,6 @@
 [package]
 name = "ora-cli"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 edition = "2024"
 publish.workspace = true
 description = "Command line interface for the Ora scheduler."
