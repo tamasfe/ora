@@ -4,8 +4,8 @@ use std::{pin::Pin, sync::Arc, time::SystemTime};
 
 use eyre::Context;
 use schemars::Schema;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+use wgroup::WaitGroup;
 
 use crate::{
     execution::ExecutionId,
@@ -163,13 +163,7 @@ impl<C> Executor<C> {
 /// The executor is stopped once this handle is dropped.
 #[must_use = "The executor stops when this handle is dropped."]
 pub struct ExecutorHandle {
-    handle: JoinHandle<()>,
-}
-
-impl Drop for ExecutorHandle {
-    fn drop(&mut self) {
-        self.handle.abort();
-    }
+    _wg: Option<WaitGroup>,
 }
 
 /// The context in which a job is executed.

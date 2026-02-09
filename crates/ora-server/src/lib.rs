@@ -89,7 +89,7 @@ where
     ///
     /// Stopping the server will be possible
     /// only via the provided wait group.
-    pub fn spawn_with_wg_handle(self, wg: WaitGroupHandle) -> ServerHandle<B> {
+    pub fn spawn_with_wg(self, wg: WaitGroupHandle) -> ServerHandle<B> {
         server::spawn_server(self.backend, self.options, Either::Right(wg))
     }
 }

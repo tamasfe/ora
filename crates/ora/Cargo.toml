@@ -38,6 +38,7 @@ http-body = "1.0.1"
 bytes = "1.11.1"
 cronexpr = "1.4.0"
 ora-macros = { version = "1.0.0-rc.2", path = "../ora-macros" }
+wgroup = { version = "0.1.0", path = "../wgroup" }
 
 # All targets other than wasm
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

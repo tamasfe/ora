@@ -9,6 +9,7 @@ use tokio::{spawn, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use uuid::Uuid;
+use wgroup::WaitGuard;
 
 use crate::{
     execution::ExecutionId,
@@ -32,6 +33,7 @@ pub(super) async fn executor_loop(
     queues: Arc<[ExecutorJobQueue]>,
     server_cancellation_grace_period: Duration,
     on_execution_failed: Option<ExecutionFailedCb>,
+    _wg: WaitGuard,
 ) {
     let active_executions = ActiveExecutions::default();
 
