@@ -150,3 +150,22 @@ pub struct PendingSchedule {
     /// The job template.
     pub job_template: JobDefinition,
 }
+
+/// The result of adding schedules,
+/// indicating whether the schedules were added or already existed.
+pub enum AddedSchedules {
+    /// The schedules were added successfully.
+    Added(Vec<ScheduleId>),
+    /// No schedules were added because existing schedules matched the `if_not_exists` filters.
+    Existing(Vec<ScheduleId>),
+}
+
+impl AddedSchedules {
+    /// Returns the IDs of the schedules, regardless of whether they were added or already existed.
+    #[must_use]
+    pub fn schedule_ids(&self) -> &[ScheduleId] {
+        match self {
+            AddedSchedules::Added(ids) | AddedSchedules::Existing(ids) => ids,
+        }
+    }
+}

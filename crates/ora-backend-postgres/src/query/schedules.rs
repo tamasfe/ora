@@ -222,20 +222,22 @@ pub(crate) async fn schedule_count(
     Ok(count)
 }
 
-pub(crate) async fn schedule_exists(
+pub(crate) async fn schedule_ids(
     tx: &DbTransaction<'_>,
     filters: ScheduleFilters,
-) -> crate::Result<bool> {
-    let (query, values) = SelectStatement::new()
-        .expr(Expr::exists(select_schedule_ids(&filters)))
-        .take()
-        .build_postgres(PostgresQueryBuilder);
+) -> crate::Result<Vec<ScheduleId>> {
+    let (query, values) = select_schedule_ids(&filters).build_postgres(PostgresQueryBuilder);
 
     let stmt = tx.prepare_owned(query).await?;
 
-    let exists: bool = tx.query_one(&stmt, &values.as_params()).await?.try_get(0)?;
+    let rows = tx.query(&stmt, &values.as_params()).await?;
 
-    Ok(exists)
+    let schedule_ids = rows
+        .into_iter()
+        .map(|row| Ok(ScheduleId(row.try_get(0)?)))
+        .collect::<Result<Vec<_>, crate::Error>>()?;
+
+    Ok(schedule_ids)
 }
 
 pub(super) fn select_schedule_ids(filters: &ScheduleFilters) -> SelectStatement {

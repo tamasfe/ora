@@ -1,9 +1,14 @@
 //! Job management.
 
-use std::{cmp, marker::PhantomData, pin::Pin, time::SystemTime};
+use std::{
+    cmp,
+    marker::PhantomData,
+    pin::{Pin, pin},
+    time::SystemTime,
+};
 
 use eyre::{Context, ContextCompat, OptionExt, bail};
-use futures::{FutureExt, Stream};
+use futures::{FutureExt, Stream, TryStreamExt};
 use tonic::Request;
 use uuid::Uuid;
 
@@ -235,6 +240,19 @@ impl AdminClient {
                 }
             }
         })
+    }
+
+    /// Return the first job that matches the given filters, if any.
+    ///
+    /// This is just a convenience function that calls `list_jobs` with a limit of 1.
+    pub async fn first_job(
+        &self,
+        filters: JobFilters,
+        order: JobOrderBy,
+    ) -> crate::Result<Option<Job<AnyJobType>>> {
+        pin!(self.list_jobs(filters, order, Some(1)))
+            .try_next()
+            .await
     }
 
     /// Return whether any jobs exist based on the given filters.

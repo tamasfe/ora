@@ -12,10 +12,13 @@ use ora_backend::{
         SucceededExecution,
     },
     executors::ExecutorId,
-    jobs::{CancelledJob, JobDetails, JobFilters, JobId, JobOrderBy, JobType, JobTypeId, NewJob},
+    jobs::{
+        AddedJobs, CancelledJob, JobDetails, JobFilters, JobId, JobOrderBy, JobType, JobTypeId,
+        NewJob,
+    },
     schedules::{
-        PendingSchedule, ScheduleDefinition, ScheduleDetails, ScheduleFilters, ScheduleId,
-        ScheduleOrderBy, StoppedSchedule,
+        AddedSchedules, PendingSchedule, ScheduleDefinition, ScheduleDetails, ScheduleFilters,
+        ScheduleId, ScheduleOrderBy, StoppedSchedule,
     },
 };
 
@@ -26,8 +29,8 @@ use uuid::Uuid;
 use crate::{
     db::{DbPool, DbTransaction},
     query::{
-        jobs::{cancel_jobs, job_count, job_exists},
-        schedules::{schedule_count, schedule_exists},
+        jobs::{cancel_jobs, job_count},
+        schedules::schedule_count,
     },
 };
 
@@ -183,20 +186,22 @@ impl Backend for PostgresBackend {
         &self,
         jobs: &[NewJob],
         if_not_exists: Option<JobFilters>,
-    ) -> Result<Vec<JobId>> {
+    ) -> Result<AddedJobs> {
         if jobs.is_empty() {
-            return Ok(Vec::new());
+            return Ok(AddedJobs::Added(Vec::new()));
         }
 
         let mut conn = self.pool.get().await?;
 
         let tx = conn.transaction().await?;
 
-        if let Some(filters) = if_not_exists
-            && job_exists(&tx, filters).await?
-        {
-            tx.commit().await?;
-            return Ok(Vec::new());
+        if let Some(filters) = if_not_exists {
+            let existing_job_ids = query::jobs::job_ids(&tx, filters).await?;
+
+            if !existing_job_ids.is_empty() {
+                tx.commit().await?;
+                return Ok(AddedJobs::Existing(existing_job_ids));
+            }
         }
 
         let mut col_id = Vec::with_capacity(jobs.len());
@@ -319,7 +324,7 @@ impl Backend for PostgresBackend {
 
         tx.commit().await?;
 
-        Ok(job_ids)
+        Ok(AddedJobs::Added(job_ids))
     }
 
     async fn list_jobs(
@@ -372,19 +377,21 @@ impl Backend for PostgresBackend {
         &self,
         schedules: &[ScheduleDefinition],
         if_not_exists: Option<ScheduleFilters>,
-    ) -> Result<Vec<ScheduleId>> {
+    ) -> Result<AddedSchedules> {
         if schedules.is_empty() {
-            return Ok(Vec::new());
+            return Ok(AddedSchedules::Added(Vec::new()));
         }
 
         let mut conn = self.pool.get().await?;
         let tx = conn.transaction().await?;
 
-        if let Some(filters) = if_not_exists
-            && schedule_exists(&tx, filters).await?
-        {
-            tx.commit().await?;
-            return Ok(Vec::new());
+        if let Some(filters) = if_not_exists {
+            let existing_schedule_ids = query::schedules::schedule_ids(&tx, filters).await?;
+
+            if !existing_schedule_ids.is_empty() {
+                tx.commit().await?;
+                return Ok(AddedSchedules::Existing(existing_schedule_ids));
+            }
         }
 
         let mut col_id = Vec::with_capacity(schedules.len());
@@ -446,7 +453,7 @@ impl Backend for PostgresBackend {
 
         let schedule_ids = col_id.into_iter().map(ScheduleId).collect::<Vec<_>>();
 
-        Ok(schedule_ids)
+        Ok(AddedSchedules::Added(schedule_ids))
     }
 
     async fn list_schedules(

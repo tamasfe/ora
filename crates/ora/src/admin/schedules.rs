@@ -1,6 +1,6 @@
 //! Schedule management.
 
-use std::{cmp, marker::PhantomData};
+use std::{cmp, marker::PhantomData, pin::pin};
 
 use eyre::{Context, OptionExt};
 use futures::{Stream, TryStreamExt};
@@ -233,6 +233,19 @@ impl AdminClient {
                 }
             }
         })
+    }
+
+    /// Return the first schedule matching the given filters, if any.
+    ///
+    /// This is just a convenience method that calls `list_schedules` with a limit of 1.
+    pub async fn first_schedule(
+        &self,
+        filters: ScheduleFilters,
+        order: ScheduleOrderBy,
+    ) -> crate::Result<Option<Schedule<AnyJobType>>> {
+        pin!(self.list_schedules(filters, order, Some(1)))
+            .try_next()
+            .await
     }
 
     /// Count the amount of schedules matching the given filters.

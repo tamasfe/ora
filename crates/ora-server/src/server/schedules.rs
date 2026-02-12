@@ -65,7 +65,10 @@ pub(super) async fn schedule_new_jobs_loop(backend: Arc<impl Backend>, wg: WaitG
             if !new_jobs.is_empty() {
                 match backend.add_jobs(&new_jobs, None).await {
                     Ok(jobs) => {
-                        tracing::debug!(job_count = jobs.len(), "spawned new jobs for schedules");
+                        tracing::debug!(
+                            job_count = jobs.added_job_ids().len(),
+                            "spawned new jobs for schedules"
+                        );
                     }
                     Err(error) => {
                         tracing::error!(%error, "failed to spawn jobs for schedules");

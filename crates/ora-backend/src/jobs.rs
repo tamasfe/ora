@@ -258,3 +258,31 @@ pub struct CancelledJob {
     /// The last execution ID of the job.
     pub last_execution_id: ExecutionId,
 }
+
+/// The result of adding jobs,
+/// indicating whether the jobs were added or already existed.
+pub enum AddedJobs {
+    /// The jobs were added successfully.
+    Added(Vec<JobId>),
+    /// No jobs were added because existing jobs matched the `if_not_exists` filters.
+    Existing(Vec<JobId>),
+}
+
+impl AddedJobs {
+    /// Get the IDs of the added or existing jobs.
+    #[must_use]
+    pub fn job_ids(&self) -> &[JobId] {
+        match self {
+            AddedJobs::Added(ids) | AddedJobs::Existing(ids) => ids,
+        }
+    }
+
+    /// Return the added job IDs, or an empty slice if no jobs were added.
+    #[must_use]
+    pub fn added_job_ids(&self) -> &[JobId] {
+        match self {
+            AddedJobs::Added(ids) => ids,
+            AddedJobs::Existing(_) => &[],
+        }
+    }
+}

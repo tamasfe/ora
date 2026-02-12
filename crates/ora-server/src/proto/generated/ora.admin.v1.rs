@@ -464,6 +464,10 @@ pub struct AddJobsResponse {
     /// The IDs of the added jobs.
     #[prost(string, repeated, tag = "1")]
     pub job_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// The IDs of existing jobs that
+    /// matched the `if_not_exists` filters (if any).
+    #[prost(string, repeated, tag = "2")]
+    pub existing_job_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 impl ::prost::Name for AddJobsResponse {
     const NAME: &'static str = "AddJobsResponse";
@@ -619,6 +623,10 @@ pub struct AddSchedulesResponse {
     /// The IDs of the added schedules.
     #[prost(string, repeated, tag = "1")]
     pub schedule_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// The IDs of existing schedules that
+    /// matched the `if_not_exists` filters (if any).
+    #[prost(string, repeated, tag = "2")]
+    pub existing_schedule_ids: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
 }
 impl ::prost::Name for AddSchedulesResponse {
     const NAME: &'static str = "AddSchedulesResponse";

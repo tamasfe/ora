@@ -70,7 +70,7 @@ where
             None => None,
         };
 
-        let job_ids = self
+        let added_jobs = self
             .backend
             .add_jobs(
                 &jobs
@@ -85,8 +85,20 @@ where
             .await
             .err_status()?;
 
+        let (added_job_ids, existing_job_ids) = match added_jobs {
+            ora_backend::jobs::AddedJobs::Added(job_ids) => (job_ids, Vec::new()),
+            ora_backend::jobs::AddedJobs::Existing(job_ids) => (Vec::new(), job_ids),
+        };
+
         Ok(Response::new(v1::AddJobsResponse {
-            job_ids: job_ids.into_iter().map(|id| id.0.to_string()).collect(),
+            job_ids: added_job_ids
+                .into_iter()
+                .map(|id| id.0.to_string())
+                .collect(),
+            existing_job_ids: existing_job_ids
+                .into_iter()
+                .map(|id| id.0.to_string())
+                .collect(),
         }))
     }
 
@@ -201,14 +213,23 @@ where
             }
         }
 
-        let schedule_ids = self
+        let added_schedules = self
             .backend
             .add_schedules(&schedules, if_not_exists)
             .await
             .err_status()?;
 
+        let (schedule_ids, existing_schedule_ids) = match added_schedules {
+            ora_backend::schedules::AddedSchedules::Added(ids) => (ids, Vec::new()),
+            ora_backend::schedules::AddedSchedules::Existing(ids) => (Vec::new(), ids),
+        };
+
         Ok(Response::new(v1::AddSchedulesResponse {
             schedule_ids: schedule_ids
+                .into_iter()
+                .map(|id| id.0.to_string())
+                .collect(),
+            existing_schedule_ids: existing_schedule_ids
                 .into_iter()
                 .map(|id| id.0.to_string())
                 .collect(),

@@ -68,7 +68,7 @@ async fn job_execution(backend: &impl Backend) {
         .add_jobs(&new_jobs(&job_definitions), None)
         .await
         .expect("Failed to add jobs");
-    assert_eq!(result.len(), job_definitions.len());
+    assert_eq!(result.job_ids().len(), job_definitions.len());
 
     let jobs = backend
         .list_jobs(crate::jobs::JobFilters::default(), None, 10, None)
@@ -212,7 +212,7 @@ async fn job_cancellation(backend: &impl Backend) {
         .add_jobs(&new_jobs(&job_definitions), None)
         .await
         .expect("Failed to add jobs");
-    assert_eq!(result.len(), job_definitions.len());
+    assert_eq!(result.job_ids().len(), job_definitions.len());
 
     let ready_executions = pin!(backend.ready_executions())
         .try_next()
@@ -335,7 +335,7 @@ pub async fn job_queries(backend: &impl Backend) {
         .add_jobs(&new_jobs(&job_definitions), None)
         .await
         .expect("Failed to add jobs");
-    assert_eq!(result.len(), job_definitions.len());
+    assert_eq!(result.job_ids().len(), job_definitions.len());
 
     let jobs = backend
         .list_jobs(crate::jobs::JobFilters::default(), None, 10, None)
@@ -466,7 +466,7 @@ pub async fn pagination_and_ordering(backend: &impl Backend) {
         .add_jobs(&new_jobs(&job_definitions), None)
         .await
         .expect("Failed to add jobs");
-    assert_eq!(result.len(), job_definitions.len());
+    assert_eq!(result.job_ids().len(), job_definitions.len());
 
     {
         let mut all_jobs = Vec::new();
@@ -609,7 +609,7 @@ pub async fn schedules(backend: &impl Backend) {
         .add_schedules(&schedule_definitions, None)
         .await
         .expect("Failed to add schedules");
-    assert_eq!(result.len(), schedule_definitions.len());
+    assert_eq!(result.schedule_ids().len(), schedule_definitions.len());
 
     let schedules = backend
         .list_schedules(ScheduleFilters::default(), None, 10, None)

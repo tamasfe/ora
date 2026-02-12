@@ -343,17 +343,22 @@ pub(crate) async fn job_count(tx: &DbTransaction<'_>, filters: JobFilters) -> cr
     Ok(count)
 }
 
-pub(crate) async fn job_exists(tx: &DbTransaction<'_>, filters: JobFilters) -> crate::Result<bool> {
-    let (query, values) = SelectStatement::new()
-        .expr(Expr::exists(select_job_ids(&filters)))
-        .take()
-        .build_postgres(PostgresQueryBuilder);
+pub(crate) async fn job_ids(
+    tx: &DbTransaction<'_>,
+    filters: JobFilters,
+) -> crate::Result<Vec<JobId>> {
+    let (query, values) = select_job_ids(&filters).build_postgres(PostgresQueryBuilder);
 
     let stmt = tx.prepare_owned(query).await?;
 
-    let exists: bool = tx.query_one(&stmt, &values.as_params()).await?.get(0);
+    let rows = tx.query(&stmt, &values.as_params()).await?;
 
-    Ok(exists)
+    let job_ids = rows
+        .into_iter()
+        .map(|row| Ok(JobId(row.try_get(0)?)))
+        .collect::<Result<Vec<_>, crate::Error>>()?;
+
+    Ok(job_ids)
 }
 
 fn select_job_ids(filters: &JobFilters) -> SelectStatement {

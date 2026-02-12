@@ -10,9 +10,9 @@ use crate::{
         ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, StartedExecution,
         SucceededExecution,
     },
-    jobs::{CancelledJob, JobDetails, JobFilters, JobId, JobOrderBy, JobType, NewJob},
+    jobs::{AddedJobs, CancelledJob, JobDetails, JobFilters, JobOrderBy, JobType, NewJob},
     schedules::{
-        PendingSchedule, ScheduleDefinition, ScheduleDetails, ScheduleFilters, ScheduleId,
+        AddedSchedules, PendingSchedule, ScheduleDefinition, ScheduleDetails, ScheduleFilters,
         ScheduleOrderBy, StoppedSchedule,
     },
 };
@@ -53,7 +53,7 @@ pub trait Backend: Send + Sync + 'static {
         &self,
         jobs: &[NewJob],
         if_not_exists: Option<JobFilters>,
-    ) -> impl Future<Output = Result<Vec<JobId>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<AddedJobs, Self::Error>> + Send;
 
     /// List jobs matching the given filters.
     fn list_jobs(
@@ -86,7 +86,7 @@ pub trait Backend: Send + Sync + 'static {
         &self,
         schedules: &[ScheduleDefinition],
         if_not_exists: Option<ScheduleFilters>,
-    ) -> impl Future<Output = Result<Vec<ScheduleId>, Self::Error>> + Send;
+    ) -> impl Future<Output = Result<AddedSchedules, Self::Error>> + Send;
 
     /// List schedules matching the given filters.
     fn list_schedules(

@@ -67,6 +67,9 @@ message AddJobsRequest {
 message AddJobsResponse {
   // The IDs of the added jobs.
   repeated string job_ids = 1;
+  // The IDs of existing jobs that
+  // matched the `if_not_exists` filters (if any).
+  repeated string existing_job_ids = 2;
 }
 
 // Request for `ListJobs`.
@@ -129,6 +132,9 @@ message AddSchedulesRequest {
 message AddSchedulesResponse {
   // The IDs of the added schedules.
   repeated string schedule_ids = 1;
+  // The IDs of existing schedules that
+  // matched the `if_not_exists` filters (if any).
+  repeated string existing_schedule_ids = 2;
 }
 
 // Request for `ListSchedules`.
