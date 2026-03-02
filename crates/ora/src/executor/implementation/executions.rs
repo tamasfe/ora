@@ -5,7 +5,7 @@ use std::{
 };
 
 use flume::{Receiver, Sender};
-use tokio::{spawn, time::timeout};
+use tokio::{select, spawn, time::timeout};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use uuid::Uuid;
@@ -33,11 +33,35 @@ pub(super) async fn executor_loop(
     queues: Arc<[ExecutorJobQueue]>,
     server_cancellation_grace_period: Duration,
     on_execution_failed: Option<ExecutionFailedCb>,
-    _wg: WaitGuard,
+    wg: WaitGuard,
 ) {
     let active_executions = ActiveExecutions::default();
 
-    while let Ok(msg) = incoming.recv_async().await {
+    loop {
+        let msg = select! {
+                biased;
+
+                _ = wg.waiting() => {
+                    tracing::debug!("executor loop is shutting down");
+                    if active_executions.is_empty() {
+                        tracing::debug!("no active executions, shutting down immediately");
+                        break;
+                    }
+
+                    active_executions.cancel_all();
+                    break;
+                }
+                msg = incoming.recv_async() => {
+                    match msg {
+                        Ok(msg) => msg,
+                        Err(_) => {
+                            tracing::debug!("server channel closed, shutting down executor loop");
+                            break;
+                        }
+                    }
+            }
+        };
+
         match msg {
             ServerMessageKind::Properties(executor_properties) => {
                 tracing::Span::current().record("executor_id", &executor_properties.executor_id);
@@ -88,6 +112,7 @@ pub(super) async fn executor_loop(
                         active_executions.add(execution_id),
                         server_cancellation_grace_period,
                         on_execution_failed.clone(),
+                        wg.add_with("execution"),
                     )
                     .in_current_span(),
                 );
@@ -116,6 +141,7 @@ async fn run_execution(
     active_execution: ActiveExecutionGuard,
     server_cancellation_grace_period: Duration,
     on_execution_failed: Option<ExecutionFailedCb>,
+    _wg: WaitGuard,
 ) {
     tracing::Span::current().record("execution_id", &ready_execution.execution_id);
     tracing::Span::current().record("job_id", &ready_execution.job_id);
@@ -264,6 +290,18 @@ impl ActiveExecutions {
     fn cancel(&self, execution_id: &ExecutionId) {
         let executions = self.executions.lock().unwrap();
         if let Some(token) = executions.get(execution_id) {
+            token.cancel();
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        let executions = self.executions.lock().unwrap();
+        executions.is_empty()
+    }
+
+    fn cancel_all(&self) {
+        let executions = self.executions.lock().unwrap();
+        for token in executions.values() {
             token.cancel();
         }
     }

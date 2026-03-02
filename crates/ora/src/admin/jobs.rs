@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     admin::{AdminClient, schedules::Schedule},
-    common::{LabelFilter, TimeRange},
+    common::{AddedOrExisting, LabelFilter, TimeRange},
     execution::{ExecutionId, ExecutionStatus},
     executor::ExecutorId,
     job::{JobDefinition, JobId},
@@ -93,40 +93,69 @@ impl AdminClient {
     ///
     /// If any jobs exists based on the given filters, no
     /// jobs will be added.
+    /// If multiple existing jobs are matched by the filter,
+    /// one is arbitrarily chosen and returned.
     pub async fn add_job_if_not_exists<J>(
         &self,
         job: JobDefinition<J>,
         filters: JobFilters,
-    ) -> crate::Result<Option<Job<J>>>
+    ) -> crate::Result<AddedOrExisting<Job<AnyJobType>>>
     where
         J: JobType,
     {
-        let id = self
+        let res = self
             .inner
             .add_jobs(Request::new(AddJobsRequest {
                 jobs: vec![job.try_into()?],
                 if_not_exists: Some(filters.into()),
             }))
             .await?
-            .into_inner()
+            .into_inner();
+
+        let added_job_id = res
             .job_ids
-            .pop();
+            .into_iter()
+            .next()
+            .map(|id| {
+                id.parse::<Uuid>()
+                    .map(JobId)
+                    .wrap_err("server returned invalid job ID")
+            })
+            .transpose()?;
 
-        let Some(id) = id else {
-            return Ok(None);
-        };
+        let existing_job_id = res
+            .existing_job_ids
+            .into_iter()
+            .next()
+            .map(|id| {
+                id.parse::<Uuid>()
+                    .map(JobId)
+                    .wrap_err("server returned invalid job ID")
+            })
+            .transpose()?;
 
-        let id = id
-            .parse::<Uuid>()
-            .map(JobId)
-            .wrap_err("server returned invalid job ID")?;
-
-        Ok(Some(Job {
-            client: self.clone(),
-            id,
-            raw: None,
-            phantom: PhantomData,
-        }))
+        match (added_job_id, existing_job_id) {
+            (Some(added_job_id), None) => Ok(AddedOrExisting::Added(Job {
+                client: self.clone(),
+                id: added_job_id,
+                raw: None,
+                phantom: PhantomData,
+            })),
+            (None, Some(existing_job_id)) => Ok(AddedOrExisting::Existing(Job {
+                client: self.clone(),
+                id: existing_job_id,
+                raw: None,
+                phantom: PhantomData,
+            })),
+            (None, None) => Err(eyre::eyre!(
+                "no job was added but no existing job was returned by the server"
+            )
+            .into()),
+            (Some(_), Some(_)) => Err(eyre::eyre!(
+                "server returned both an added job ID and an existing job ID, which is unexpected"
+            )
+            .into()),
+        }
     }
 
     /// Add multiple jobs if no existing jobs match the given filters.
@@ -134,7 +163,7 @@ impl AdminClient {
         &self,
         jobs: I,
         filters: JobFilters,
-    ) -> crate::Result<Vec<Job<AnyJobType>>>
+    ) -> crate::Result<AddedOrExisting<Vec<Job<AnyJobType>>>>
     where
         I: IntoIterator<Item: TryInto<proto::jobs::v1::Job, Error = crate::Error>>,
     {
@@ -143,27 +172,50 @@ impl AdminClient {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.inner
+        let res = self
+            .inner
             .add_jobs(Request::new(AddJobsRequest {
                 jobs,
                 if_not_exists: Some(filters.into()),
             }))
             .await?
-            .into_inner()
-            .job_ids
-            .into_iter()
-            .map(|id| {
-                Result::<_, crate::Error>::Ok(Job {
-                    client: self.clone(),
-                    id: JobId(
-                        id.parse::<Uuid>()
-                            .wrap_err("server returned invalid job ID")?,
-                    ),
-                    raw: None,
-                    phantom: PhantomData,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
+            .into_inner();
+
+        if res.job_ids.is_empty() {
+            Ok(AddedOrExisting::Existing(
+                res.existing_job_ids
+                    .into_iter()
+                    .map(|id| {
+                        Result::<_, crate::Error>::Ok(Job {
+                            client: self.clone(),
+                            id: JobId(
+                                id.parse::<Uuid>()
+                                    .wrap_err("server returned invalid job ID")?,
+                            ),
+                            raw: None,
+                            phantom: PhantomData,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        } else {
+            Ok(AddedOrExisting::Added(
+                res.job_ids
+                    .into_iter()
+                    .map(|id| {
+                        Result::<_, crate::Error>::Ok(Job {
+                            client: self.clone(),
+                            id: JobId(
+                                id.parse::<Uuid>()
+                                    .wrap_err("server returned invalid job ID")?,
+                            ),
+                            raw: None,
+                            phantom: PhantomData,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        }
     }
 
     /// List jobs based on the given filters.
@@ -495,7 +547,7 @@ impl<J> Job<J> {
 
     /// Wait for the job to terminate.
     #[cfg(not(target_arch = "wasm32"))]
-    pub async fn wait(&mut self) -> crate::Result<()> {
+    pub async fn terminated(&mut self) -> crate::Result<()> {
         loop {
             let executions = self.executions().await?;
 
@@ -716,7 +768,7 @@ where
     ///
     /// If a job was cancelled, it will be treated as an error.
     pub async fn wait_result(&mut self) -> Result<<J as JobType>::Output, crate::Error> {
-        self.wait().await?;
+        self.terminated().await?;
 
         let Some(last_execution) = self.executions().await?.pop() else {
             return Err(eyre::eyre!("no executions found for job").into());

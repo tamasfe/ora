@@ -561,9 +561,9 @@ async fn executor_loop(
 
                     Some(q.executions.swap_remove(idx))
                 }) else {
-                    tracing::error!("executor completed execution that was not assigned to it");
-                    drop_executor(executor_id, &mut executors, &events);
-                    break;
+                    // this can happen when an execution gets cancelled
+                    tracing::debug!("executor completed execution that was not assigned to it");
+                    continue;
                 };
 
                 let timestamp = match execution_succeeded.timestamp {
@@ -609,9 +609,9 @@ async fn executor_loop(
 
                     Some(q.executions.swap_remove(idx))
                 }) else {
-                    tracing::error!("executor completed execution that was not assigned to it");
-                    drop_executor(executor_id, &mut executors, &events);
-                    break;
+                    // this can happen when an execution gets cancelled
+                    tracing::debug!("executor completed execution that was not assigned to it");
+                    continue;
                 };
 
                 let timestamp = match execution_failed.timestamp {

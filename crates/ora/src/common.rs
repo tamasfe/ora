@@ -38,3 +38,34 @@ pub struct TimeRange {
     /// If `None`, the range is open-ended at the end.
     pub end: Option<SystemTime>,
 }
+
+/// A type that is returned from `if_not_exists` requests,
+/// a resource was either added or existing ones are returned.
+pub enum AddedOrExisting<T> {
+    /// The resource was added.
+    Added(T),
+    /// The resource already existed.
+    Existing(T),
+}
+
+impl<T> AddedOrExisting<T> {
+    /// Unwrap the inner value.
+    #[must_use]
+    pub fn into_inner(self) -> T {
+        match self {
+            AddedOrExisting::Added(job) | AddedOrExisting::Existing(job) => job,
+        }
+    }
+
+    /// Return whether the job was added or already existed.
+    #[must_use]
+    pub fn is_added(&self) -> bool {
+        matches!(self, AddedOrExisting::Added(_))
+    }
+
+    /// Return whether the job already existed.
+    #[must_use]
+    pub fn is_existing(&self) -> bool {
+        matches!(self, AddedOrExisting::Existing(_))
+    }
+}

@@ -629,7 +629,7 @@ impl Jobs {
                     .await?;
 
                     tracing::info!("waiting for job...");
-                    job.wait().await?;
+                    job.terminated().await?;
                 }
 
                 list_jobs(
@@ -660,7 +660,7 @@ impl Jobs {
                 let mut job = stream.try_next().await?.ok_or_eyre("job not found")?;
 
                 tracing::info!("waiting for job...");
-                job.wait().await?;
+                job.terminated().await?;
 
                 list_jobs(
                     &client,
@@ -689,7 +689,7 @@ impl Jobs {
 
                 let mut job = stream.try_next().await?.ok_or_eyre("job not found")?;
 
-                job.wait().await?;
+                job.terminated().await?;
 
                 let last_exec = job.executions().await?.pop().unwrap();
 

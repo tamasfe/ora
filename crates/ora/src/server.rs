@@ -11,7 +11,7 @@ use crate::proto::{
     executors::v1::execution_service_client::ExecutionServiceClient,
 };
 
-pub use ora_server::{Backend, GrpcServices, ServerBuilder, ServerHandle};
+pub use ora_server::{Backend, GrpcServices, ServerBuilder, ServerHandle, ServerOptions};
 
 /// Extension trait for an ora server handle.
 pub trait ServerHandleExt {

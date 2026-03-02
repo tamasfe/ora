@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use deadpool_postgres::{Pool, PoolError};
 use futures::Stream;
@@ -362,12 +362,10 @@ impl Backend for PostgresBackend {
     async fn cancel_jobs(&self, filters: JobFilters) -> Result<Vec<CancelledJob>> {
         let mut conn = self.pool.get().await?;
         let tx = conn.transaction().await?;
+        let now = std::time::SystemTime::now();
+
         let jobs = cancel_jobs(&tx, filters).await?;
-
-        let job_ids = jobs.iter().map(|j| j.job_id).collect::<Vec<_>>();
-
-        mark_jobs_inactive(&tx, &job_ids).await?;
-
+        mark_jobs_inactive(&tx, &jobs.iter().map(|j| (j.job_id, now)).collect::<Vec<_>>()).await?;
         tx.commit().await?;
 
         Ok(jobs)
@@ -444,6 +442,46 @@ impl Backend for PostgresBackend {
                     &col_scheduling_policy_json,
                     &col_start_after,
                     &col_end_before,
+                ],
+            )
+            .await?;
+        }
+
+        {
+            let mut col_schedule_id = Vec::with_capacity(schedules.len());
+            let mut col_schedule_label_key = Vec::with_capacity(schedules.len());
+            let mut col_schedule_label_value = Vec::with_capacity(schedules.len());
+
+            for (i, schedule) in schedules.iter().enumerate() {
+                for label in &schedule.labels {
+                    col_schedule_id.push(col_id[i]);
+                    col_schedule_label_key.push(label.key.as_str());
+                    col_schedule_label_value.push(label.value.as_str());
+                }
+            }
+
+            let stmt = tx
+                .prepare(
+                    r#"--sql
+                    INSERT INTO ora.schedule_label (
+                        schedule_id,
+                        label_key,
+                        label_value
+                    ) SELECT * FROM UNNEST(
+                        $1::UUID[],
+                        $2::TEXT[],
+                        $3::TEXT[]
+                    )
+                    "#,
+                )
+                .await?;
+
+            tx.execute(
+                &stmt,
+                &[
+                    &col_schedule_id,
+                    &col_schedule_label_key,
+                    &col_schedule_label_value,
                 ],
             )
             .await?;
@@ -832,7 +870,7 @@ impl Backend for PostgresBackend {
                 WHERE
                     execution_id = id
                     AND status < 2
-                RETURNING job_id
+                RETURNING job_id, t.succeeded_at
                 "#,
             )
             .await?;
@@ -860,12 +898,15 @@ impl Backend for PostgresBackend {
             )
             .await?;
 
-        let mut job_ids = Vec::with_capacity(rows.len());
+        let mut jobs = Vec::with_capacity(rows.len());
         for row in rows {
-            job_ids.push(JobId(row.try_get(0)?));
+            jobs.push((
+                JobId(row.try_get(0)?),
+                UNIX_EPOCH + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(1)?),
+            ));
         }
 
-        mark_jobs_inactive(&tx, &job_ids).await?;
+        mark_jobs_inactive(&tx, &jobs).await?;
 
         tx.commit().await?;
 
@@ -897,8 +938,12 @@ impl Backend for PostgresBackend {
         let mut conn = self.pool.get().await?;
         let tx = conn.transaction().await?;
 
-        let job_ids = executions_failed(&tx, executions).await?;
-        add_executions(&tx, &job_ids).await?;
+        let jobs = executions_failed(&tx, executions).await?;
+        add_executions(
+            &tx,
+            &jobs.into_iter().map(|(id, ..)| id).collect::<Vec<_>>(),
+        )
+        .await?;
 
         tx.commit().await?;
 
@@ -1032,26 +1077,8 @@ impl Backend for PostgresBackend {
                         WHERE id IN (
                             SELECT ora.job.id
                             FROM ora.job
-                            JOIN LATERAL (
-                                SELECT
-                                    status,
-                                    succeeded_at,
-                                    failed_at,
-                                    cancelled_at
-                                FROM
-                                    ora.execution
-                                WHERE
-                                    ora.execution.job_id = ora.job.id
-                                ORDER BY ora.execution.id DESC
-                                LIMIT 1
-                            ) e ON TRUE
                             WHERE
-                                ora.job.inactive
-                                AND (
-                                    e.succeeded_at < to_timestamp($1)
-                                    OR e.failed_at < to_timestamp($1)
-                                    OR e.cancelled_at < to_timestamp($1)
-                                )
+                                ora.job.inactive_since < to_timestamp($1)
                             LIMIT 25
                             FOR UPDATE SKIP LOCKED
                         );
@@ -1184,7 +1211,7 @@ impl Backend for PostgresBackend {
 async fn executions_failed(
     tx: &DbTransaction<'_>,
     executions: &[FailedExecution],
-) -> Result<Vec<JobId>> {
+) -> Result<Vec<(JobId, SystemTime)>> {
     let stmt = tx
         .prepare(
             r#"--sql
@@ -1200,7 +1227,7 @@ async fn executions_failed(
             WHERE
                 execution_id = id
                 AND status < 2
-            RETURNING job_id;
+            RETURNING job_id, t.failed_at
             "#,
         )
         .await?;
@@ -1228,9 +1255,16 @@ async fn executions_failed(
         )
         .await?;
 
-    let job_ids = rows.into_iter().map(|row| JobId(row.get(0))).collect();
+    let mut jobs = Vec::with_capacity(rows.len());
 
-    Ok(job_ids)
+    for row in rows {
+        jobs.push((
+            JobId(row.try_get(0)?),
+            UNIX_EPOCH + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(1)?),
+        ));
+    }
+
+    Ok(jobs)
 }
 
 async fn add_executions(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()> {
@@ -1265,15 +1299,22 @@ async fn add_executions(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()> {
     Ok(())
 }
 
-async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()> {
+async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[(JobId, SystemTime)]) -> Result<()> {
     if jobs.is_empty() {
         return Ok(());
     }
 
     let mut col_job_id = Vec::with_capacity(jobs.len());
+    let mut col_inactive_since = Vec::with_capacity(jobs.len());
 
-    for job in jobs {
+    for (job, inactive_since) in jobs {
         col_job_id.push(job.0);
+        col_inactive_since.push(
+            inactive_since
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs_f64(),
+        );
     }
 
     {
@@ -1281,13 +1322,20 @@ async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()
             .prepare(
                 r#"--sql
                 UPDATE ora.job
-                SET inactive = TRUE
-                WHERE id = ANY($1::UUID[])
+                SET inactive_since = to_timestamp(t.inactive_since)
+                FROM
+                    UNNEST(
+                        $1::UUID[],
+                        $2::DOUBLE PRECISION[]
+                    ) AS t(job_id, inactive_since)
+                WHERE
+                    id = t.job_id;
                 "#,
             )
             .await?;
 
-        tx.execute(&stmt, &[&col_job_id]).await?;
+        tx.execute(&stmt, &[&col_job_id, &col_inactive_since])
+            .await?;
     }
 
     {

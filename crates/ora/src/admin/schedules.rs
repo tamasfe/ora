@@ -12,7 +12,7 @@ use crate::{
         AdminClient,
         jobs::{Job, JobFilters, JobOrderBy},
     },
-    common::{LabelFilter, TimeRange},
+    common::{AddedOrExisting, LabelFilter, TimeRange},
     job_type::{AnyJobType, JobType, JobTypeId},
     proto::{
         self,
@@ -90,15 +90,18 @@ impl AdminClient {
     }
 
     /// Add a schedule if no schedules exist with the given filter.
+    ///
+    /// If multiple existing schedules are matched by the filter,
+    /// one is arbitrarily chosen and returned.
     pub async fn add_schedule_if_not_exists<J>(
         &self,
         schedule: ScheduleDefinition<J>,
         filters: ScheduleFilters,
-    ) -> crate::Result<Option<Schedule<J>>>
+    ) -> crate::Result<AddedOrExisting<Schedule<AnyJobType>>>
     where
         J: JobType,
     {
-        let id = self
+        let res = self
             .inner
             .add_schedules(Request::new(AddSchedulesRequest {
                 schedules: vec![schedule.try_into()?],
@@ -106,25 +109,52 @@ impl AdminClient {
                 inherit_labels: Some(true),
             }))
             .await?
-            .into_inner()
+            .into_inner();
+
+        let added_schedule_id = res
             .schedule_ids
-            .pop();
+            .into_iter()
+            .next()
+            .map(|id| {
+                id.parse::<Uuid>()
+                    .map(ScheduleId)
+                    .wrap_err("server returned invalid schedule ID")
+            })
+            .transpose()?;
 
-        let Some(id) = id else {
-            return Ok(None);
-        };
+        let existing_schedule_id = res
+            .existing_schedule_ids
+            .into_iter()
+            .next()
+            .map(|id| {
+                id.parse::<Uuid>()
+                    .map(ScheduleId)
+                    .wrap_err("server returned invalid schedule ID")
+            })
+            .transpose()?;
 
-        let id = id
-            .parse::<Uuid>()
-            .wrap_err("invalid schedule ID")
-            .map(ScheduleId)?;
-
-        Ok(Some(Schedule {
-            id,
-            client: self.clone(),
-            raw: None,
-            phantom: PhantomData,
-        }))
+        match (added_schedule_id, existing_schedule_id) {
+            (Some(added_schedule_id), None) => Ok(AddedOrExisting::Added(Schedule {
+                client: self.clone(),
+                id: added_schedule_id,
+                raw: None,
+                phantom: PhantomData,
+            })),
+            (None, Some(existing_schedule_id)) => Ok(AddedOrExisting::Existing(Schedule {
+                client: self.clone(),
+                id: existing_schedule_id,
+                raw: None,
+                phantom: PhantomData,
+            })),
+            (None, None) => Err(eyre::eyre!(
+                "no schedule was added but no existing schedule was returned by the server"
+            )
+            .into()),
+            (Some(_), Some(_)) => Err(eyre::eyre!(
+                "server returned both an added schedule ID and an existing schedule ID, which is unexpected"
+            )
+            .into()),
+        }
     }
 
     /// Add multiple schedules if no schedules exist with the given filter.
@@ -132,7 +162,7 @@ impl AdminClient {
         &self,
         schedules: I,
         filters: ScheduleFilters,
-    ) -> crate::Result<Vec<Schedule<AnyJobType>>>
+    ) -> crate::Result<AddedOrExisting<Vec<Schedule<AnyJobType>>>>
     where
         I: IntoIterator<Item: TryInto<proto::schedules::v1::Schedule, Error = crate::Error>>,
     {
@@ -141,28 +171,51 @@ impl AdminClient {
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.inner
+        let res = self
+            .inner
             .add_schedules(Request::new(AddSchedulesRequest {
                 schedules,
                 if_not_exists: Some(filters.into()),
                 inherit_labels: Some(true),
             }))
             .await?
-            .into_inner()
-            .schedule_ids
-            .into_iter()
-            .map(|id| {
-                Result::<_, crate::Error>::Ok(Schedule {
-                    client: self.clone(),
-                    id: ScheduleId(
-                        id.parse::<Uuid>()
-                            .wrap_err("server returned invalid schedule ID")?,
-                    ),
-                    raw: None,
-                    phantom: PhantomData,
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
+            .into_inner();
+
+        if res.schedule_ids.is_empty() {
+            Ok(AddedOrExisting::Existing(
+                res.existing_schedule_ids
+                    .into_iter()
+                    .map(|id| {
+                        Result::<_, crate::Error>::Ok(Schedule {
+                            client: self.clone(),
+                            id: ScheduleId(
+                                id.parse::<Uuid>()
+                                    .wrap_err("server returned invalid job ID")?,
+                            ),
+                            raw: None,
+                            phantom: PhantomData,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        } else {
+            Ok(AddedOrExisting::Added(
+                res.schedule_ids
+                    .into_iter()
+                    .map(|id| {
+                        Result::<_, crate::Error>::Ok(Schedule {
+                            client: self.clone(),
+                            id: ScheduleId(
+                                id.parse::<Uuid>()
+                                    .wrap_err("server returned invalid job ID")?,
+                            ),
+                            raw: None,
+                            phantom: PhantomData,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ))
+        }
     }
 
     /// List schedules based on the given filters.
