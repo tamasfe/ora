@@ -1,3 +1,4 @@
+//! Postgres backend implementation for Ora.
 #![allow(missing_docs)]
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -40,8 +41,11 @@ mod db;
 mod models;
 mod query;
 
+/// Postgres backend for Ora.
+#[must_use]
 pub struct PostgresBackend {
     pool: DbPool,
+    delete_batch_size: usize,
 }
 
 type Result<T> = core::result::Result<T, Error>;
@@ -49,14 +53,19 @@ type Result<T> = core::result::Result<T, Error>;
 /// Errors that can occur when using the Postgres backend.
 #[derive(Error, Debug)]
 pub enum Error {
+    /// An error occurred during database migrations.
     #[error("{0}")]
     Migrations(#[from] refinery::Error),
+    /// An error occurred while acquiring a database connection from the pool.
     #[error("{0}")]
     Pool(#[from] PoolError),
+    /// An error occurred during a database operation.
     #[error("{0}")]
     Postgres(#[from] tokio_postgres::Error),
+    /// An error occurred while serializing or deserializing JSON data.
     #[error("{0}")]
     Serde(#[from] serde_json::Error),
+    /// An error occurred while converting a value to or from a database type.
     #[error("invalid page token: {0}")]
     InvalidPageToken(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -71,7 +80,21 @@ impl PostgresBackend {
             .set_migration_table_name("ora.migrations")
             .run_async(&mut **conn)
             .await?;
-        Ok(Self { pool: DbPool(pool) })
+        Ok(Self {
+            pool: DbPool(pool),
+            delete_batch_size: 40_000,
+        })
+    }
+
+    /// Set the batch size for all delete operations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `batch_size` is zero.
+    pub fn with_delete_batch_size(mut self, batch_size: usize) -> Self {
+        assert!(batch_size > 0, "batch size must be greater than zero");
+        self.delete_batch_size = batch_size;
+        self
     }
 }
 
@@ -365,7 +388,11 @@ impl Backend for PostgresBackend {
         let now = std::time::SystemTime::now();
 
         let jobs = cancel_jobs(&tx, filters).await?;
-        mark_jobs_inactive(&tx, &jobs.iter().map(|j| (j.job_id, now)).collect::<Vec<_>>()).await?;
+        mark_jobs_inactive(
+            &tx,
+            &jobs.iter().map(|j| (j.job_id, now)).collect::<Vec<_>>(),
+        )
+        .await?;
         tx.commit().await?;
 
         Ok(jobs)
@@ -1060,6 +1087,8 @@ impl Backend for PostgresBackend {
     }
 
     async fn delete_history(&self, before: std::time::SystemTime) -> crate::Result<()> {
+        let batch_size = i64::try_from(self.delete_batch_size).unwrap_or(i64::MAX);
+
         let mut conn = self.pool.get().await?;
 
         // delete in a loop so that we don't lock
@@ -1073,15 +1102,16 @@ impl Backend for PostgresBackend {
                 let stmt = tx
                     .prepare(
                         r#"--sql
-                        DELETE FROM ora.job
-                        WHERE id IN (
-                            SELECT ora.job.id
+                        WITH cte AS (
+                            SELECT ctid
                             FROM ora.job
-                            WHERE
-                                ora.job.inactive_since < to_timestamp($1)
-                            LIMIT 25
-                            FOR UPDATE SKIP LOCKED
-                        );
+                            WHERE inactive_since < to_timestamp($1)
+                            ORDER BY inactive_since
+                            LIMIT $2
+                        )
+                        DELETE FROM ora.job j
+                        USING cte
+                        WHERE j.ctid = cte.ctid;
                         "#,
                     )
                     .await?;
@@ -1089,10 +1119,13 @@ impl Backend for PostgresBackend {
                 let deleted = tx
                     .execute(
                         &stmt,
-                        &[&before
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs_f64()],
+                        &[
+                            &before
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs_f64(),
+                            &batch_size,
+                        ],
                     )
                     .await?;
 
@@ -1106,15 +1139,16 @@ impl Backend for PostgresBackend {
                 let stmt = tx
                     .prepare(
                         r#"--sql
-                        DELETE FROM ONLY ora.schedule
-                        WHERE ctid IN (
+                        WITH cte AS (
                             SELECT ctid
                             FROM ora.schedule
-                            WHERE 
-                                ora.schedule.stopped_at < to_timestamp($1)
-                            LIMIT 25
-                            FOR UPDATE SKIP LOCKED
+                            WHERE stopped_at < to_timestamp($1)
+                            ORDER BY stopped_at
+                            LIMIT $2
                         )
+                        DELETE FROM ora.schedule s
+                        USING cte
+                        WHERE s.ctid = cte.ctid;
                         "#,
                     )
                     .await?;
@@ -1122,10 +1156,13 @@ impl Backend for PostgresBackend {
                 let deleted = tx
                     .execute(
                         &stmt,
-                        &[&before
-                            .duration_since(UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_secs_f64()],
+                        &[
+                            &before
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs_f64(),
+                            &batch_size,
+                        ],
                     )
                     .await?;
 

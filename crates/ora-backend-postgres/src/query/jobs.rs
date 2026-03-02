@@ -493,22 +493,53 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
     }
 
     if let Some(statuses) = execution_statuses {
-        let status_values: Vec<i16> = statuses.iter().map(|s| *s as i16).collect();
+        // The below 20 or so lines are just query optimizations.
+        let active_only = statuses
+            .iter()
+            .all(|s| matches!(s, ExecutionStatus::Pending | ExecutionStatus::InProgress));
+        let inactive_only = statuses.iter().all(|s| {
+            matches!(
+                s,
+                ExecutionStatus::Succeeded | ExecutionStatus::Failed | ExecutionStatus::Cancelled
+            )
+        });
 
-        select.and_where(Expr::cust_with_values(
-            r#"
-            (
-                SELECT
-                    status
-                FROM
-                    ora.execution
-                WHERE
-                    ora.execution.job_id = ora.job.id
-                ORDER BY ora.execution.id DESC
-                LIMIT 1
-            ) = ANY($1::SMALLINT[])"#,
-            [status_values],
-        ));
+        let active_statuses = [ExecutionStatus::Pending, ExecutionStatus::InProgress];
+        let inactive_statuses = [
+            ExecutionStatus::Succeeded,
+            ExecutionStatus::Failed,
+            ExecutionStatus::Cancelled,
+        ];
+
+        let exhaustive = (active_only && active_statuses.iter().all(|s| statuses.contains(s)))
+            || (inactive_only && inactive_statuses.iter().all(|s| statuses.contains(s)));
+
+        if active_only {
+            select.and_where(Expr::cust("ora.job.inactive_since IS NULL"));
+        } else if inactive_only {
+            select.and_where(Expr::cust("ora.job.inactive_since IS NOT NULL"));
+        }
+
+        // Checking active/inactive is not enough,
+        // we need to filter further based on the last execution status.
+        if !exhaustive {
+            let status_values: Vec<i16> = statuses.iter().map(|s| *s as i16).collect();
+
+            select.and_where(Expr::cust_with_values(
+                r#"
+                (
+                    SELECT
+                        status
+                    FROM
+                        ora.execution
+                    WHERE
+                        ora.execution.job_id = ora.job.id
+                    ORDER BY ora.execution.id DESC
+                    LIMIT 1
+                ) = ANY($1::SMALLINT[])"#,
+                [status_values],
+            ));
+        }
     }
 
     if let Some(labels) = labels {
