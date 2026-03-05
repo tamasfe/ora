@@ -1,7 +1,7 @@
 //! Postgres backend implementation for Ora.
 #![allow(missing_docs)]
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use deadpool_postgres::{Pool, PoolError};
 use futures::Stream;
@@ -33,6 +33,7 @@ use crate::{
         jobs::{cancel_jobs, job_count},
         schedules::schedule_count,
     },
+    util::{systemtime_from_ts, systemtime_to_ts},
 };
 
 embed_migrations!("./migrations");
@@ -40,6 +41,7 @@ embed_migrations!("./migrations");
 mod db;
 mod models;
 mod query;
+mod util;
 
 /// Postgres backend for Ora.
 #[must_use]
@@ -645,8 +647,7 @@ impl Backend for PostgresBackend {
                         input_payload_json: row.try_get(3)?,
                         attempt_number: row.try_get::<_, i64>(4)? as u64,
                         retry_policy: serde_json::from_str(&row.try_get::<_, String>(5)?)?,
-                        target_execution_time: UNIX_EPOCH
-                            + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(6)?),
+                        target_execution_time: systemtime_from_ts(row.try_get::<_, f64>(6)?),
                     });
                 }
 
@@ -690,9 +691,7 @@ impl Backend for PostgresBackend {
                 tx.commit().await?;
 
                 match row {
-                    Some(row) => row
-                        .try_get::<_, Option<f64>>(0)?
-                        .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
+                    Some(row) => row.try_get::<_, Option<f64>>(0)?.map(systemtime_from_ts),
                     None => None,
                 }
             };
@@ -801,10 +800,8 @@ impl Backend for PostgresBackend {
                         execution_id: ExecutionId(row.try_get(0)?),
                         job_id: JobId(row.try_get(1)?),
                         executor_id: ExecutorId(row.try_get(2)?),
-                        target_execution_time: UNIX_EPOCH
-                            + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(3)?),
-                        started_at: UNIX_EPOCH
-                            + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(4)?),
+                        target_execution_time: systemtime_from_ts(row.try_get::<_, f64>(3)?),
+                        started_at: systemtime_from_ts(row.try_get::<_, f64>(4)?),
                         timeout_policy: serde_json::from_str(&row.try_get::<_, String>(5)?)?,
                         retry_policy: serde_json::from_str(&row.try_get::<_, String>(6)?)?,
                         attempt_number: row.try_get::<_, i64>(7)? as u64,
@@ -853,13 +850,7 @@ impl Backend for PostgresBackend {
         for execution in executions {
             col_execution_id.push(execution.execution_id.0);
             col_executor_id.push(execution.executor_id.0);
-            col_started_at.push(
-                execution
-                    .started_at
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs_f64(),
-            );
+            col_started_at.push(systemtime_to_ts(execution.started_at));
         }
 
         tx.execute(
@@ -908,13 +899,7 @@ impl Backend for PostgresBackend {
 
         for execution in executions {
             col_execution_id.push(execution.execution_id.0);
-            col_succeeded_at.push(
-                execution
-                    .succeeded_at
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs_f64(),
-            );
+            col_succeeded_at.push(systemtime_to_ts(execution.succeeded_at));
             col_output_json.push(execution.output_json.as_str());
         }
 
@@ -929,7 +914,7 @@ impl Backend for PostgresBackend {
         for row in rows {
             jobs.push((
                 JobId(row.try_get(0)?),
-                UNIX_EPOCH + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(1)?),
+                systemtime_from_ts(row.try_get::<_, f64>(1)?),
             ));
         }
 
@@ -1066,15 +1051,11 @@ impl Backend for PostgresBackend {
                         schedule_id: ScheduleId(row.try_get(0)?),
                         last_target_execution_time: row
                             .try_get::<_, Option<f64>>(1)?
-                            .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
+                            .map(systemtime_from_ts),
                         scheduling: serde_json::from_str(row.try_get::<_, &str>(2)?)?,
                         time_range: TimeRange {
-                            start: row
-                                .try_get::<_, Option<f64>>(3)?
-                                .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
-                            end: row
-                                .try_get::<_, Option<f64>>(4)?
-                                .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
+                            start: row.try_get::<_, Option<f64>>(3)?.map(systemtime_from_ts),
+                            end: row.try_get::<_, Option<f64>>(4)?.map(systemtime_from_ts),
                         },
                         job_template: serde_json::from_str(row.try_get::<_, &str>(5)?)?,
                     });
@@ -1117,16 +1098,7 @@ impl Backend for PostgresBackend {
                     .await?;
 
                 let deleted = tx
-                    .execute(
-                        &stmt,
-                        &[
-                            &before
-                                .duration_since(UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs_f64(),
-                            &batch_size,
-                        ],
-                    )
+                    .execute(&stmt, &[&systemtime_to_ts(before), &batch_size])
                     .await?;
 
                 deleted_rows += deleted;
@@ -1154,16 +1126,7 @@ impl Backend for PostgresBackend {
                     .await?;
 
                 let deleted = tx
-                    .execute(
-                        &stmt,
-                        &[
-                            &before
-                                .duration_since(UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs_f64(),
-                            &batch_size,
-                        ],
-                    )
+                    .execute(&stmt, &[&systemtime_to_ts(before), &batch_size])
                     .await?;
 
                 tx.commit().await?;
@@ -1275,13 +1238,7 @@ async fn executions_failed(
 
     for execution in executions {
         col_execution_id.push(execution.execution_id.0);
-        col_succeeded_at.push(
-            execution
-                .failed_at
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64(),
-        );
+        col_succeeded_at.push(systemtime_to_ts(execution.failed_at));
         col_failure_reason.push(execution.failure_reason.as_str());
     }
 
@@ -1297,7 +1254,7 @@ async fn executions_failed(
     for row in rows {
         jobs.push((
             JobId(row.try_get(0)?),
-            UNIX_EPOCH + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(1)?),
+            systemtime_from_ts(row.try_get::<_, f64>(1)?),
         ));
     }
 
@@ -1346,12 +1303,7 @@ async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[(JobId, SystemTime)]
 
     for (job, inactive_since) in jobs {
         col_job_id.push(job.0);
-        col_inactive_since.push(
-            inactive_since
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64(),
-        );
+        col_inactive_since.push(systemtime_to_ts(*inactive_since));
     }
 
     {

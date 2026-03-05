@@ -1,6 +1,6 @@
 [package]
 name = "ora-cli"
-version = "0.12.5"
+version = "0.12.6"
 edition = "2024"
 publish.workspace = true
 description = "Command line interface for the Ora scheduler."
@@ -23,7 +23,7 @@ futures.workspace = true
 humantime = "2.3.0"
 jiff = "0.2.18"
 jsonschema = "0.41.0"
-ora = { version = "0.12.5", path = "../ora" }
+ora = { version = "0.12.6", path = "../ora" }
 ratatui = "0.30.0"
 serde_json = "1.0.149"
 tempfile = "3.24.0"

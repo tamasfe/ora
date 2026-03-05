@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::UNIX_EPOCH};
+use std::str::FromStr;
 
 use base64::Engine;
 use ora_backend::{
@@ -16,7 +16,10 @@ use sea_query_postgres::PostgresBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::DbTransaction;
+use crate::{
+    db::DbTransaction,
+    util::{systemtime_from_ts, systemtime_to_ts},
+};
 
 pub(crate) async fn stop_schedules(
     tx: &DbTransaction<'_>,
@@ -122,9 +125,7 @@ pub(crate) async fn schedule_details(
     let mut schedules = Vec::with_capacity(rows.len());
 
     for row in rows {
-        let stopped_at = row
-            .try_get::<_, Option<f64>>(6)?
-            .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts));
+        let stopped_at = row.try_get::<_, Option<f64>>(6)?.map(systemtime_from_ts);
 
         schedules.push(ScheduleDetails {
             id: ScheduleId(row.try_get(0)?),
@@ -133,15 +134,11 @@ pub(crate) async fn schedule_details(
                 job_template: serde_json::from_str(row.try_get::<_, &str>(2)?)?,
                 labels: Vec::new(),
                 time_range: TimeRange {
-                    start: row
-                        .try_get::<_, Option<f64>>(3)?
-                        .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
-                    end: row
-                        .try_get::<_, Option<f64>>(4)?
-                        .map(|ts| UNIX_EPOCH + std::time::Duration::from_secs_f64(ts)),
+                    start: row.try_get::<_, Option<f64>>(3)?.map(systemtime_from_ts),
+                    end: row.try_get::<_, Option<f64>>(4)?.map(systemtime_from_ts),
                 },
             },
-            created_at: UNIX_EPOCH + std::time::Duration::from_secs_f64(row.try_get::<_, f64>(5)?),
+            created_at: systemtime_from_ts(row.try_get::<_, f64>(5)?),
             status: if stopped_at.is_some() {
                 ScheduleStatus::Stopped
             } else {
@@ -279,10 +276,7 @@ pub(super) fn select_schedule_ids(filters: &ScheduleFilters) -> SelectStatement 
 
     if let Some(created_at) = created_at {
         if let Some(start) = created_at.start {
-            let start = start
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let start = systemtime_to_ts(start);
 
             select.and_where(Expr::col(("ora", "schedule", "created_at")).gte(
                 Expr::cust_with_values("to_timestamp($1::DOUBLE PRECISION)", [start]),
@@ -290,10 +284,7 @@ pub(super) fn select_schedule_ids(filters: &ScheduleFilters) -> SelectStatement 
         }
 
         if let Some(end) = created_at.end {
-            let end = end
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let end = systemtime_to_ts(end);
 
             select.and_where(Expr::col(("ora", "schedule", "created_at")).lt(
                 Expr::cust_with_values("to_timestamp($1::DOUBLE PRECISION)", [end]),

@@ -1,7 +1,4 @@
-use std::{
-    str::FromStr,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{str::FromStr, time::SystemTime};
 
 use base64::Engine;
 use ora_backend::{
@@ -18,7 +15,11 @@ use sea_query_postgres::PostgresBinder;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{db::DbTransaction, models::PgExecutionStatus};
+use crate::{
+    db::DbTransaction,
+    models::PgExecutionStatus,
+    util::{systemtime_from_ts, systemtime_to_ts},
+};
 
 pub(crate) async fn cancel_jobs(
     tx: &DbTransaction<'_>,
@@ -129,12 +130,7 @@ pub(crate) async fn job_details(
                                 AND ora.job.id > $2::UUID)
                         "#,
                         [
-                            Value::from(
-                                last_target_execution_time
-                                    .duration_since(UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs_f64(),
-                            ),
+                            Value::from(systemtime_to_ts(last_target_execution_time)),
                             last_job_id.0.into(),
                         ],
                     ));
@@ -156,12 +152,7 @@ pub(crate) async fn job_details(
                                 AND ora.job.id > $2::UUID)
                         "#,
                         [
-                            Value::from(
-                                last_target_execution_time
-                                    .duration_since(UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs_f64(),
-                            ),
+                            Value::from(systemtime_to_ts(last_target_execution_time)),
                             last_job_id.0.into(),
                         ],
                     ));
@@ -199,10 +190,10 @@ pub(crate) async fn job_details(
         for row in rows {
             jobs.push(JobDetails {
                 id: JobId(row.try_get(0)?),
-                created_at: UNIX_EPOCH + Duration::from_secs_f64(row.try_get(1)?),
+                created_at: systemtime_from_ts(row.try_get(1)?),
                 job: JobDefinition {
                     job_type_id: JobTypeId::new_unchecked(row.try_get::<_, String>(2)?),
-                    target_execution_time: UNIX_EPOCH + Duration::from_secs_f64(row.try_get(3)?),
+                    target_execution_time: systemtime_from_ts(row.try_get(3)?),
                     input_payload_json: row.try_get(4)?,
                     labels: Vec::new(),
                     timeout_policy: serde_json::from_str(row.try_get::<_, &str>(5)?)?,
@@ -309,19 +300,11 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
 
         job.executions.push(ExecutionDetails {
             id: ExecutionId(row.try_get(1)?),
-            created_at: UNIX_EPOCH + Duration::from_secs_f64(row.try_get(2)?),
-            started_at: row
-                .try_get::<_, Option<f64>>(3)?
-                .map(|d| UNIX_EPOCH + Duration::from_secs_f64(d)),
-            succeeded_at: row
-                .try_get::<_, Option<f64>>(4)?
-                .map(|d| UNIX_EPOCH + Duration::from_secs_f64(d)),
-            failed_at: row
-                .try_get::<_, Option<f64>>(5)?
-                .map(|d| UNIX_EPOCH + Duration::from_secs_f64(d)),
-            cancelled_at: row
-                .try_get::<_, Option<f64>>(6)?
-                .map(|d| UNIX_EPOCH + Duration::from_secs_f64(d)),
+            created_at: systemtime_from_ts(row.try_get(2)?),
+            started_at: row.try_get::<_, Option<f64>>(3)?.map(systemtime_from_ts),
+            succeeded_at: row.try_get::<_, Option<f64>>(4)?.map(systemtime_from_ts),
+            failed_at: row.try_get::<_, Option<f64>>(5)?.map(systemtime_from_ts),
+            cancelled_at: row.try_get::<_, Option<f64>>(6)?.map(systemtime_from_ts),
             output_json: row.try_get(7)?,
             failure_reason: row.try_get(8)?,
             status: PgExecutionStatus::from(row.try_get::<_, i16>(9)?).into(),
@@ -440,10 +423,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
 
     if let Some(target_execution_time) = target_execution_time {
         if let Some(start) = target_execution_time.start {
-            let start = start
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let start = systemtime_to_ts(start);
 
             select.and_where(Expr::col(("ora", "job", "target_execution_time")).gte(
                 Expr::cust_with_values("to_timestamp($1::DOUBLE PRECISION)", [start]),
@@ -451,10 +431,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
         }
 
         if let Some(end) = target_execution_time.end {
-            let end = end
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let end = systemtime_to_ts(end);
 
             select.and_where(Expr::col(("ora", "job", "target_execution_time")).lt(
                 Expr::cust_with_values("to_timestamp($1::DOUBLE PRECISION)", [end]),
@@ -464,10 +441,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
 
     if let Some(created_at) = created_at {
         if let Some(start) = created_at.start {
-            let start = start
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let start = systemtime_to_ts(start);
 
             select.and_where(
                 Expr::col(("ora", "job", "created_at")).gte(Expr::cust_with_values(
@@ -478,10 +452,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
         }
 
         if let Some(end) = created_at.end {
-            let end = end
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
+            let end = systemtime_to_ts(end);
 
             select.and_where(
                 Expr::col(("ora", "job", "created_at")).lt(Expr::cust_with_values(
