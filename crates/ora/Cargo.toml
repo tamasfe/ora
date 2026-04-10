@@ -1,6 +1,6 @@
 [package]
 name = "ora"
-version = "0.12.6"
+version = "0.12.7"
 edition = "2024"
 publish.workspace = true
 description.workspace = true
@@ -21,7 +21,7 @@ serde_json = "1.0.149"
 eyre = "0.6.12"
 uuid = { version = "1.19.0", features = ["serde"] }
 futures.workspace = true
-ora-server = { version = "0.12.6", path = "../ora-server", optional = true }
+ora-server = { version = "0.12.7", path = "../ora-server", optional = true }
 hyper-util = { version = "0.1.19", optional = true }
 tokio = { version = "1.49.0", features = [
     "rt",
@@ -37,7 +37,7 @@ async-stream = "0.3.6"
 http-body = "1.0.1"
 bytes = "1.11.1"
 cronexpr = "1.4.0"
-ora-macros = { version = "0.12.6", path = "../ora-macros" }
+ora-macros = { version = "0.12.7", path = "../ora-macros" }
 wgroup = { version = "0.1.0", path = "../wgroup" }
 
 # All targets other than wasm
