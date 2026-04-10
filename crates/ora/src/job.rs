@@ -85,6 +85,26 @@ impl<J> JobDefinition<J> {
         self.retry_policy.retries = retries;
         self
     }
+
+    /// Set the backoff duration between retries.
+    ///
+    pub fn with_retry_backoff(mut self, backoff_duration: Duration) -> Self {
+        self.retry_policy.backoff_duration = backoff_duration;
+        self
+    }
+
+    /// Set the strategy for calculating the backoff duration between retries.
+    pub fn with_retry_backoff_strategy(mut self, backoff_strategy: BackoffStrategy) -> Self {
+        self.retry_policy.backoff_strategy = backoff_strategy;
+        self
+    }
+
+    /// Set the maximum backoff duration between retries.
+    ///
+    pub fn with_retry_max_backoff(mut self, max_backoff_duration: Duration) -> Self {
+        self.retry_policy.max_backoff_duration = Some(max_backoff_duration);
+        self
+    }
 }
 
 impl<J> JobDefinition<J> {
@@ -162,6 +182,30 @@ pub struct RetryPolicy {
     ///
     /// If zero, the job will not be retried.
     pub retries: u64,
+    /// The backoff duration between retries.
+    ///
+    /// By default, the backoff duration is zero, which means that the job will be
+    /// retried immediately after a failure.
+    pub backoff_duration: Duration,
+    /// The maximum backoff duration between retries.
+    ///
+    /// If the backoff duration is greater than the maximum backoff duration,
+    /// the backoff duration is capped at the maximum backoff duration.
+    pub max_backoff_duration: Option<Duration>,
+    /// The backoff strategy for retries.
+    pub backoff_strategy: BackoffStrategy,
+}
+
+/// The backoff strategy for retries.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum BackoffStrategy {
+    /// The backoff strategy is linear,
+    /// which means that the backoff duration is constant between retries.
+    #[default]
+    Fixed,
+    /// The backoff strategy is exponential,
+    /// which means that the backoff duration increases exponentially between retries.
+    Exponential,
 }
 
 /// Helper trait implemented for types implementing [`JobType`]

@@ -15,7 +15,7 @@ use ora::{
 use serde_json::Value;
 use tempfile::NamedTempFile;
 
-use crate::completions::complete_job_type;
+use crate::{commands::jobs::BackoffStrategy, completions::complete_job_type};
 
 #[derive(Subcommand)]
 pub(crate) enum Schedules {
@@ -62,6 +62,32 @@ pub(crate) enum Schedules {
         /// Set how many times the schedule can be retries.
         #[arg(long, visible_aliases = ["retry"])]
         retries: Option<u64>,
+        /// Backoff duration for replies.
+        ///
+        /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
+        #[arg(
+            long = "retry-backoff",
+            visible_aliases= ["backoff"],
+            conflicts_with = "cron_expression"
+        )]
+        retry_backoff: Option<String>,
+        /// The maximum backoff duration for retries.
+        ///
+        /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
+        /// Only applicable if `--retry-backoff-strategy` is set.
+        #[arg(
+            long = "retry-max-backoff",
+            visible_aliases= ["max-backoff"],
+            requires = "retry_backoff"
+        )]
+        retry_max_backoff: Option<String>,
+        /// The backoff strategy to use for retries.
+        #[arg(
+            long = "retry-backoff-strategy",
+            visible_aliases = ["backoff-strategy"],
+            default_value_t = BackoffStrategy::Fixed
+        )]
+        retry_backoff_strategy: BackoffStrategy,
         /// Set the timeout of the jobs in
         /// a human-readable format, e.g., `30s`, `5m`, `1h`.
         #[arg(long)]
@@ -369,6 +395,9 @@ impl Schedules {
                 start_after,
                 stop_before,
                 missed_job_action,
+                retry_backoff,
+                retry_max_backoff,
+                retry_backoff_strategy,
             } => {
                 let job_type_id =
                     JobTypeId::new(job_type_id).wrap_err("invalid schedule type ID")?;
@@ -498,6 +527,24 @@ impl Schedules {
                     }
                 }
 
+                let retry_backoff = if let Some(backoff) = retry_backoff {
+                    Some(
+                        humantime::parse_duration(&backoff)
+                            .wrap_err("invalid retry backoff duration")?,
+                    )
+                } else {
+                    None
+                };
+
+                let retry_max_backoff = if let Some(max_backoff) = retry_max_backoff {
+                    Some(
+                        humantime::parse_duration(&max_backoff)
+                            .wrap_err("invalid retry max backoff duration")?,
+                    )
+                } else {
+                    None
+                };
+
                 let schedule = client
                     .add_schedules([ora::proto::schedules::v1::Schedule {
                         labels: labels
@@ -531,6 +578,15 @@ impl Schedules {
                             }),
                             retry_policy: Some(RetryPolicy {
                                 retries: retries.unwrap_or(0),
+                                backoff_strategy: ora::proto::jobs::v1::BackoffStrategy::from(
+                                    retry_backoff_strategy,
+                                ) as _,
+                                backoff_duration: retry_backoff
+                                    .map(TryInto::try_into)
+                                    .transpose()?,
+                                max_backoff_duration: retry_max_backoff
+                                    .map(TryInto::try_into)
+                                    .transpose()?,
                             }),
                         }),
                         scheduling: if let Some(interval) = repeat_interval {

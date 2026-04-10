@@ -97,6 +97,23 @@ pub struct RetryPolicy {
     /// If the number of retries is zero, the job is not retried.
     #[prost(uint64, tag = "1")]
     pub retries: u64,
+    /// The backoff duration between retries.
+    ///
+    /// By default, the backoff duration is zero,
+    /// which means that the job is retried immediately after a failure.
+    #[prost(message, optional, tag = "2")]
+    pub backoff_duration: ::core::option::Option<::prost_types::Duration>,
+    /// The maximum backoff duration between retries.
+    ///
+    /// If the backoff duration is greater than the maximum backoff duration,
+    /// the backoff duration is capped at the maximum backoff duration.
+    ///
+    /// This option is only applicable when the backoff strategy is exponential.
+    #[prost(message, optional, tag = "3")]
+    pub max_backoff_duration: ::core::option::Option<::prost_types::Duration>,
+    /// The backoff strategy for retries.
+    #[prost(enumeration = "BackoffStrategy", tag = "4")]
+    pub backoff_strategy: i32,
 }
 impl ::prost::Name for RetryPolicy {
     const NAME: &'static str = "RetryPolicy";
@@ -143,6 +160,39 @@ impl TimeoutBaseTime {
             "TIMEOUT_BASE_TIME_UNSPECIFIED" => Some(Self::Unspecified),
             "TIMEOUT_BASE_TIME_TARGET_EXECUTION_TIME" => Some(Self::TargetExecutionTime),
             "TIMEOUT_BASE_TIME_START_TIME" => Some(Self::StartTime),
+            _ => None,
+        }
+    }
+}
+/// The backoff strategy for retries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum BackoffStrategy {
+    /// The backoff strategy is unspecified and depends on the implementation.
+    Unspecified = 0,
+    /// The backoff strategy is fixed, which means that the backoff duration is constant between retries.
+    Fixed = 1,
+    /// The backoff strategy is exponential, which means that the backoff duration increases exponentially between retries.
+    Exponential = 2,
+}
+impl BackoffStrategy {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "BACKOFF_STRATEGY_UNSPECIFIED",
+            Self::Fixed => "BACKOFF_STRATEGY_FIXED",
+            Self::Exponential => "BACKOFF_STRATEGY_EXPONENTIAL",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "BACKOFF_STRATEGY_UNSPECIFIED" => Some(Self::Unspecified),
+            "BACKOFF_STRATEGY_FIXED" => Some(Self::Fixed),
+            "BACKOFF_STRATEGY_EXPONENTIAL" => Some(Self::Exponential),
             _ => None,
         }
     }

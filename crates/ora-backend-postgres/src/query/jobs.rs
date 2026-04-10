@@ -277,7 +277,8 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
                 output_json,
                 failure_reason,
                 status,
-                executor_id
+                executor_id,
+                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
             FROM
                 ora.execution
             WHERE
@@ -309,6 +310,7 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
             failure_reason: row.try_get(8)?,
             status: PgExecutionStatus::from(row.try_get::<_, i16>(9)?).into(),
             executor_id: row.try_get::<_, Option<Uuid>>(10)?.map(ExecutorId),
+            target_execution_time: systemtime_from_ts(row.try_get(11)?),
         });
     }
 

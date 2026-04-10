@@ -7,8 +7,8 @@ use futures::Stream;
 use crate::{
     common::NextPageToken,
     executions::{
-        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, StartedExecution,
-        SucceededExecution,
+        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, RetriedExecution,
+        StartedExecution, SucceededExecution,
     },
     jobs::{AddedJobs, CancelledJob, JobDetails, JobFilters, JobOrderBy, JobType, NewJob},
     schedules::{
@@ -161,7 +161,7 @@ pub trait Backend: Send + Sync + 'static {
     /// For each job, a new execution must be created.
     fn executions_retried(
         &self,
-        executions: &[FailedExecution],
+        executions: &[RetriedExecution],
     ) -> impl Future<Output = Result<(), Self::Error>> + Send;
 
     /// Return a stream of active schedules that do not have

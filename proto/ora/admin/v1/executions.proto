@@ -26,6 +26,12 @@ message Execution {
   optional string output_json = 9;
   // The error message if the execution failed or was cancelled.
   optional string failure_reason = 10;
+  // The target time of this execution.
+  //
+  // This is might differ from the job's target execution time
+  // in cases such as when an execution is created as part of
+  // a retry of a failed execution.
+  google.protobuf.Timestamp target_execution_time = 11;
 }
 
 // Status of a job execution.

@@ -81,6 +81,13 @@ pub struct Execution {
     /// The error message if the execution failed or was cancelled.
     #[prost(string, optional, tag = "10")]
     pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
+    /// The target time of this execution.
+    ///
+    /// This is might differ from the job's target execution time
+    /// in cases such as when an execution is created as part of
+    /// a retry of a failed execution.
+    #[prost(message, optional, tag = "11")]
+    pub target_execution_time: ::core::option::Option<::prost_types::Timestamp>,
 }
 impl ::prost::Name for Execution {
     const NAME: &'static str = "Execution";

@@ -4,7 +4,7 @@ use std::{pin::pin, sync::Arc, time::SystemTime};
 
 use ora_backend::{
     Backend,
-    executions::{FailedExecution, SucceededExecution},
+    executions::{FailedExecution, RetriedExecution, SucceededExecution},
     jobs::{RetryPolicy, TimeoutBaseTime},
 };
 use wgroup::WaitGuard;
@@ -326,13 +326,48 @@ where
 
     for execution in executions {
         if execution.attempt_number <= execution.retry_policy.retries {
+            let backoff_duration = if execution.retry_policy.backoff_duration.is_zero() {
+                execution.retry_policy.backoff_duration
+            } else {
+                match execution.retry_policy.backoff_strategy {
+                    ora_backend::jobs::BackoffStrategy::Fixed => {
+                        execution.retry_policy.backoff_duration
+                    }
+                    ora_backend::jobs::BackoffStrategy::Exponential => {
+                        let backoff_multiplier = 2u32
+                            .checked_pow(u32::try_from(execution.attempt_number).unwrap_or(2) - 1)
+                            .unwrap_or(u32::MAX);
+
+                        let mut final_backoff_duration = execution
+                            .retry_policy
+                            .backoff_duration
+                            .checked_mul(backoff_multiplier)
+                            .unwrap_or(std::time::Duration::from_secs(u64::MAX));
+
+                        if let Some(max_backoff) = execution.retry_policy.max_backoff_duration
+                            && final_backoff_duration > max_backoff
+                        {
+                            final_backoff_duration = max_backoff;
+                        }
+
+                        final_backoff_duration
+                    }
+                }
+            };
+
             tracing::info!(
                 execution_id = %execution.execution.execution_id,
                 attempt_number = execution.attempt_number,
+                backoff_duration = ?backoff_duration,
                 "retrying execution"
             );
 
-            retried_executions.push(execution.execution);
+            retried_executions.push(RetriedExecution {
+                failed_execution: execution.execution,
+                retry_execution_time: SystemTime::now()
+                    .checked_add(backoff_duration)
+                    .unwrap_or(SystemTime::UNIX_EPOCH),
+            });
         } else {
             tracing::debug!(
                 execution_id = %execution.execution.execution_id,
@@ -355,14 +390,9 @@ where
         }
     }
 
-    if !retried_executions.is_empty() {
-        if let Err(error) = backend.executions_retried(&retried_executions).await {
-            tracing::error!(%error, "error updating retried executions");
-        } else {
-            tracing::info!(
-                count = retried_executions.len(),
-                "retrying executions due to executor disconnection"
-            );
-        }
+    if !retried_executions.is_empty()
+        && let Err(error) = backend.executions_retried(&retried_executions).await
+    {
+        tracing::error!(%error, "error updating retried executions");
     }
 }

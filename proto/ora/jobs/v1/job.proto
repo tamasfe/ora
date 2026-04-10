@@ -76,4 +76,28 @@ message RetryPolicy {
   //
   // If the number of retries is zero, the job is not retried.
   uint64 retries = 1;
+  // The backoff duration between retries.
+  //
+  // By default, the backoff duration is zero,
+  // which means that the job is retried immediately after a failure.
+  google.protobuf.Duration backoff_duration = 2;
+  // The maximum backoff duration between retries.
+  //
+  // If the backoff duration is greater than the maximum backoff duration,
+  // the backoff duration is capped at the maximum backoff duration.
+  //
+  // This option is only applicable when the backoff strategy is exponential.
+  optional google.protobuf.Duration max_backoff_duration = 3;
+  // The backoff strategy for retries.
+  BackoffStrategy backoff_strategy = 4;
+}
+
+// The backoff strategy for retries.
+enum BackoffStrategy {
+  // The backoff strategy is unspecified and depends on the implementation.
+  BACKOFF_STRATEGY_UNSPECIFIED = 0;
+  // The backoff strategy is fixed, which means that the backoff duration is constant between retries.
+  BACKOFF_STRATEGY_FIXED = 1;
+  // The backoff strategy is exponential, which means that the backoff duration increases exponentially between retries.
+  BACKOFF_STRATEGY_EXPONENTIAL = 2;
 }

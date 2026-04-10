@@ -78,6 +78,32 @@ pub(crate) enum Jobs {
         /// Set how many times the job can be retries.
         #[arg(long, visible_aliases = ["retry"])]
         retries: Option<u64>,
+        /// Backoff duration for replies.
+        ///
+        /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
+        #[arg(
+            long = "retry-backoff",
+            visible_aliases= ["backoff"],
+            conflicts_with = "cron_expression"
+        )]
+        retry_backoff: Option<String>,
+        /// The maximum backoff duration for retries.
+        ///
+        /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
+        /// Only applicable if `--retry-backoff-strategy` is set.
+        #[arg(
+            long = "retry-max-backoff",
+            visible_aliases= ["max-backoff"],
+            requires = "retry_backoff"
+        )]
+        retry_max_backoff: Option<String>,
+        /// The backoff strategy to use for retries.
+        #[arg(
+            long = "retry-backoff-strategy",
+            visible_aliases = ["backoff-strategy"],
+            default_value_t = BackoffStrategy::Fixed
+        )]
+        retry_backoff_strategy: BackoffStrategy,
         /// Set the timeout of the job in
         /// a human-readable format, e.g., `30s`, `5m`, `1h`.
         #[arg(long)]
@@ -394,6 +420,34 @@ impl From<ExecutionStatus> for JobStatus {
     }
 }
 
+/// The backoff strategy for retries.
+#[derive(ValueEnum, Clone)]
+pub(crate) enum BackoffStrategy {
+    /// Exponential backoff strategy.
+    Exponential,
+    /// Fixed backoff strategy.
+    Fixed,
+}
+
+impl core::fmt::Display for BackoffStrategy {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = match self {
+            BackoffStrategy::Exponential => "exponential",
+            BackoffStrategy::Fixed => "fixed",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl From<BackoffStrategy> for ora::proto::jobs::v1::BackoffStrategy {
+    fn from(strategy: BackoffStrategy) -> Self {
+        match strategy {
+            BackoffStrategy::Exponential => ora::proto::jobs::v1::BackoffStrategy::Exponential as _,
+            BackoffStrategy::Fixed => ora::proto::jobs::v1::BackoffStrategy::Fixed as _,
+        }
+    }
+}
+
 /// The order in which jobs are listed.
 #[derive(ValueEnum, Clone)]
 pub(crate) enum JobOrder {
@@ -457,6 +511,9 @@ impl Jobs {
                 retries,
                 timeout,
                 wait,
+                retry_backoff,
+                retry_backoff_strategy,
+                retry_max_backoff,
             } => {
                 let job_type_id = JobTypeId::new(job_type_id).wrap_err("invalid job type ID")?;
 
@@ -579,6 +636,24 @@ impl Jobs {
                     Timestamp::now()
                 };
 
+                let retry_backoff = if let Some(backoff) = retry_backoff {
+                    Some(
+                        humantime::parse_duration(&backoff)
+                            .wrap_err("invalid retry backoff duration")?,
+                    )
+                } else {
+                    None
+                };
+
+                let retry_max_backoff = if let Some(max_backoff) = retry_max_backoff {
+                    Some(
+                        humantime::parse_duration(&max_backoff)
+                            .wrap_err("invalid retry max backoff duration")?,
+                    )
+                } else {
+                    None
+                };
+
                 let mut job = client
                     .add_jobs([ora::proto::jobs::v1::Job {
                         job_type_id: job_type_id.clone().into_inner().into(),
@@ -610,6 +685,13 @@ impl Jobs {
                         }),
                         retry_policy: Some(RetryPolicy {
                             retries: retries.unwrap_or(0),
+                            backoff_strategy: ora::proto::jobs::v1::BackoffStrategy::from(
+                                retry_backoff_strategy,
+                            ) as _,
+                            backoff_duration: retry_backoff.map(TryInto::try_into).transpose()?,
+                            max_backoff_duration: retry_max_backoff
+                                .map(TryInto::try_into)
+                                .transpose()?,
                         }),
                     }])
                     .await?

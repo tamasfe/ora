@@ -57,6 +57,11 @@ pub struct ExecutionDetails {
     pub output_json: Option<String>,
     /// The error message if the execution failed or was cancelled.
     pub failure_reason: Option<String>,
+    /// The target execution time for the execution.
+    ///
+    /// This might differ from the job's target execution time
+    /// if the execution was created as a retry of a failed execution.
+    pub target_execution_time: SystemTime,
 }
 
 /// The status of an execution.
@@ -125,6 +130,14 @@ pub struct FailedExecution {
     pub failed_at: SystemTime,
     /// The error message for the failure.
     pub failure_reason: String,
+}
+
+/// A failed execution that needs to be retried.
+pub struct RetriedExecution {
+    /// The failed execution.
+    pub failed_execution: FailedExecution,
+    /// The target execution time for the retry.
+    pub retry_execution_time: SystemTime,
 }
 
 /// An execution that is currently in progress.

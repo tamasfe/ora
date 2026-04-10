@@ -3,7 +3,7 @@
 
 use std::{
     pin::pin,
-    time::{Duration, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use futures::TryStreamExt;
@@ -12,7 +12,9 @@ use uuid::Uuid;
 use crate::{
     Backend,
     common::{Label, TimeRange},
-    executions::{ExecutionStatus, FailedExecution, StartedExecution, SucceededExecution},
+    executions::{
+        ExecutionStatus, FailedExecution, RetriedExecution, StartedExecution, SucceededExecution,
+    },
     jobs::{JobDefinition, JobFilters, JobTypeId, NewJob, RetryPolicy, TimeoutPolicy},
     schedules::{MissedTimePolicy, SchedulingPolicy},
 };
@@ -39,7 +41,10 @@ async fn job_execution(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         },
         JobDefinition {
             job_type_id: JobTypeId::new("DoSomething2").unwrap(),
@@ -60,7 +65,10 @@ async fn job_execution(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::TargetExecutionTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         },
     ]
     .to_vec();
@@ -159,11 +167,14 @@ async fn job_execution(backend: &impl Backend) {
     assert_eq!(in_progress_executions[0].execution_id, exec2.execution_id);
 
     backend
-        .executions_retried(&[FailedExecution {
-            execution_id: exec2.execution_id,
-            job_id: exec2.job_id,
-            failed_at: std::time::SystemTime::now(),
-            failure_reason: "Temporary failure".to_string(),
+        .executions_retried(&[RetriedExecution {
+            failed_execution: FailedExecution {
+                execution_id: exec2.execution_id,
+                job_id: exec2.job_id,
+                failed_at: std::time::SystemTime::now(),
+                failure_reason: "Temporary failure".to_string(),
+            },
+            retry_execution_time: SystemTime::now(),
         }])
         .await
         .unwrap();
@@ -205,7 +216,10 @@ async fn job_cancellation(backend: &impl Backend) {
             timeout: Duration::from_secs(20),
             base_time: crate::jobs::TimeoutBaseTime::StartTime,
         },
-        retry_policy: RetryPolicy { retries: 0 },
+        retry_policy: RetryPolicy {
+            retries: 0,
+            ..Default::default()
+        },
     }]
     .to_vec();
     let result = backend
@@ -291,7 +305,10 @@ pub async fn job_queries(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         },
         JobDefinition {
             job_type_id: JobTypeId::new("QueryJob2").unwrap(),
@@ -306,7 +323,10 @@ pub async fn job_queries(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         },
         JobDefinition {
             job_type_id: JobTypeId::new("QueryJob2").unwrap(),
@@ -327,7 +347,10 @@ pub async fn job_queries(backend: &impl Backend) {
                 timeout: Duration::from_secs(30),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 1 },
+            retry_policy: RetryPolicy {
+                retries: 1,
+                ..Default::default()
+            },
         },
     ]
     .to_vec();
@@ -459,7 +482,10 @@ pub async fn pagination_and_ordering(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         })
         .collect::<Vec<_>>();
     let result = backend
@@ -593,7 +619,10 @@ pub async fn schedules(backend: &impl Backend) {
                 timeout: Duration::from_secs(20),
                 base_time: crate::jobs::TimeoutBaseTime::StartTime,
             },
-            retry_policy: RetryPolicy { retries: 0 },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
         },
         scheduling: SchedulingPolicy::FixedInterval {
             interval: Duration::from_secs(1),

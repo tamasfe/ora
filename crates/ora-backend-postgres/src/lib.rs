@@ -9,8 +9,8 @@ use ora_backend::{
     Backend,
     common::{NextPageToken, TimeRange},
     executions::{
-        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, StartedExecution,
-        SucceededExecution,
+        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, RetriedExecution,
+        StartedExecution, SucceededExecution,
     },
     executors::ExecutorId,
     jobs::{
@@ -231,6 +231,7 @@ impl Backend for PostgresBackend {
 
         let mut col_id = Vec::with_capacity(jobs.len());
         let mut col_schedule_id = Vec::with_capacity(jobs.len());
+        let mut new_executions = Vec::with_capacity(jobs.len());
 
         {
             let mut col_job_type_id = Vec::with_capacity(jobs.len());
@@ -247,6 +248,11 @@ impl Backend for PostgresBackend {
                 col_timeout_policy_json.push(serde_json::to_string(&job.job.timeout_policy)?);
                 col_retry_policy_json.push(serde_json::to_string(&job.job.retry_policy)?);
                 col_schedule_id.push(job.schedule_id.map(|s| s.0));
+
+                new_executions.push(NewExecution {
+                    job_id: JobId(col_id.last().copied().unwrap()),
+                    target_execution_time: job.job.target_execution_time,
+                });
             }
 
             let stmt = tx
@@ -344,12 +350,13 @@ impl Backend for PostgresBackend {
             tx.execute(&stmt, &[&col_id, &col_schedule_id]).await?;
         }
 
-        let job_ids = col_id.into_iter().map(Into::into).collect::<Vec<_>>();
-        add_executions(&tx, &job_ids).await?;
+        add_executions(&tx, &new_executions).await?;
 
         tx.commit().await?;
 
-        Ok(AddedJobs::Added(job_ids))
+        Ok(AddedJobs::Added(
+            col_id.into_iter().map(Into::into).collect::<Vec<_>>(),
+        ))
     }
 
     async fn list_jobs(
@@ -585,14 +592,14 @@ impl Backend for PostgresBackend {
                                 ora.job.input_payload_json,
                                 (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
                                 ora.job.retry_policy_json,
-                                EXTRACT(EPOCH FROM ora.job.target_execution_time)::DOUBLE PRECISION
+                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
                             FROM
                                 ora.execution
                             JOIN ora.job ON
                                 ora.execution.job_id = ora.job.id
                             WHERE
                                 status = 0
-                                AND ora.job.target_execution_time <= NOW()
+                                AND ora.execution.target_execution_time <= NOW()
                                 AND ora.execution.id > $1::UUID
                             ORDER BY
                                 ora.execution.id ASC
@@ -613,14 +620,14 @@ impl Backend for PostgresBackend {
                                 ora.job.input_payload_json,
                                 (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
                                 ora.job.retry_policy_json,
-                                EXTRACT(EPOCH FROM ora.job.target_execution_time)::DOUBLE PRECISION
+                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
                             FROM
                                 ora.execution
                             JOIN ora.job ON
                                 ora.execution.job_id = ora.job.id
                             WHERE
                                 status = 0
-                                AND ora.job.target_execution_time <= NOW()
+                                AND ora.execution.target_execution_time <= NOW()
                             ORDER BY
                                 ora.execution.id ASC
                             LIMIT 1000
@@ -673,14 +680,12 @@ impl Backend for PostgresBackend {
                         SELECT
                             EXTRACT(EPOCH FROM target_execution_time)::DOUBLE PRECISION
                         FROM
-                            ora.job
-                        JOIN ora.execution ON
-                            ora.execution.job_id = ora.job.id
+                            ora.execution
                         WHERE
                             ora.execution.status = 0
                             AND NOT (ora.execution.id = ANY($1::UUID[]))
                         ORDER BY
-                            ora.job.target_execution_time ASC
+                            ora.execution.target_execution_time ASC
                         LIMIT 1
                         "#,
                     )
@@ -942,7 +947,7 @@ impl Backend for PostgresBackend {
         Ok(())
     }
 
-    async fn executions_retried(&self, executions: &[FailedExecution]) -> Result<()> {
+    async fn executions_retried(&self, executions: &[RetriedExecution]) -> Result<()> {
         if executions.is_empty() {
             return Ok(());
         }
@@ -950,12 +955,32 @@ impl Backend for PostgresBackend {
         let mut conn = self.pool.get().await?;
         let tx = conn.transaction().await?;
 
-        let jobs = executions_failed(&tx, executions).await?;
-        add_executions(
-            &tx,
-            &jobs.into_iter().map(|(id, ..)| id).collect::<Vec<_>>(),
-        )
-        .await?;
+        let mut failed_executions = Vec::with_capacity(executions.len());
+        let mut new_executions = Vec::with_capacity(executions.len());
+
+        for execution in executions {
+            failed_executions.push(FailedExecution {
+                execution_id: execution.failed_execution.execution_id,
+                job_id: execution.failed_execution.job_id,
+                failed_at: execution.failed_execution.failed_at,
+                failure_reason: execution.failed_execution.failure_reason.clone(),
+            });
+
+            new_executions.push(NewExecution {
+                job_id: execution.failed_execution.job_id,
+                target_execution_time: execution.retry_execution_time,
+            });
+        }
+
+        let jobs_active = executions_failed(&tx, &failed_executions).await?;
+
+        // Just an additional check against race conditions,
+        // we must only retry jobs that are still active according to the db state.
+        new_executions.retain(|n| jobs_active.iter().any(|(j, _)| j == &n.job_id));
+
+        if !new_executions.is_empty() {
+            add_executions(&tx, &new_executions).await?;
+        }
 
         tx.commit().await?;
 
@@ -1261,17 +1286,28 @@ async fn executions_failed(
     Ok(jobs)
 }
 
-async fn add_executions(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()> {
-    if jobs.is_empty() {
+struct NewExecution {
+    job_id: JobId,
+    target_execution_time: SystemTime,
+}
+
+async fn add_executions(tx: &DbTransaction<'_>, executions: &[NewExecution]) -> Result<()> {
+    if executions.is_empty() {
         return Ok(());
     }
 
-    let mut col_job_id = Vec::with_capacity(jobs.len());
-    let mut col_execution_id = Vec::with_capacity(jobs.len());
+    let mut col_execution_id = Vec::with_capacity(executions.len());
+    let mut col_job_id = Vec::with_capacity(executions.len());
+    let mut col_target_execution_time = Vec::with_capacity(executions.len());
 
-    for job in jobs {
-        col_job_id.push(job.0);
+    for NewExecution {
+        job_id,
+        target_execution_time,
+    } in executions
+    {
         col_execution_id.push(Uuid::now_v7());
+        col_job_id.push(job_id.0);
+        col_target_execution_time.push(systemtime_to_ts(*target_execution_time));
     }
 
     let stmt = tx
@@ -1279,16 +1315,26 @@ async fn add_executions(tx: &DbTransaction<'_>, jobs: &[JobId]) -> Result<()> {
             r#"--sql
             INSERT INTO ora.execution (
                 id,
-                job_id
-            ) SELECT * FROM UNNEST(
+                job_id,
+                target_execution_time
+            ) SELECT 
+                execution_id,
+                job_id,
+                to_timestamp(target_execution_time)
+             FROM UNNEST(
                 $1::UUID[],
-                $2::UUID[]
-            )
+                $2::UUID[],
+                $3::DOUBLE PRECISION[]
+            ) as t(execution_id, job_id, target_execution_time)
             "#,
         )
         .await?;
 
-    tx.execute(&stmt, &[&col_execution_id, &col_job_id]).await?;
+    tx.execute(
+        &stmt,
+        &[&col_execution_id, &col_job_id, &col_target_execution_time],
+    )
+    .await?;
 
     Ok(())
 }

@@ -198,12 +198,39 @@ pub enum TimeoutBaseTime {
 }
 
 /// Retry policy for a job.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RetryPolicy {
     /// The maximum number of retries.
     ///
     /// If zero, the job will not be retried.
     pub retries: u64,
+    /// The backoff duration between retries.
+    ///
+    /// By default, the backoff duration is zero, which means that the job will be
+    /// retried immediately after a failure.
+    #[serde(default)]
+    pub backoff_duration: Duration,
+    /// The maximum backoff duration between retries.
+    ///
+    /// If the backoff duration is greater than the maximum backoff duration,
+    /// the backoff duration is capped at the maximum backoff duration.
+    #[serde(default)]
+    pub max_backoff_duration: Option<Duration>,
+    /// The backoff strategy for retries.
+    #[serde(default)]
+    pub backoff_strategy: BackoffStrategy,
+}
+
+/// The backoff strategy for retries.
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub enum BackoffStrategy {
+    /// The backoff strategy is linear,
+    /// which means that the backoff duration is constant between retries.
+    #[default]
+    Fixed,
+    /// The backoff strategy is exponential,
+    /// which means that the backoff duration increases exponentially between retries.
+    Exponential,
 }
 
 /// Filters for querying jobs.

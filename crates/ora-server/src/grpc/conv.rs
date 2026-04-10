@@ -334,6 +334,15 @@ impl From<proto::jobs::v1::RetryPolicy> for ora_backend::jobs::RetryPolicy {
     fn from(value: proto::jobs::v1::RetryPolicy) -> Self {
         Self {
             retries: value.retries,
+            backoff_duration: value
+                .backoff_duration
+                .unwrap_or_default()
+                .try_into()
+                .unwrap_or_default(),
+            max_backoff_duration: value
+                .max_backoff_duration
+                .map(|d| d.try_into().unwrap_or_default()),
+            backoff_strategy: value.backoff_strategy().into(),
         }
     }
 }
@@ -342,6 +351,36 @@ impl From<ora_backend::jobs::RetryPolicy> for proto::jobs::v1::RetryPolicy {
     fn from(value: ora_backend::jobs::RetryPolicy) -> Self {
         Self {
             retries: value.retries,
+            backoff_duration: Some(
+                prost_types::Duration::try_from(value.backoff_duration).unwrap_or_default(),
+            ),
+            max_backoff_duration: value
+                .max_backoff_duration
+                .map(|d| prost_types::Duration::try_from(d).unwrap_or_default()),
+            backoff_strategy: proto::jobs::v1::BackoffStrategy::from(value.backoff_strategy).into(),
+        }
+    }
+}
+
+impl From<proto::jobs::v1::BackoffStrategy> for ora_backend::jobs::BackoffStrategy {
+    fn from(value: proto::jobs::v1::BackoffStrategy) -> Self {
+        match value {
+            proto::jobs::v1::BackoffStrategy::Unspecified
+            | proto::jobs::v1::BackoffStrategy::Fixed => ora_backend::jobs::BackoffStrategy::Fixed,
+            proto::jobs::v1::BackoffStrategy::Exponential => {
+                ora_backend::jobs::BackoffStrategy::Exponential
+            }
+        }
+    }
+}
+
+impl From<ora_backend::jobs::BackoffStrategy> for proto::jobs::v1::BackoffStrategy {
+    fn from(value: ora_backend::jobs::BackoffStrategy) -> Self {
+        match value {
+            ora_backend::jobs::BackoffStrategy::Fixed => proto::jobs::v1::BackoffStrategy::Fixed,
+            ora_backend::jobs::BackoffStrategy::Exponential => {
+                proto::jobs::v1::BackoffStrategy::Exponential
+            }
         }
     }
 }
@@ -404,6 +443,7 @@ impl From<ora_backend::executions::ExecutionDetails> for proto::admin::v1::Execu
             cancelled_at: value.cancelled_at.map(Into::into),
             output_json: value.output_json,
             failure_reason: value.failure_reason,
+            target_execution_time: Some(value.target_execution_time.into()),
         }
     }
 }

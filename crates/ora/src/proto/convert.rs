@@ -3,7 +3,7 @@ use crate::{
     admin::{jobs::JobFilters, schedules::ScheduleFilters},
     common::LabelFilter,
     execution::ExecutionStatus,
-    job::{RetryPolicy, TimeoutPolicy},
+    job::{BackoffStrategy, RetryPolicy, TimeoutPolicy},
     proto::{self, common::v1::TimeRange},
     schedule::SchedulingPolicy,
 };
@@ -161,6 +161,9 @@ impl From<RetryPolicy> for proto::jobs::v1::RetryPolicy {
     fn from(value: RetryPolicy) -> Self {
         Self {
             retries: value.retries,
+            backoff_duration: value.backoff_duration.try_into().ok(),
+            max_backoff_duration: value.max_backoff_duration.and_then(|d| d.try_into().ok()),
+            backoff_strategy: proto::jobs::v1::BackoffStrategy::from(value.backoff_strategy) as _,
         }
     }
 }
@@ -169,6 +172,31 @@ impl From<proto::jobs::v1::RetryPolicy> for RetryPolicy {
     fn from(value: proto::jobs::v1::RetryPolicy) -> Self {
         Self {
             retries: value.retries,
+            backoff_duration: value
+                .backoff_duration
+                .and_then(|d| d.try_into().ok())
+                .unwrap_or_default(),
+            max_backoff_duration: value.max_backoff_duration.and_then(|d| d.try_into().ok()),
+            backoff_strategy: BackoffStrategy::from(value.backoff_strategy()),
+        }
+    }
+}
+
+impl From<BackoffStrategy> for proto::jobs::v1::BackoffStrategy {
+    fn from(value: BackoffStrategy) -> Self {
+        match value {
+            BackoffStrategy::Fixed => proto::jobs::v1::BackoffStrategy::Fixed,
+            BackoffStrategy::Exponential => proto::jobs::v1::BackoffStrategy::Exponential,
+        }
+    }
+}
+
+impl From<proto::jobs::v1::BackoffStrategy> for BackoffStrategy {
+    fn from(value: proto::jobs::v1::BackoffStrategy) -> Self {
+        match value {
+            proto::jobs::v1::BackoffStrategy::Unspecified
+            | proto::jobs::v1::BackoffStrategy::Fixed => BackoffStrategy::Fixed,
+            proto::jobs::v1::BackoffStrategy::Exponential => BackoffStrategy::Exponential,
         }
     }
 }
