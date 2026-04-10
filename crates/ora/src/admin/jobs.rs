@@ -545,6 +545,17 @@ impl<J> Job<J> {
             .collect::<Result<Vec<_>, eyre::Report>>()?)
     }
 
+    /// Whether the job has terminated.
+    pub async fn is_terminated(&mut self) -> crate::Result<bool> {
+        let exc = self.executions().await?;
+
+        let Some(last_execution) = exc.last() else {
+            return Ok(false);
+        };
+
+        Ok(last_execution.status().is_terminal())
+    }
+
     /// Wait for the job to terminate.
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn terminated(&mut self) -> crate::Result<()> {
@@ -558,6 +569,29 @@ impl<J> Job<J> {
             if last_execution.status().is_terminal() {
                 return Ok(());
             }
+
+            tokio::time::sleep(self.client.poll_interval).await;
+        }
+    }
+
+    /// Wait for a change in any of the executions of the job.
+    ///
+    /// This will also return if no more execution changes are expected,
+    /// i.e. if the last execution has reached a terminal state.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn executions_changed(&mut self) -> crate::Result<()> {
+        let mut last_execution = self.executions().await?.last().cloned();
+
+        loop {
+            let new_executions = self.executions().await?;
+
+            let new_last_execution = new_executions.last();
+
+            if new_last_execution != last_execution.as_ref() {
+                return Ok(());
+            }
+
+            last_execution = new_last_execution.cloned();
 
             tokio::time::sleep(self.client.poll_interval).await;
         }
@@ -823,6 +857,42 @@ pub struct Execution<J> {
     output_json: Option<String>,
     failure_reason: Option<String>,
     _job_type: PhantomData<J>,
+}
+
+impl<J> PartialEq for Execution<J> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.executor_id == other.executor_id
+            && self.status == other.status
+            && self.created_at == other.created_at
+            && self.started_at == other.started_at
+            && self.succeeded_at == other.succeeded_at
+            && self.failed_at == other.failed_at
+            && self.cancelled_at == other.cancelled_at
+            && self.output_json == other.output_json
+            && self.failure_reason == other.failure_reason
+            && self._job_type == other._job_type
+    }
+}
+
+impl<J> Eq for Execution<J> {}
+
+impl<J> Clone for Execution<J> {
+    fn clone(&self) -> Self {
+        Self {
+            id: self.id,
+            executor_id: self.executor_id,
+            status: self.status,
+            created_at: self.created_at,
+            started_at: self.started_at,
+            succeeded_at: self.succeeded_at,
+            failed_at: self.failed_at,
+            cancelled_at: self.cancelled_at,
+            output_json: self.output_json.clone(),
+            failure_reason: self.failure_reason.clone(),
+            _job_type: PhantomData,
+        }
+    }
 }
 
 impl<J> Execution<J> {

@@ -9,7 +9,7 @@ use clap_complete::ArgValueCompleter;
 use comfy_table::{Table, presets};
 use eyre::{Context, OptionExt};
 use futures::TryStreamExt;
-use jiff::{Timestamp, civil::Time};
+use jiff::{Timestamp, civil::Time, tz::TimeZone};
 use ora::{
     AdminClient, JobFilters, JobTypeId,
     common::{LabelFilter, TimeRange},
@@ -448,6 +448,15 @@ impl From<BackoffStrategy> for ora::proto::jobs::v1::BackoffStrategy {
     }
 }
 
+impl From<ora::proto::jobs::v1::BackoffStrategy> for BackoffStrategy {
+    fn from(strategy: ora::proto::jobs::v1::BackoffStrategy) -> Self {
+        match strategy {
+            ora::proto::jobs::v1::BackoffStrategy::Exponential => BackoffStrategy::Exponential,
+            _ => BackoffStrategy::Fixed, // Default to Fixed for unrecognized values
+        }
+    }
+}
+
 /// The order in which jobs are listed.
 #[derive(ValueEnum, Clone)]
 pub(crate) enum JobOrder {
@@ -699,6 +708,37 @@ impl Jobs {
                     .ok_or_eyre("failed to add job")?;
 
                 if wait {
+                    tracing::info!("waiting for job...");
+                    loop {
+                        job.executions_changed().await?;
+
+                        list_jobs(
+                            &client,
+                            JobOrder::CreatedDesc,
+                            1,
+                            JobFilters {
+                                job_ids: Some(vec![job.id()]),
+                                ..Default::default()
+                            },
+                        )
+                        .await?;
+
+                        if job.is_terminated().await? {
+                            break;
+                        }
+                    }
+
+                    let last_exec = job.executions().await?.pop().unwrap();
+
+                    if let Some(output) = last_exec.output_json() {
+                        println!("{output}");
+                    } else if let Some(reason) = last_exec.failure_reason() {
+                        println!("{reason}");
+                        std::process::exit(1);
+                    } else {
+                        std::process::exit(1);
+                    }
+                } else {
                     list_jobs(
                         &client,
                         JobOrder::CreatedDesc,
@@ -709,21 +749,7 @@ impl Jobs {
                         },
                     )
                     .await?;
-
-                    tracing::info!("waiting for job...");
-                    job.terminated().await?;
                 }
-
-                list_jobs(
-                    &client,
-                    JobOrder::CreatedDesc,
-                    1,
-                    JobFilters {
-                        job_ids: Some(vec![job.id()]),
-                        ..Default::default()
-                    },
-                )
-                .await?;
 
                 Ok(())
             }
@@ -742,18 +768,35 @@ impl Jobs {
                 let mut job = stream.try_next().await?.ok_or_eyre("job not found")?;
 
                 tracing::info!("waiting for job...");
-                job.terminated().await?;
+                loop {
+                    job.executions_changed().await?;
 
-                list_jobs(
-                    &client,
-                    JobOrder::CreatedDesc,
-                    1,
-                    JobFilters {
-                        job_ids: Some(vec![job.id()]),
-                        ..Default::default()
-                    },
-                )
-                .await?;
+                    list_jobs(
+                        &client,
+                        JobOrder::CreatedDesc,
+                        1,
+                        JobFilters {
+                            job_ids: Some(vec![job.id()]),
+                            ..Default::default()
+                        },
+                    )
+                    .await?;
+
+                    if job.is_terminated().await? {
+                        break;
+                    }
+                }
+
+                let last_exec = job.executions().await?.pop().unwrap();
+
+                if let Some(output) = last_exec.output_json() {
+                    println!("{output}");
+                } else if let Some(reason) = last_exec.failure_reason() {
+                    println!("{reason}");
+                    std::process::exit(1);
+                } else {
+                    std::process::exit(1);
+                }
 
                 Ok(())
             }
@@ -848,7 +891,7 @@ async fn list_jobs(
     let mut stream = pin!(client.list_jobs(filters, order.into(), Some(limit)));
     let mut table = Table::new();
     table.load_preset(presets::UTF8_FULL);
-    table.set_header(["Type", "Target", "Status", "Labels", "ID"]);
+    table.set_header(["Type", "Target", "Status", "Labels", "Retries", "Misc"]);
     while let Some(mut job) = stream.try_next().await? {
         let last_exec = job.executions().await?.pop().unwrap();
         let raw = job.raw().await?;
@@ -872,15 +915,65 @@ async fn list_jobs(
             write!(&mut status, " ({})", humantime::format_duration(dur)).unwrap();
         }
 
+        let raw_retry_policy = raw_def.retry_policy.unwrap_or_default();
+
+        let job_attempt_count = raw.executions.len().saturating_sub(1) as u64;
+
+        let mut retries = String::new();
+
+        if raw_retry_policy.retries > 0 {
+            writeln!(
+                &mut retries,
+                "{}/{}\n",
+                job_attempt_count, raw_retry_policy.retries
+            )
+            .unwrap();
+
+            writeln!(
+                &mut retries,
+                "backoff: {}",
+                raw_retry_policy
+                    .backoff_duration
+                    .map(
+                        |d| humantime::format_duration(d.try_into().unwrap_or_default())
+                            .to_string()
+                    )
+                    .unwrap_or_else(|| "none".to_string())
+            )
+            .unwrap();
+
+            write!(
+                &mut retries,
+                "{}",
+                BackoffStrategy::from(raw_retry_policy.backoff_strategy())
+            )
+            .unwrap();
+        } else {
+            retries.push('-');
+        }
+
+        let mut misc = String::new();
+        misc.push_str("ID:\n");
+        writeln!(&mut misc, " {}", job.id()).unwrap();
+
+        misc.push_str("schedule ID:\n");
+        if let Some(schedule_id) = raw.schedule_id {
+            writeln!(&mut misc, " {schedule_id}").unwrap();
+        } else {
+            misc.push_str(" -");
+        }
+
         table.add_row([
             raw_def.job_type_id,
             Timestamp::try_from(SystemTime::try_from(
                 raw_def.target_execution_time.ok_or_eyre("missing")?,
             )?)?
+            .to_zoned(TimeZone::system())
             .to_string(),
             status,
             labels,
-            job.id().to_string(),
+            retries,
+            misc,
         ]);
     }
     println!("{table}");

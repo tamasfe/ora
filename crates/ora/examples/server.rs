@@ -73,7 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(())
         })
         .handler_with_options(
-            async |_, _: AlwaysFail| eyre::bail!("job is supposed to fail"),
+            async |_, _: AlwaysFail| {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+                eyre::bail!("job is supposed to fail")
+            },
             HandlerOptions { max_concurrent: 10 },
         )
         .handler(async |ctx, job: SucceedAfter| {

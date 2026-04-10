@@ -692,7 +692,7 @@ async fn list_schedules(
     let mut table = Table::new();
     table.load_preset(presets::UTF8_FULL);
     table.set_style(comfy_table::TableComponent::HeaderLines, '=');
-    table.set_header(["Type", "Status", "Policy", "Labels", "ID"]);
+    table.set_header(["Type", "Status", "Policy", "Labels", "Retries", "Misc"]);
     while let Some(mut schedule) = stream.try_next().await? {
         let raw = schedule.raw().await?;
         let raw_def = raw.schedule.ok_or_eyre("missing schedule data")?;
@@ -719,12 +719,38 @@ async fn list_schedules(
             SchedulingPolicy::Cron { expression, .. } => expression,
         };
 
+        let raw_retry_policy = raw_job_def.retry_policy.unwrap_or_default();
+
+        let mut retries = format!("count: {}\n", raw_retry_policy.retries);
+
+        writeln!(
+            &mut retries,
+            "backoff: {}",
+            raw_retry_policy
+                .backoff_duration
+                .map(|d| humantime::format_duration(d.try_into().unwrap_or_default()).to_string())
+                .unwrap_or_else(|| "none".to_string())
+        )
+        .unwrap();
+
+        write!(
+            &mut retries,
+            "{}",
+            BackoffStrategy::from(raw_retry_policy.backoff_strategy())
+        )
+        .unwrap();
+
+        let mut meta = String::new();
+        meta.push_str("ID:\n");
+        writeln!(&mut meta, " {}", schedule.id()).unwrap();
+
         table.add_row([
             raw_job_def.job_type_id,
             status,
             policy,
             labels,
-            schedule.id().to_string(),
+            retries,
+            meta,
         ]);
     }
     println!("{table}");
