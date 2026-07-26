@@ -1,6 +1,7 @@
 //! A simple executable that starts the ora server with several executors and example job types.
 
 use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime, tokio_postgres::NoTls};
+use http::Method;
 use ora::{
     JobType,
     executor::{Executor, HandlerOptions},
@@ -13,6 +14,13 @@ use ora_server::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tonic::transport::Server;
+use tonic_web::GrpcWebLayer;
+use tower_http::{
+    LatencyUnit,
+    cors::{Any, CorsLayer},
+    trace::{DefaultOnRequest, DefaultOnResponse, TraceLayer},
+};
+use tracing::Level;
 use tracing_subscriber::{Registry, layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Return the character count in the given string.
@@ -93,6 +101,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = server.grpc();
 
     Server::builder()
+        .accept_http1(true)
+        .layer(
+            TraceLayer::new_for_grpc()
+                .on_request(DefaultOnRequest::new().level(Level::INFO))
+                .on_response(
+                    DefaultOnResponse::new()
+                        .level(Level::INFO)
+                        .latency_unit(LatencyUnit::Micros),
+                ),
+        )
+        .layer(
+            CorsLayer::new()
+                .allow_headers(Any)
+                .allow_methods([Method::GET, Method::POST])
+                .allow_origin(Any),
+        )
+        .layer(GrpcWebLayer::new())
         .add_service(AdminServiceServer::new(greeter))
         .serve(addr)
         .await?;
