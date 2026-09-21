@@ -1,5 +1,3 @@
-use std::cmp;
-
 use ora::admin::job_types::JobTypeInfo;
 use ratatui::{
     style::{
@@ -12,23 +10,28 @@ use ratatui::{
     },
 };
 
+use crate::tui::ui::empty_message;
+
+/// Keeps the column wide enough for the placeholder message while the
+/// job types are still loading or failed to load.
+const MIN_WIDTH: u16 = 16;
+
 #[derive(Debug, Default)]
 pub(crate) struct JobTypeList {
     pub(crate) focused: bool,
+    pub(crate) loading: bool,
     pub(crate) state: ListState,
     pub(crate) job_types: Vec<JobTypeInfo>,
 }
 
 impl JobTypeList {
     pub(crate) fn max_width(&self) -> u16 {
-        cmp::min(
-            50,
-            self.job_types
-                .iter()
-                .map(|jt| u16::try_from(jt.id.as_str().len()).unwrap_or(10))
-                .max()
-                .unwrap_or(10),
-        )
+        self.job_types
+            .iter()
+            .map(|jt| u16::try_from(jt.id.as_str().len()).unwrap_or(MIN_WIDTH))
+            .max()
+            .unwrap_or(0)
+            .clamp(MIN_WIDTH, 50)
     }
 }
 
@@ -50,6 +53,8 @@ impl Widget for &mut JobTypeList {
                 Style::default()
             });
 
+        let inner = block.inner(area);
+
         let items = self
             .job_types
             .iter()
@@ -63,5 +68,9 @@ impl Widget for &mut JobTypeList {
             .highlight_spacing(HighlightSpacing::Always);
 
         StatefulWidget::render(list, area, buf, &mut self.state);
+
+        if self.job_types.is_empty() {
+            empty_message(self.loading, "No job types.", inner, buf);
+        }
     }
 }

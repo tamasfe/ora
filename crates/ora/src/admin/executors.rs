@@ -8,6 +8,7 @@ use tonic::Request;
 use crate::{AdminClient, JobTypeId, executor::ExecutorId, proto::admin::v1::ListExecutorsRequest};
 
 /// Information about a registered executor.
+#[derive(Debug)]
 pub struct ExecutorInfo {
     /// The unique identifier of the executor.
     pub id: ExecutorId,
@@ -20,6 +21,7 @@ pub struct ExecutorInfo {
 }
 
 /// A job queue belonging to an executor.
+#[derive(Debug)]
 pub struct ExecutorQueueInfo {
     /// The job type ID of the queue.
     pub job_type_id: JobTypeId,
