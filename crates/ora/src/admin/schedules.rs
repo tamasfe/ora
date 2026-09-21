@@ -429,6 +429,13 @@ impl<J> Schedule<J> {
         self.raw.as_ref()
     }
 
+    /// Turn this schedule into its raw representation,
+    /// if it was cached.
+    #[must_use]
+    pub fn into_raw(self) -> Option<proto::admin::v1::Schedule> {
+        self.raw
+    }
+
     /// Always fetch the raw raw data from the server.
     ///
     /// Returns `None` if the data was cached, this is
