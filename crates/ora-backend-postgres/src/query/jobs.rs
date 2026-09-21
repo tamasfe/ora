@@ -360,23 +360,21 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
     } = filters;
 
     let mut select = SelectStatement::new()
-        .distinct()
         .expr_as(Expr::col(("ora", "job", "id")), "job_id")
         .from(("ora", "job"))
         .take();
 
-    let mut join_executions = {
-        let mut executions_joined = false;
-        move |select: &mut SelectStatement| {
-            if !executions_joined {
-                select.join(
-                    JoinType::Join,
-                    ("ora", "execution"),
-                    Expr::col(("ora", "job", "id")).equals(("ora", "execution", "job_id")),
-                );
-            }
-            executions_joined = true;
+    let mut executions_joined = false;
+
+    let mut join_executions = |select: &mut SelectStatement| {
+        if !executions_joined {
+            select.join(
+                JoinType::Join,
+                ("ora", "execution"),
+                Expr::col(("ora", "job", "id")).equals(("ora", "execution", "job_id")),
+            );
         }
+        executions_joined = true;
     };
 
     if let Some(job_ids) = job_ids {
@@ -546,6 +544,13 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
             "ora.job.schedule_id = ANY($1::UUID[])",
             [schedule_ids],
         ));
+    }
+
+    // Only the executions join can repeat a job ID. De-duplicating
+    // sorts the whole matching set before any LIMIT applies, so one
+    // page of a job type with a lot of history pays for all of it.
+    if executions_joined {
+        select.distinct();
     }
 
     select
