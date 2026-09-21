@@ -26,6 +26,9 @@ use crate::{
     schedule::ScheduleId,
 };
 
+/// How many items the server is asked for at a time.
+const PAGE_SIZE: u32 = 25;
+
 impl AdminClient {
     /// Add a job to be executed.
     pub async fn add_job<J>(&self, job: JobDefinition<J>) -> crate::Result<Job<J>>
@@ -218,6 +221,62 @@ impl AdminClient {
         }
     }
 
+    /// List one page of jobs, along with the token for the page after
+    /// it, if there is one.
+    ///
+    /// [`AdminClient::list_jobs`] walks every page before its stream
+    /// ends. This returns as soon as the server answers, so a caller
+    /// can show one page while the rest are still unfetched.
+    pub async fn list_jobs_page(
+        &self,
+        filters: JobFilters,
+        order: JobOrderBy,
+        page_size: u32,
+        page_token: Option<String>,
+    ) -> crate::Result<(Vec<Job<AnyJobType>>, Option<String>)> {
+        let response = self
+            .inner
+            .list_jobs(Request::new(ListJobsRequest {
+                filters: Some(filters.into()),
+                order_by: match order {
+                    JobOrderBy::TargetExecutionTimeAsc => {
+                        proto::admin::v1::JobOrderBy::TargetExecutionTimeAsc as i32
+                    }
+                    JobOrderBy::TargetExecutionTimeDesc => {
+                        proto::admin::v1::JobOrderBy::TargetExecutionTimeDesc as i32
+                    }
+                    JobOrderBy::CreatedAtAsc => proto::admin::v1::JobOrderBy::CreatedAtAsc as i32,
+                    JobOrderBy::CreatedAtDesc => proto::admin::v1::JobOrderBy::CreatedAtDesc as i32,
+                },
+                pagination: Some(PaginationOptions {
+                    page_size,
+                    next_page_token: page_token,
+                }),
+            }))
+            .await?
+            .into_inner();
+
+        let jobs = response
+            .jobs
+            .into_iter()
+            .map(|job_proto| {
+                Ok(Job {
+                    client: self.clone(),
+                    id: JobId(
+                        job_proto
+                            .id
+                            .parse::<Uuid>()
+                            .wrap_err("server returned invalid job ID")?,
+                    ),
+                    raw: Some(job_proto),
+                    phantom: PhantomData,
+                })
+            })
+            .collect::<Result<Vec<_>, crate::Error>>()?;
+
+        Ok((jobs, response.next_page_token))
+    }
+
     /// List jobs based on the given filters.
     pub fn list_jobs(
         &self,
@@ -227,9 +286,7 @@ impl AdminClient {
     ) -> impl Stream<Item = crate::Result<Job<AnyJobType>>> {
         async_stream::try_stream!({
             let mut total_count = 0;
-            let mut next_page_token = None;
-
-            let filters: proto::admin::v1::JobFilters = filters.into();
+            let mut page_token = None;
 
             loop {
                 if let Some(limit) = limit
@@ -238,56 +295,25 @@ impl AdminClient {
                     break;
                 }
 
-                let response = self
-                    .inner
-                    .list_jobs(Request::new(ListJobsRequest {
-                        filters: Some(filters.clone()),
-                        order_by: match order {
-                            JobOrderBy::TargetExecutionTimeAsc => {
-                                proto::admin::v1::JobOrderBy::TargetExecutionTimeAsc as i32
-                            }
-                            JobOrderBy::TargetExecutionTimeDesc => {
-                                proto::admin::v1::JobOrderBy::TargetExecutionTimeDesc as i32
-                            }
-                            JobOrderBy::CreatedAtAsc => {
-                                proto::admin::v1::JobOrderBy::CreatedAtAsc as i32
-                            }
-                            JobOrderBy::CreatedAtDesc => {
-                                proto::admin::v1::JobOrderBy::CreatedAtDesc as i32
-                            }
-                        },
-                        pagination: Some(PaginationOptions {
-                            page_size: if let Some(limit) = limit {
-                                cmp::min(25, limit)
-                            } else {
-                                25
-                            },
-                            next_page_token: next_page_token.clone(),
-                        }),
-                    }))
-                    .await?
-                    .into_inner();
+                let page_size =
+                    limit.map_or(PAGE_SIZE, |limit| cmp::min(PAGE_SIZE, limit - total_count));
 
-                for job_proto in response.jobs {
-                    let job_id = JobId(
-                        job_proto
-                            .id
-                            .parse::<Uuid>()
-                            .wrap_err("server returned invalid job ID")?,
-                    );
+                let (jobs, next) = self
+                    .list_jobs_page(filters.clone(), order, page_size, page_token)
+                    .await?;
 
-                    yield Job {
-                        client: self.clone(),
-                        id: job_id,
-                        raw: Some(job_proto),
-                        phantom: PhantomData,
-                    };
+                for job in jobs {
+                    yield job;
                     total_count += 1;
+
+                    if limit.is_some_and(|limit| total_count >= limit) {
+                        break;
+                    }
                 }
 
-                next_page_token = response.next_page_token;
+                page_token = next;
 
-                if next_page_token.is_none() {
+                if page_token.is_none() {
                     break;
                 }
             }

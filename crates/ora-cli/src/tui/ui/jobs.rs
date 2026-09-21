@@ -29,6 +29,14 @@ pub(crate) struct JobTable {
     pub(crate) loading: bool,
     pub(crate) state: TableState,
     pub(crate) jobs: Vec<Job>,
+    /// The token for the page after the rows held here, when the
+    /// server said there is one.
+    pub(crate) next_page: Option<String>,
+    /// How many pages of rows have arrived.
+    pub(crate) pages: usize,
+    /// The pages of the fetch in progress. The rows on screen are
+    /// replaced from here once enough of them have arrived.
+    pub(crate) incoming: Vec<Job>,
     /// How far the input/output payloads are scrolled, and the job
     /// they belong to, so selecting a different one resets it.
     payload_scroll: u16,
