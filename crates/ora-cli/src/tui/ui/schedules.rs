@@ -26,6 +26,14 @@ pub(crate) struct ScheduleTable {
     pub(crate) loading: bool,
     pub(crate) state: TableState,
     pub(crate) schedules: Vec<Schedule>,
+    /// The token for the page after the rows held here, when the
+    /// server said there is one.
+    pub(crate) next_page: Option<String>,
+    /// How many pages of rows have arrived.
+    pub(crate) pages: usize,
+    /// The pages of the fetch in progress. The rows on screen are
+    /// replaced from here once enough of them have arrived.
+    pub(crate) incoming: Vec<Schedule>,
 }
 
 impl ScheduleTable {

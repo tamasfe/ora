@@ -47,10 +47,13 @@ impl Events {
 pub(super) enum AppEvent {
     Term(crossterm::event::Event),
     JobTypesUpdated(Vec<JobTypeInfo>),
-    /// Carries the token of the request it answers, so a superseded
-    /// one can be discarded.
-    JobsUpdated(u64, Vec<Job>),
-    SchedulesUpdated(u64, Vec<Schedule>),
+    /// One page of jobs or schedules, with the token for the page
+    /// after it.
+    ///
+    /// Carries the token of the request it answers, and whether the
+    /// rows extend the table or replace it.
+    JobsUpdated(u64, Vec<Job>, Option<String>, bool),
+    SchedulesUpdated(u64, Vec<Schedule>, Option<String>, bool),
     ExecutorsUpdated(Vec<ExecutorInfo>),
     /// The jobs of one executor, carrying the executor ID they belong to.
     ExecutorJobsUpdated(String, Vec<Job>),

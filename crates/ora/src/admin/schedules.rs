@@ -218,6 +218,60 @@ impl AdminClient {
         }
     }
 
+    /// List one page of schedules, along with the token for the page
+    /// after it, if there is one.
+    ///
+    /// [`AdminClient::list_schedules`] walks every page before its
+    /// stream ends. This returns as soon as the server answers, so a
+    /// caller can show one page while the rest are still unfetched.
+    pub async fn list_schedules_page(
+        &self,
+        filters: ScheduleFilters,
+        order: ScheduleOrderBy,
+        page_size: u32,
+        page_token: Option<String>,
+    ) -> crate::Result<(Vec<Schedule<AnyJobType>>, Option<String>)> {
+        let response = self
+            .inner
+            .list_schedules(Request::new(ListSchedulesRequest {
+                filters: Some(filters.into()),
+                order_by: match order {
+                    ScheduleOrderBy::CreatedAtAsc => {
+                        proto::admin::v1::ScheduleOrderBy::CreatedAtAsc as i32
+                    }
+                    ScheduleOrderBy::CreatedAtDesc => {
+                        proto::admin::v1::ScheduleOrderBy::CreatedAtDesc as i32
+                    }
+                },
+                pagination: Some(PaginationOptions {
+                    page_size,
+                    next_page_token: page_token,
+                }),
+            }))
+            .await?
+            .into_inner();
+
+        let schedules = response
+            .schedules
+            .into_iter()
+            .map(|schedule_proto| {
+                Ok(Schedule {
+                    client: self.clone(),
+                    id: ScheduleId(
+                        schedule_proto
+                            .id
+                            .parse::<Uuid>()
+                            .wrap_err("server returned invalid schedule ID")?,
+                    ),
+                    raw: Some(schedule_proto),
+                    phantom: PhantomData,
+                })
+            })
+            .collect::<Result<Vec<_>, crate::Error>>()?;
+
+        Ok((schedules, response.next_page_token))
+    }
+
     /// List schedules based on the given filters.
     pub fn list_schedules(
         &self,
