@@ -95,7 +95,7 @@ fn job_id_completions(active_only: bool) -> Vec<CompletionCandidate> {
             .unwrap()
             .unwrap();
 
-            jobs.sort_by(|(a, ..), (b, ..)| a.cmp(b));
+            jobs.sort_by_key(|(a, ..)| *a);
 
             let mut candidates = Vec::with_capacity(jobs.len());
 
@@ -197,7 +197,7 @@ fn schedule_id_completions(active_only: bool) -> Vec<CompletionCandidate> {
             .unwrap()
             .unwrap();
 
-            jobs.sort_by(|(a, ..), (b, ..)| a.cmp(b));
+            jobs.sort_by_key(|(a, ..)| *a);
 
             let mut candidates = Vec::with_capacity(jobs.len());
 

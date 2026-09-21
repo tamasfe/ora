@@ -26,7 +26,7 @@ pub(super) async fn delete_history_loop(
         }
 
         tokio::select! {
-            _ = tokio::time::sleep(cmp::min(Duration::from_secs(60), history_keep_duration)) => {}
+            _ = tokio::time::sleep(cmp::min(Duration::from_mins(1), history_keep_duration)) => {}
             _ = wg.waiting() => {
                 tracing::debug!("shutting down");
                 break;

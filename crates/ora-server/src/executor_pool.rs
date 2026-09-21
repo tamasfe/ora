@@ -24,7 +24,7 @@ use crate::proto::{
     },
 };
 
-const MAX_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(60);
+const MAX_HEARTBEAT_INTERVAL: Duration = Duration::from_mins(1);
 
 pub(crate) enum ExecutorEvent {
     JobTypesAdded {

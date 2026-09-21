@@ -714,7 +714,7 @@ async fn list_schedules(
 
         let policy = match policy {
             SchedulingPolicy::FixedInterval { interval, .. } => {
-                format!("every {}", humantime::format_duration(interval),)
+                format!("every {}", humantime::format_duration(interval))
             }
             SchedulingPolicy::Cron { expression, .. } => expression,
         };
