@@ -60,6 +60,10 @@ pub(super) enum AppEvent {
     /// A background request failed, the message is shown in the
     /// footer. Carries the request's token, where it has one.
     Failed(Request, String, Option<u64>),
+    /// A job or schedule was created from the form.
+    Created,
+    /// Creating from the form failed, the message stays on the form.
+    CreateFailed(String),
     Refresh,
     /// Advances the loading indicator and keeps
     /// relative times in the footer current.

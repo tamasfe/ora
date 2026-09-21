@@ -1,5 +1,6 @@
 mod detail;
 mod executors;
+mod form;
 mod job_types;
 mod jobs;
 mod schedules;
@@ -8,6 +9,7 @@ use std::time::SystemTime;
 
 pub(crate) use detail::Detail;
 pub(crate) use executors::ExecutorTable;
+pub(crate) use form::{Form, FormKind, parse_cron};
 use jiff::{SignedDuration, Timestamp, TimestampRound};
 pub(crate) use job_types::JobTypeList;
 pub(crate) use jobs::JobTable;
@@ -70,6 +72,11 @@ impl Widget for &mut App {
             detail.render(content, buf);
         }
 
+        // Fullscreen: the form rebinds tab, so a tab bar would be a lie.
+        if let Some(form) = self.form.as_mut() {
+            form.render(area, buf);
+        }
+
         if let Some(confirm) = self.confirm.as_ref() {
             render_confirm(confirm, content, buf);
         }
@@ -123,8 +130,14 @@ fn render_tabs(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) {
     Line::from(actions).right_aligned().render(right, buf);
 }
 
-/// What the keys do.
+/// What the keys do, least steady first: the row is right aligned, so
+/// only what is left of a changing action moves.
 fn action_spans(app: &App) -> Vec<Span<'static>> {
+    // An overlay owns the keyboard and carries its own hints.
+    if app.modal_open() {
+        return Vec::new();
+    }
+
     let mut spans = Vec::new();
     let mut action = |text: &'static str| {
         if !spans.is_empty() {
@@ -146,6 +159,14 @@ fn action_spans(app: &App) -> Vec<Span<'static>> {
             }
         }
         Tab::Executors => {}
+    }
+
+    if app.can_duplicate() {
+        action("duplicate (d)");
+    }
+
+    if app.can_create() {
+        action("new (n)");
     }
 
     action("refresh (r)");
@@ -178,6 +199,10 @@ const SEPARATOR: &str = " · ";
 /// What the rows are filtered by, next to the key that changes each
 /// one, and the label filter as it is typed.
 fn filter_spans(app: &App) -> Vec<Span<'static>> {
+    if app.modal_open() {
+        return Vec::new();
+    }
+
     // Typing takes the row, which fits several pairs and their syntax.
     if app.labels_focused {
         let orange = Style::new().fg(tailwind::ORANGE.c600);

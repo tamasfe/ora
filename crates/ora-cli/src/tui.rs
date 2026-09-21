@@ -26,7 +26,24 @@ mod ui;
 
 pub(crate) async fn run(client: AdminClient) -> eyre::Result<()> {
     let terminal = ratatui::init();
+
+    // Without this a paste arrives as the keys it is made of, and the
+    // newline at the end of one submits the form it was pasted into.
+    let bracketed = crossterm::execute!(
+        std::io::stdout(),
+        crossterm::event::EnableBracketedPaste
+    )
+    .is_ok();
+
     let result = App::new(client).run(terminal).await;
+
+    if bracketed {
+        let _ = crossterm::execute!(
+            std::io::stdout(),
+            crossterm::event::DisableBracketedPaste
+        );
+    }
+
     ratatui::restore();
     result
 }
@@ -179,6 +196,7 @@ pub(crate) struct Confirm {
 enum ConfirmAction {
     CancelJob(String),
     StopSchedule(String),
+    Create(Box<Created>),
 }
 
 /// The outcome of the most recent background request.
@@ -315,6 +333,8 @@ pub struct App {
     /// and coming back returns to where you were.
     details: [Option<ui::Detail>; 3],
     confirm: Option<Confirm>,
+    /// The creation form, when one is open.
+    form: Option<ui::Form>,
     status: Status,
     pending: Pending,
     spinner: usize,
@@ -341,6 +361,7 @@ impl App {
             executor_jobs: Vec::new(),
             details: [const { None }; 3],
             confirm: None,
+            form: None,
             status: Status::default(),
             pending: Pending::default(),
             spinner: 0,
@@ -409,6 +430,7 @@ impl App {
         match event {
             AppEvent::Term(event) => match event {
                 Event::Key(key_event) => self.on_key(key_event),
+                Event::Paste(text) => self.on_paste(&text),
                 _ => {}
             },
             AppEvent::JobTypesUpdated(job_type_infos) => {
@@ -517,6 +539,16 @@ impl App {
                     self.refresh_detail();
                 }
             }
+            AppEvent::Created => {
+                self.form = None;
+                self.reload();
+            }
+            AppEvent::CreateFailed(error) => {
+                if let Some(form) = self.form.as_mut() {
+                    form.submitting = false;
+                    form.error = Some(error);
+                }
+            }
             // A request made for filters that have since been
             // replaced answers a question nobody is asking any
             // more, and it must not clear the wait for the one
@@ -540,13 +572,77 @@ impl App {
         Ok(true)
     }
 
+    /// Take pasted text wherever typing would go.
+    ///
+    /// Control characters are dropped, since every field here holds a
+    /// single line and the bindings are not meant to see them.
+    fn on_paste(&mut self, text: &str) {
+        if self.confirm.is_some() {
+            return;
+        }
+
+        for c in text.chars().filter(|c| !c.is_control()) {
+            if let Some(form) = self.form.as_mut() {
+                form.push_char(c);
+            } else if self.labels_focused {
+                self.label_filter_mut().push(c);
+            } else {
+                return;
+            }
+        }
+    }
+
     fn on_key(&mut self, event: KeyEvent) {
         match (event.modifiers, event.code, event.kind) {
+            // The confirmation sits on top of everything, including the
+            // form, so it has to be matched before it.
             (KeyModifiers::NONE, key, KeyEventKind::Press) if self.confirm.is_some() => match key {
                 KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.run_confirmed_action(),
                 KeyCode::Char('n' | 'N') | KeyCode::Esc => self.confirm = None,
                 _ => {}
             },
+            (KeyModifiers::NONE | KeyModifiers::SHIFT, key, KeyEventKind::Press)
+                if self.form.is_some() =>
+            {
+                if key == KeyCode::Enter {
+                    self.submit_form();
+                    return;
+                }
+
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                match key {
+                    KeyCode::Esc => self.form = None,
+                    KeyCode::Up => form.select_previous(),
+                    KeyCode::Down => form.select_next(),
+                    KeyCode::Tab => form.select_next_cell(),
+                    KeyCode::BackTab => form.select_previous_cell(),
+                    KeyCode::Left => form.cycle(false),
+                    KeyCode::Right => form.cycle(true),
+                    KeyCode::Backspace => form.pop_char(),
+                    KeyCode::Delete => form.delete_char(),
+                    KeyCode::Char(c) => form.push_char(c),
+                    _ => {}
+                }
+            }
+            // Only these keys are taken, so ctrl-c still quits from a form.
+            (
+                KeyModifiers::ALT | KeyModifiers::CONTROL,
+                key @ (KeyCode::Left | KeyCode::Right | KeyCode::Backspace),
+                KeyEventKind::Press,
+            ) if self.form.is_some() => {
+                let Some(form) = self.form.as_mut() else {
+                    return;
+                };
+
+                match key {
+                    KeyCode::Left => form.move_word(false),
+                    KeyCode::Right => form.move_word(true),
+                    _ => form.pop_word(),
+                }
+            }
             (KeyModifiers::NONE, KeyCode::Tab, KeyEventKind::Press) if !self.labels_focused => {
                 self.switch_tab(true);
             }
@@ -610,6 +706,12 @@ impl App {
             }
             (KeyModifiers::NONE, KeyCode::Char('s' | 'S'), KeyEventKind::Press) => {
                 self.confirm_stop_schedule();
+            }
+            (KeyModifiers::NONE, KeyCode::Char('n' | 'N'), KeyEventKind::Press) => {
+                self.open_form();
+            }
+            (KeyModifiers::NONE, KeyCode::Char('d' | 'D'), KeyEventKind::Press) => {
+                self.duplicate();
             }
             (KeyModifiers::NONE, KeyCode::Char('r' | 'R'), KeyEventKind::Press) => {
                 self.fetch(true);
@@ -1118,6 +1220,123 @@ impl App {
         )));
     }
 
+    /// Whether an overlay currently owns the keyboard.
+    pub(crate) fn modal_open(&self) -> bool {
+        self.form.is_some() || self.confirm.is_some() || self.detail().is_some()
+    }
+
+    /// Whether the selected row can be opened as a new job or
+    /// schedule of its own.
+    pub(crate) fn can_duplicate(&self) -> bool {
+        self.can_create()
+            && self.table_focused()
+            && match self.tab {
+                Tab::Jobs => self.job_table.selected().is_some(),
+                Tab::Schedules => self.schedule_table.selected().is_some(),
+                Tab::Executors => false,
+            }
+    }
+
+    pub(crate) fn can_create(&self) -> bool {
+        matches!(self.tab, Tab::Jobs | Tab::Schedules) && self.selected_job_type().is_some()
+    }
+
+    fn new_form(&self) -> Option<ui::Form> {
+        if !self.can_create() {
+            return None;
+        }
+
+        let index = self.job_type_list.state.selected()?;
+        let job_type = self.job_type_list.job_types.get(index)?;
+
+        let kind = if self.tab == Tab::Jobs {
+            ui::FormKind::Job
+        } else {
+            ui::FormKind::Schedule
+        };
+
+        Some(ui::Form::new(
+            kind,
+            job_type.id.as_str().to_string(),
+            job_type.input_schema_json.as_deref(),
+        ))
+    }
+
+    fn open_form(&mut self) {
+        self.form = self.new_form();
+    }
+
+    /// Open a creation form filled in from the selected row.
+    ///
+    /// The target time is left alone: a job is duplicated to run
+    /// again, not to run again at the time the first one did.
+    fn duplicate(&mut self) {
+        let Some(mut form) = self.new_form() else {
+            return;
+        };
+
+        match self.tab {
+            Tab::Jobs => {
+                let Some(job) = self.job_table.selected().and_then(|job| job.job.as_ref()) else {
+                    return;
+                };
+
+                fill_from_job(&mut form, job);
+            }
+            Tab::Schedules => {
+                let Some(schedule) = self
+                    .schedule_table
+                    .selected()
+                    .and_then(|schedule| schedule.schedule.as_ref())
+                else {
+                    return;
+                };
+
+                fill_from_schedule(&mut form, schedule);
+            }
+            Tab::Executors => return,
+        }
+
+        self.form = Some(form);
+    }
+
+    fn submit_form(&mut self) {
+        let Some(form) = self.form.as_mut() else {
+            return;
+        };
+
+        if form.submitting {
+            return;
+        }
+
+        if let Some(error) = form.validate() {
+            form.error = Some(error);
+            return;
+        }
+
+        let request = match form.kind {
+            ui::FormKind::Job => build_job(form).map(Created::Job),
+            ui::FormKind::Schedule => build_schedule(form).map(Created::Schedule),
+        };
+
+        match request {
+            Ok(created) => {
+                form.error = None;
+
+                let prompt = match &created {
+                    Created::Job(_) => format!("Create job {}?", form.job_type_id),
+                    Created::Schedule(_) => format!("Create schedule {}?", form.job_type_id),
+                };
+
+                self.confirm = Some(Confirm {
+                    prompt,
+                    action: ConfirmAction::Create(Box::new(created)),
+                });
+            }
+            Err(error) => form.error = Some(error),
+        }
+    }
+
     fn confirm_cancel_job(&mut self) {
         if !self.can_cancel_job() {
             return;
@@ -1169,10 +1388,219 @@ impl App {
                     self.events.sender(),
                 ));
             }
+            ConfirmAction::Create(created) => {
+                if let Some(form) = self.form.as_mut() {
+                    form.submitting = true;
+                }
+
+                match *created {
+                    Created::Job(job) => {
+                        spawn(data::add_job(
+                            job,
+                            self.client.clone(),
+                            self.events.sender(),
+                        ));
+                    }
+                    Created::Schedule(schedule) => {
+                        spawn(data::add_schedule(
+                            schedule,
+                            self.client.clone(),
+                            self.events.sender(),
+                        ));
+                    }
+                }
+            }
         }
     }
 
     fn quit(&mut self) {
         self.running = false;
     }
+}
+
+#[derive(Debug)]
+enum Created {
+    Job(ora::proto::jobs::v1::Job),
+    Schedule(ora::proto::schedules::v1::Schedule),
+}
+
+/// Parse the `key=value` rows of the labels field. A row's value may
+/// be empty: a label needs a key, not a value.
+fn parse_labels(rows: &[(String, String)]) -> Vec<ora::proto::common::v1::Label> {
+    rows.iter()
+        .filter(|(key, _)| !key.trim().is_empty())
+        .map(|(key, value)| ora::proto::common::v1::Label {
+            key: key.trim().to_string(),
+            value: value.trim().to_string(),
+        })
+        .collect()
+}
+
+/// The policies shared by a job and a schedule's job template.
+fn policies(
+    form: &ui::Form,
+) -> Result<
+    (
+        ora::proto::jobs::v1::TimeoutPolicy,
+        ora::proto::jobs::v1::RetryPolicy,
+    ),
+    String,
+> {
+    let timeout = form.option("timeout");
+    let timeout = if timeout.trim().is_empty() {
+        None
+    } else {
+        Some(
+            humantime::parse_duration(timeout.trim())
+                .map_err(|error| format!("invalid timeout: {error}"))?,
+        )
+    };
+
+    let retries = form.option("retries");
+    let retries = if retries.trim().is_empty() {
+        0
+    } else {
+        retries
+            .trim()
+            .parse::<u64>()
+            .map_err(|error| format!("invalid retries: {error}"))?
+    };
+
+    Ok((
+        ora::proto::jobs::v1::TimeoutPolicy {
+            timeout: timeout.and_then(|d| d.try_into().ok()),
+            base_time: ora::proto::jobs::v1::TimeoutBaseTime::StartTime as _,
+        },
+        ora::proto::jobs::v1::RetryPolicy {
+            retries,
+            ..Default::default()
+        },
+    ))
+}
+
+/// Fill in the options every job and schedule shares.
+fn fill_policies(
+    form: &mut ui::Form,
+    timeout: Option<&ora::proto::jobs::v1::TimeoutPolicy>,
+    retry: Option<&ora::proto::jobs::v1::RetryPolicy>,
+) {
+    if let Some(timeout) = timeout
+        .and_then(|policy| policy.timeout)
+        .and_then(|timeout| std::time::Duration::try_from(timeout).ok())
+        .filter(|timeout| !timeout.is_zero())
+    {
+        form.set_option("timeout", humantime::format_duration(timeout).to_string());
+    }
+
+    if let Some(retries) = retry.map(|policy| policy.retries).filter(|r| *r > 0) {
+        form.set_option("retries", retries.to_string());
+    }
+}
+
+fn fill_from_job(form: &mut ui::Form, job: &ora::proto::jobs::v1::Job) {
+    form.prefill_input(&job.input_payload_json);
+    form.set_pairs_option("labels", label_rows(&job.labels));
+    fill_policies(form, job.timeout_policy.as_ref(), job.retry_policy.as_ref());
+}
+
+fn fill_from_schedule(form: &mut ui::Form, schedule: &ora::proto::schedules::v1::Schedule) {
+    use ora::proto::schedules::v1::scheduling_policy::Policy;
+
+    if let Some(job) = schedule.job_template.as_ref() {
+        form.prefill_input(&job.input_payload_json);
+        fill_policies(form, job.timeout_policy.as_ref(), job.retry_policy.as_ref());
+    }
+
+    form.set_pairs_option("labels", label_rows(&schedule.labels));
+
+    match schedule.scheduling.as_ref().and_then(|s| s.policy.as_ref()) {
+        Some(Policy::Cron(cron)) => {
+            form.set_option("cron", cron.cron_expression.clone());
+            form.set_option_bool("immediate", cron.immediate);
+        }
+        Some(Policy::Interval(interval)) => {
+            if let Some(interval) = interval
+                .interval
+                .and_then(|interval| std::time::Duration::try_from(interval).ok())
+            {
+                form.set_option("interval", humantime::format_duration(interval).to_string());
+            }
+
+            form.set_option_bool("immediate", interval.immediate);
+        }
+        None => {}
+    }
+}
+
+fn label_rows(labels: &[ora::proto::common::v1::Label]) -> Vec<(String, String)> {
+    labels
+        .iter()
+        .map(|label| (label.key.clone(), label.value.clone()))
+        .collect()
+}
+
+fn build_job(form: &ui::Form) -> Result<ora::proto::jobs::v1::Job, String> {
+    let target = form
+        .time_option("target")?
+        .unwrap_or_else(jiff::Timestamp::now);
+
+    let (timeout_policy, retry_policy) = policies(form)?;
+
+    Ok(ora::proto::jobs::v1::Job {
+        job_type_id: form.job_type_id.clone(),
+        target_execution_time: Some(std::time::SystemTime::from(target).into()),
+        input_payload_json: form.payload().to_string(),
+        labels: parse_labels(&form.pairs_option("labels")),
+        timeout_policy: Some(timeout_policy),
+        retry_policy: Some(retry_policy),
+    })
+}
+
+fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule, String> {
+    use ora::proto::schedules::v1::{
+        SchedulingPolicy, SchedulingPolicyCron, SchedulingPolicyInterval, scheduling_policy::Policy,
+    };
+
+    let cron = form.option("cron");
+    let interval = form.option("interval");
+    let immediate = form.option_bool("immediate");
+
+    let policy = if !cron.trim().is_empty() {
+        ui::parse_cron(&cron).map_err(|error| format!("invalid cron: {error}"))?;
+
+        Policy::Cron(SchedulingPolicyCron {
+            cron_expression: cron.trim().to_string(),
+            immediate,
+            ..Default::default()
+        })
+    } else if !interval.trim().is_empty() {
+        let interval = humantime::parse_duration(interval.trim())
+            .map_err(|error| format!("invalid interval: {error}"))?;
+
+        Policy::Interval(SchedulingPolicyInterval {
+            interval: interval.try_into().ok(),
+            immediate,
+            ..Default::default()
+        })
+    } else {
+        return Err("a cron expression or an interval is required".to_string());
+    };
+
+    let (timeout_policy, retry_policy) = policies(form)?;
+
+    Ok(ora::proto::schedules::v1::Schedule {
+        scheduling: Some(SchedulingPolicy {
+            policy: Some(policy),
+        }),
+        job_template: Some(ora::proto::jobs::v1::Job {
+            job_type_id: form.job_type_id.clone(),
+            target_execution_time: Some(std::time::SystemTime::UNIX_EPOCH.into()),
+            input_payload_json: form.payload().to_string(),
+            labels: vec![],
+            timeout_policy: Some(timeout_policy),
+            retry_policy: Some(retry_policy),
+        }),
+        labels: parse_labels(&form.pairs_option("labels")),
+        time_range: None,
+    })
 }

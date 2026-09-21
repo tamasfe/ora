@@ -267,3 +267,29 @@ fn parse_label_filter(filter: &str) -> Option<Vec<LabelFilter>> {
             .collect(),
     )
 }
+
+pub(super) async fn add_job(
+    job: ora::proto::jobs::v1::Job,
+    admin: AdminClient,
+    events: Sender<AppEvent>,
+) {
+    let event = match request("create job", admin.add_jobs([job])).await {
+        Ok(_) => AppEvent::Created,
+        Err(error) => AppEvent::CreateFailed(error),
+    };
+
+    let _ = events.send_async(event).await;
+}
+
+pub(super) async fn add_schedule(
+    schedule: ora::proto::schedules::v1::Schedule,
+    admin: AdminClient,
+    events: Sender<AppEvent>,
+) {
+    let event = match request("create schedule", admin.add_schedules([schedule])).await {
+        Ok(_) => AppEvent::Created,
+        Err(error) => AppEvent::CreateFailed(error),
+    };
+
+    let _ = events.send_async(event).await;
+}
