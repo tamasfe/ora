@@ -3,11 +3,15 @@ import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { create } from "@bufbuild/protobuf";
 import { ScheduleFiltersSchema, ScheduleStatus } from "../../api/ora/admin/v1/schedules_pb";
+import type { Label } from "../../api/ora/common/v1/label_pb";
 import type { StopSchedulesRequest } from "../../components/StopSchedulesDialog.vue";
 import { useOraAdminClient } from "../../grpc";
 import { useLoader } from "../../util";
 import { formatDuration, formatRelative, formatTimestamp, prettyJson } from "../../util/format";
 import { backoffStrategyLabel, hasTimeout, timeoutBaseTimeLabel } from "../../util/job";
+import { labelsToFilters } from "../../util/labels";
+import { usePolling } from "../../util/polling";
+import { jobsLink, schedulesLink, useRefreshInterval } from "../../util/route";
 import { missedTimePolicyLabel } from "../../util/schedule";
 import { scheduleStatusInfo } from "../../util/status";
 
@@ -15,35 +19,62 @@ const route = useRoute("/schedules/[id]");
 const router = useRouter();
 const client = useOraAdminClient();
 
-const loader = useLoader(async signal => {
-  const res = await client.listSchedules(
-    { filters: { scheduleIds: [route.params.id] }, pagination: { pageSize: 1 } },
-    { signal },
-  );
-  return res.schedules[0] ?? null;
-});
+// Reading the route in the loader would reload on any query change.
+const id = computed(() => route.params.id);
+const refresh = useRefreshInterval();
 
-const schedule = computed(() => loader.data.value);
+const loader = useLoader(
+  () => id.value,
+  async (scheduleId, signal) => {
+    const res = await client.listSchedules(
+      { filters: { scheduleIds: [scheduleId] }, pagination: { pageSize: 1 } },
+      { signal },
+    );
+    return res.schedules[0] ?? null;
+  },
+);
+
+usePolling(loader, refresh);
+
+/** The schedule, not shown while another schedule is loading. */
+const schedule = computed(() =>
+  loader.stale.value ? undefined : (loader.data.value ?? undefined),
+);
+const notFound = computed(() => !loader.stale.value && loader.data.value === null);
 const definition = computed(() => schedule.value?.schedule);
 const template = computed(() => definition.value?.jobTemplate);
 const status = computed(() =>
   schedule.value ? scheduleStatusInfo[schedule.value.status] : undefined,
 );
 const policy = computed(() => definition.value?.scheduling?.policy);
+const jobsFilters = computed(() => ({ scheduleIds: [id.value] }));
 
-const jobsTable = ref<{ reload(): void }>();
+const jobsTable = ref<{ reload(force?: boolean): void }>();
 const stopRequest = ref<StopSchedulesRequest>();
 
 function stop() {
   stopRequest.value = {
-    filters: create(ScheduleFiltersSchema, { scheduleIds: [route.params.id] }),
+    filters: create(ScheduleFiltersSchema, { scheduleIds: [id.value] }),
     message: "Stop this schedule? No new jobs will be created.",
   };
 }
 
 function onStopped() {
+  loader.reload(true);
+  jobsTable.value?.reload(true);
+}
+
+function reload() {
   loader.reload();
   jobsTable.value?.reload();
+}
+
+function scheduleLabelLink(label: Label) {
+  return schedulesLink({ labels: [{ key: label.key, value: label.value }] });
+}
+
+function jobLabelLink(label: Label) {
+  return jobsLink({ labels: [{ key: label.key, value: label.value }] });
 }
 </script>
 
@@ -53,14 +84,16 @@ function onStopped() {
       <div class="flex min-w-0 items-center gap-2">
         <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" />
         <h1 class="text-2xl font-semibold">Schedule</h1>
-        <CopyableId :id="route.params.id" class="text-muted-color" />
+        <CopyableId :id="id" class="text-muted-color" />
         <Tag v-if="status" :value="status.label" :severity="status.severity" :icon="status.icon" />
+        <Skeleton v-else-if="!notFound" width="6rem" height="1.75rem" />
       </div>
-      <div class="flex items-center gap-2">
-        <RefreshControl :loading="loader.loading.value" @refresh="loader.reload" />
+      <div class="flex flex-wrap items-center gap-2">
+        <LoadStatus :state="loader" verb="load" updated class="min-w-56 text-right" />
+        <RefreshControl v-model="refresh" :loading="loader.busy.value" @refresh="reload" />
         <RouterLink
           v-slot="{ navigate }"
-          :to="{ path: '/schedules/new', query: { from: route.params.id } }"
+          :to="{ path: '/schedules/new', query: { from: id } }"
           custom
         >
           <Button
@@ -73,24 +106,48 @@ function onStopped() {
           />
         </RouterLink>
         <Button
-          v-if="schedule?.status === ScheduleStatus.ACTIVE"
           label="Stop"
           icon="pi pi-stop-circle"
           severity="danger"
+          :disabled="schedule?.status !== ScheduleStatus.ACTIVE"
           @click="stop"
         />
       </div>
     </div>
 
-    <Message v-if="loader.data.value === null" severity="warn">Schedule not found.</Message>
-    <ProgressBar v-else-if="!schedule && loader.loading.value" mode="indeterminate" class="h-1!" />
+    <Message v-if="notFound" severity="warn">Schedule not found.</Message>
 
-    <template v-if="schedule && definition">
+    <template v-else>
+      <div class="flex min-h-7 flex-wrap items-center gap-2">
+        <span class="text-sm text-muted-color"><i class="pi pi-tags mr-1" />Labels</span>
+        <template v-if="definition">
+          <LabelList
+            v-if="definition.labels.length > 0"
+            :labels="definition.labels"
+            size="normal"
+            :link="scheduleLabelLink"
+            hint="Show schedules with this label"
+          />
+          <span v-else class="text-sm text-muted-color">None</span>
+          <RouterLink
+            v-if="definition.labels.length > 1"
+            :to="schedulesLink({ labels: labelsToFilters(definition.labels) })"
+            class="text-sm text-primary hover:underline"
+          >
+            Schedules with the same labels
+          </RouterLink>
+        </template>
+        <Skeleton v-else width="16rem" height="1.5rem" />
+      </div>
+
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <template #title>Scheduling</template>
           <template #content>
-            <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+            <dl
+              v-if="schedule && definition"
+              class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm"
+            >
               <template v-if="policy?.case === 'interval'">
                 <dt class="text-muted-color">Interval</dt>
                 <dd>Every {{ formatDuration(policy.value.interval) }}</dd>
@@ -133,18 +190,10 @@ function onStopped() {
                   <span class="text-muted-color">({{ formatRelative(schedule.stoppedAt) }})</span>
                 </dd>
               </template>
-              <dt class="text-muted-color">Labels</dt>
-              <dd class="flex flex-wrap gap-1">
-                <Tag
-                  v-for="label in definition.labels"
-                  :key="label.key"
-                  :value="`${label.key}=${label.value}`"
-                  severity="secondary"
-                  class="font-normal!"
-                />
-                <span v-if="definition.labels.length === 0">-</span>
-              </dd>
             </dl>
+            <div v-else class="flex flex-col gap-3">
+              <Skeleton v-for="i in 6" :key="i" height="1.25rem" />
+            </div>
           </template>
         </Card>
 
@@ -161,6 +210,16 @@ function onStopped() {
                   >
                     {{ template.jobTypeId }}
                   </RouterLink>
+                </dd>
+                <dt class="text-muted-color">Labels</dt>
+                <dd class="min-w-0">
+                  <LabelList
+                    v-if="template.labels.length > 0"
+                    :labels="template.labels"
+                    :link="jobLabelLink"
+                    hint="Show jobs with this label"
+                  />
+                  <span v-else>-</span>
                 </dd>
                 <dt class="text-muted-color">Timeout</dt>
                 <dd>
@@ -186,19 +245,12 @@ function onStopped() {
                     backoff {{ formatDuration(template.retryPolicy.backoffDuration) }})
                   </span>
                 </dd>
-                <dt class="text-muted-color">Labels</dt>
-                <dd class="flex flex-wrap gap-1">
-                  <Tag
-                    v-for="label in template.labels"
-                    :key="label.key"
-                    :value="`${label.key}=${label.value}`"
-                    severity="secondary"
-                    class="font-normal!"
-                  />
-                  <span v-if="template.labels.length === 0">-</span>
-                </dd>
               </dl>
               <JsonEditor :model-value="prettyJson(template.inputPayloadJson)" readonly />
+            </div>
+            <div v-else-if="!schedule" class="flex flex-col gap-3">
+              <Skeleton v-for="i in 4" :key="i" height="1.25rem" />
+              <Skeleton height="6rem" />
             </div>
           </template>
         </Card>
@@ -206,7 +258,13 @@ function onStopped() {
 
       <div class="flex flex-col gap-2">
         <h2 class="text-xl font-semibold">Jobs</h2>
-        <JobsTable ref="jobsTable" :base-filters="{ scheduleIds: [route.params.id] }" />
+        <!-- Only depends on the ID, so it is not held back by loading the schedule. -->
+        <JobsTable
+          ref="jobsTable"
+          :base-filters="jobsFilters"
+          query-prefix="jobs."
+          :refresh-interval="refresh"
+        />
       </div>
     </template>
 

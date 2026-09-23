@@ -5,6 +5,8 @@ import { useToast } from "primevue/usetoast";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { useOraAdminClient } from "../grpc";
 import { useErrorToast } from "../util/errors";
+import { formatLatency, formatSeconds } from "../util/format";
+import { useStopwatch } from "../util/time";
 
 const client = useOraAdminClient();
 const confirm = useConfirm();
@@ -22,7 +24,7 @@ const presets = [
 
 const preset = ref<number | null>(30);
 const before = ref<Date>(new Date(Date.now() - 30 * day));
-const deleting = ref(false);
+const deleting = useStopwatch();
 
 function selectPreset(days: number | null) {
   if (days !== null) {
@@ -40,14 +42,18 @@ function deleteData() {
     rejectProps: { label: "Keep", severity: "secondary", outlined: true },
     acceptProps: { label: "Delete", severity: "danger" },
     accept: async () => {
-      deleting.value = true;
       try {
-        await client.deleteHistoricalData({ before: timestampFromDate(cutoff) });
-        toast.add({ severity: "success", summary: "Historical data deleted", life: 5000 });
+        const { ms } = await deleting.time(() =>
+          client.deleteHistoricalData({ before: timestampFromDate(cutoff) }),
+        );
+        toast.add({
+          severity: "success",
+          summary: "Historical data deleted",
+          detail: `Finished in ${formatLatency(ms)}.`,
+          life: 5000,
+        });
       } catch (error) {
         reportError(error, "Failed to delete historical data");
-      } finally {
-        deleting.value = false;
       }
     },
   });
@@ -76,6 +82,7 @@ function deleteData() {
               :options="presets"
               option-label="label"
               option-value="value"
+              :disabled="deleting.running.value"
               @update:model-value="selectPreset"
             />
           </div>
@@ -89,6 +96,7 @@ function deleteData() {
               hour-format="24"
               show-icon
               class="max-w-sm"
+              :disabled="deleting.running.value"
               @update:model-value="preset = null"
             />
           </div>
@@ -97,14 +105,21 @@ function deleteData() {
             The cutoff time is in the future, all inactive data will be deleted.
           </Message>
 
-          <div>
+          <div class="flex flex-wrap items-center gap-3">
             <Button
-              label="Delete historical data"
+              :label="
+                deleting.running.value
+                  ? `Deleting… ${formatSeconds(deleting.elapsed.value ?? 0)}`
+                  : 'Delete historical data'
+              "
               icon="pi pi-trash"
               severity="danger"
-              :loading="deleting"
+              :loading="deleting.running.value"
               @click="deleteData"
             />
+            <small v-if="deleting.running.value" class="text-muted-color">
+              Deleting a lot of data can take a while, the rest of the UI can be used meanwhile.
+            </small>
           </div>
         </div>
       </template>

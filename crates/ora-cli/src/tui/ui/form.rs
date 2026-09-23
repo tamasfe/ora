@@ -892,7 +892,10 @@ impl Form {
                 continue;
             }
 
-            let value = field.path.iter().try_fold(&payload, |node, key| node.get(key));
+            let value = field
+                .path
+                .iter()
+                .try_fold(&payload, |node, key| node.get(key));
 
             apply_default(field, value);
         }

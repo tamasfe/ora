@@ -84,7 +84,6 @@ pub(crate) enum Jobs {
         #[arg(
             long = "retry-backoff",
             visible_aliases= ["backoff"],
-            conflicts_with = "cron_expression"
         )]
         retry_backoff: Option<String>,
         /// The maximum backoff duration for retries.

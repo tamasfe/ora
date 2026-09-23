@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { useRoute } from "vue-router";
+import { create, toJsonString, type MessageInitShape } from "@bufbuild/protobuf";
 import {
   ScheduleFiltersSchema,
   ScheduleOrderBy,
@@ -8,10 +9,21 @@ import {
   type Schedule,
   type ScheduleFilters,
 } from "../api/ora/admin/v1/schedules_pb";
+import { LabelFilterSchema, type Label } from "../api/ora/common/v1/label_pb";
 import { useOraAdminClient } from "../grpc";
 import { useLoader } from "../util";
-import { formatRelative, formatTimestamp } from "../util/format";
-import { useTokenPagination } from "../util/pagination";
+import { formatClock, formatCount, formatRelative, formatTimestamp } from "../util/format";
+import { withLabelFilter } from "../util/labels";
+import { pageSizeOptions, useTokenPagination } from "../util/pagination";
+import { usePolling } from "../util/polling";
+import { param, useRouteQuery, useRouteQueryFields } from "../util/query";
+import {
+  queryKey,
+  scheduleFilterFields,
+  scheduleOrders,
+  schedulesLink,
+  useRefreshInterval,
+} from "../util/route";
 import { schedulingSummary } from "../util/schedule";
 import type { StopSchedulesRequest } from "./StopSchedulesDialog.vue";
 import { scheduleStatusInfo } from "../util/status";
@@ -20,20 +32,39 @@ const props = withDefaults(
   defineProps<{
     /** Fixed filters that are always applied and cannot be changed. */
     baseFilters?: MessageInitShape<typeof ScheduleFiltersSchema>;
-    /** Hide the filters and bulk actions. */
+    /** Hide the filters and bulk actions, and don't count the schedules. */
     compact?: boolean;
+    /** The default page size. */
     rows?: number;
+    /**
+     * Keeps the filters and settings in the route query, with names prefixed by this value
+     * (e.g. `schedules.` for tables embedded in other pages). The state is local if not set.
+     */
+    queryPrefix?: string;
+    /** Auto refresh interval controlled by the page, hides the table's own refresh control. */
+    refreshInterval?: number;
   }>(),
   { rows: 20 },
 );
 
-const filters = defineModel<ScheduleFilters>("filters", {
-  default: () => create(ScheduleFiltersSchema),
-});
-
+const route = useRoute();
 const client = useOraAdminClient();
 
-const orderBy = ref(ScheduleOrderBy.CREATED_AT_DESC);
+const prefix = props.queryPrefix;
+const filters = useRouteQueryFields(prefix, scheduleFilterFields, () =>
+  create(ScheduleFiltersSchema),
+);
+const orderBy = useRouteQuery(
+  queryKey(prefix, "order"),
+  param.oneOf(scheduleOrders),
+  ScheduleOrderBy.CREATED_AT_DESC,
+);
+const rows = useRouteQuery(queryKey(prefix, "rows"), param.int(pageSizeOptions), props.rows);
+const ownRefresh = useRefreshInterval(
+  props.refreshInterval === undefined ? queryKey(prefix, "refresh") : undefined,
+);
+const refresh = computed(() => props.refreshInterval ?? ownRefresh.value);
+
 const orderOptions = [
   { label: "Newest first", value: ScheduleOrderBy.CREATED_AT_DESC },
   { label: "Oldest first", value: ScheduleOrderBy.CREATED_AT_ASC },
@@ -56,40 +87,83 @@ const effectiveFilters = computed<ScheduleFilters>(() => {
   }
   return result;
 });
+const filtersKey = computed(() => toJsonString(ScheduleFiltersSchema, effectiveFilters.value));
 
-const pagination = useTokenPagination(props.rows);
+// Counting is loaded separately, so that the list doesn't wait for it.
+const count = useLoader(
+  () => (props.compact ? undefined : effectiveFilters.value),
+  async (requestFilters, signal) =>
+    Number((await client.countSchedules({ filters: requestFilters }, { signal })).count),
+  { key: requestFilters => toJsonString(ScheduleFiltersSchema, requestFilters) },
+);
 
-watch([effectiveFilters, orderBy], () => pagination.reset());
+/** The count for the current filters, unknown while it is loaded for new filters. */
+const knownCount = computed(() => (count.stale.value ? undefined : count.data.value));
 
-const list = useLoader(async signal => {
-  const requestFilters = effectiveFilters.value;
-  const listRequest = client.listSchedules(
-    {
-      filters: requestFilters,
-      orderBy: orderBy.value,
-      pagination: {
-        pageSize: pagination.rows.value,
-        nextPageToken: pagination.pageToken.value,
-      },
-    },
-    { signal },
-  );
-  const countRequest = client.countSchedules({ filters: requestFilters }, { signal });
-
-  const [res, count] = await Promise.all([listRequest, countRequest]);
-  pagination.update(res.schedules.length, res.nextPageToken, Number(count.count));
-
-  return { schedules: res.schedules, count: Number(count.count) };
+const pagination = useTokenPagination({
+  key: computed(() => `${filtersKey.value}|${orderBy.value}|${rows.value}`),
+  rows,
+  count: knownCount,
+  cacheId: prefix === undefined ? undefined : `${route.path}|${prefix}`,
 });
 
-const schedules = computed(() => list.data.value?.schedules ?? []);
-const count = computed(() => list.data.value?.count);
+const list = useLoader(
+  () => ({
+    filters: effectiveFilters.value,
+    orderBy: orderBy.value,
+    pageSize: rows.value,
+    page: pagination.page.value,
+    pageToken: pagination.pageToken.value,
+    key: pagination.key.value,
+  }),
+  async (request, signal): Promise<Schedule[]> => {
+    const res = await client.listSchedules(
+      {
+        filters: request.filters,
+        orderBy: request.orderBy,
+        pagination: { pageSize: request.pageSize, nextPageToken: request.pageToken },
+      },
+      { signal },
+    );
+
+    if (signal.aborted) {
+      return res.schedules;
+    }
+
+    pagination.update(request.key, request.page, res.schedules.length, res.nextPageToken);
+
+    if (res.schedules.length === 0 && request.page > 0) {
+      // The previous page was the last one, it is shown again.
+      return list.data.value ?? [];
+    }
+
+    return res.schedules;
+  },
+  { key: request => `${request.key}|${request.page}|${request.pageToken ?? ""}` },
+);
+
+usePolling([list, count], refresh);
+
+function reload(force = false) {
+  list.reload(force);
+  count.reload(force);
+}
+
+const schedules = computed(() => list.data.value ?? []);
 const selected = ref<Schedule[]>([]);
 
 watch(schedules, () => {
   const ids = new Set(schedules.value.map(s => s.id));
   selected.value = selected.value.filter(s => ids.has(s.id));
 });
+
+const busy = computed(() => list.busy.value || count.busy.value);
+/** The rows belong to a previous page or filters, and the new ones are taking a while. */
+const fading = computed(() => list.stale.value && list.busy.value);
+const firstLoad = computed(() => list.data.value === undefined && !list.error.value);
+
+/** Whether filters are set by the user, not only the fixed base filters. */
+const hasUserFilters = computed(() => toJsonString(ScheduleFiltersSchema, filters.value) !== "{}");
 
 const hasFilters = computed(() => {
   const f = effectiveFilters.value;
@@ -99,8 +173,34 @@ const hasFilters = computed(() => {
   );
 });
 
+const showJobType = computed(() => !baseKeys.value.includes("jobTypeIds"));
+const labelsFilterable = computed(() => !props.compact && !baseKeys.value.includes("labels"));
+
+function filterByLabel(label: Label) {
+  filters.value = {
+    ...filters.value,
+    labels: withLabelFilter(
+      filters.value.labels,
+      create(LabelFilterSchema, { key: label.key, value: label.value }),
+    ),
+  };
+}
+
+function labelLink(label: Label) {
+  return schedulesLink({ labels: [{ key: label.key, value: label.value }] });
+}
+
 /** Pending stop request, shown in a dialog. */
 const stopRequest = ref<StopSchedulesRequest>();
+
+/** Bulk actions need the current count to be confirmed. */
+const stopMatchingDisabled = computed(
+  () =>
+    knownCount.value === undefined ||
+    knownCount.value === 0 ||
+    count.busy.value ||
+    list.stale.value,
+);
 
 function requestStop(stopFilters: ScheduleFilters, message: string) {
   stopRequest.value = { filters: stopFilters, message };
@@ -117,7 +217,7 @@ function stopMatching() {
   requestStop(
     effectiveFilters.value,
     hasFilters.value
-      ? `Stop all active schedules matching the current filters (up to ${count.value ?? "?"} schedules)?`
+      ? `Stop all active schedules matching the current filters (up to ${formatCount(knownCount.value ?? 0)} schedules)?`
       : "No filters are set, this will stop ALL active schedules. Are you sure?",
   );
 }
@@ -129,42 +229,56 @@ function stopOne(schedule: Schedule) {
   );
 }
 
-defineExpose({ reload: list.reload });
+function rowClass() {
+  return fading.value ? "row-stale" : undefined;
+}
+
+defineExpose({ reload });
 </script>
 
 <template>
-  <DataTable
-    v-model:selection="selected"
-    :value="schedules"
-    data-key="id"
-    lazy
-    :paginator="schedules.length > 0 || pagination.first.value > 0"
-    :rows="pagination.rows.value"
-    :first="pagination.first.value"
-    :total-records="pagination.totalRecords(count, schedules.length)"
-    :rows-per-page-options="compact ? undefined : [10, 20, 50, 100]"
-    :paginator-template="pagination.paginatorTemplate"
-    current-page-report-template="{first} – {last}"
-    :loading="list.loading.value"
-    :size="compact ? 'small' : undefined"
-    scrollable
-    @page="pagination.onPage"
-  >
-    <template #header>
-      <div class="flex flex-col gap-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-muted-color">
-              {{ count ?? "…" }} schedule{{ count === 1 ? "" : "s" }}
-            </span>
-            <template v-if="!compact">
+  <div class="relative">
+    <LoadingBar :active="busy" class="absolute inset-x-0 top-0 z-10" />
+    <DataTable
+      v-model:selection="selected"
+      :value="schedules"
+      data-key="id"
+      lazy
+      paginator
+      :rows="rows"
+      :first="pagination.first.value"
+      :total-records="pagination.totalRecords.value"
+      :rows-per-page-options="compact ? undefined : pageSizeOptions"
+      :paginator-template="pagination.paginatorTemplate"
+      :current-page-report-template="pagination.report.value"
+      :size="compact ? 'small' : undefined"
+      :row-class="rowClass"
+      :table-style="{ tableLayout: 'fixed', minWidth: compact ? '34rem' : '64rem' }"
+      scrollable
+      @page="pagination.onPage"
+    >
+      <template v-if="!compact" #header>
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="min-w-24 text-sm text-muted-color tabular-nums">
+                <Skeleton
+                  v-if="knownCount === undefined && !count.error.value"
+                  width="5rem"
+                  height="1.25rem"
+                />
+                <template v-else>
+                  {{ knownCount === undefined ? "?" : formatCount(knownCount) }}
+                  schedule{{ knownCount === 1 ? "" : "s" }}
+                </template>
+              </div>
               <Button
-                v-if="selected.length > 0"
                 :label="`Stop selected (${selected.length})`"
                 icon="pi pi-stop-circle"
                 severity="danger"
                 outlined
                 size="small"
+                :disabled="selected.length === 0"
                 @click="stopSelected"
               />
               <Button
@@ -173,110 +287,146 @@ defineExpose({ reload: list.reload });
                 severity="danger"
                 text
                 size="small"
-                :disabled="count === 0"
+                :disabled="stopMatchingDisabled"
                 @click="stopMatching"
               />
-            </template>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <Select
+                v-model="orderBy"
+                :options="orderOptions"
+                option-label="label"
+                option-value="value"
+                size="small"
+                aria-label="Order"
+              />
+              <RefreshControl
+                v-if="refreshInterval === undefined"
+                v-model="ownRefresh"
+                :loading="busy"
+                @refresh="reload()"
+              />
+            </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <Select
-              v-if="!compact"
-              v-model="orderBy"
-              :options="orderOptions"
-              option-label="label"
-              option-value="value"
-              size="small"
-            />
-            <RefreshControl
-              v-if="!compact"
-              id="schedules"
-              :loading="list.loading.value"
-              @refresh="list.reload"
-            />
-          </div>
+          <ScheduleFilters v-model="filters" :hidden="baseKeys" />
         </div>
-        <ScheduleFilters v-if="!compact" v-model="filters" :hidden="baseKeys" />
-      </div>
-    </template>
-
-    <template #empty>
-      <div class="py-6 text-center text-muted-color">No schedules found.</div>
-    </template>
-
-    <Column v-if="!compact" selection-mode="multiple" header-style="width: 3rem" />
-    <Column header="ID">
-      <template #body="{ data }">
-        <CopyableId :id="data.id" short :to="`/schedules/${data.id}`" />
       </template>
-    </Column>
-    <Column v-if="!baseKeys.includes('jobTypeIds')" header="Job type">
-      <template #body="{ data }">
-        <RouterLink
-          :to="`/job-types/${data.schedule?.jobTemplate?.jobTypeId}`"
-          class="hover:underline"
+
+      <template #empty>
+        <div v-if="firstLoad" class="flex flex-col gap-4 py-2" aria-busy="true">
+          <Skeleton v-for="i in Math.min(rows, 20)" :key="i" height="2rem" />
+        </div>
+        <div v-else-if="list.data.value === undefined" class="py-6 text-center text-red-500">
+          The schedules could not be loaded.
+        </div>
+        <div v-else class="py-6 text-center text-muted-color">
+          {{ hasUserFilters ? "No schedules match the filters." : "No schedules found." }}
+        </div>
+      </template>
+
+      <!-- Both sides have the same width, so that the page links don't move. -->
+      <template #paginatorstart>
+        <div class="flex flex-col items-start gap-0.5" :class="compact ? 'w-32' : 'w-40 sm:w-72'">
+          <LoadStatus :state="list" verb="list" />
+          <LoadStatus :state="count" verb="count" />
+        </div>
+      </template>
+      <template #paginatorend>
+        <div
+          class="text-right text-xs text-muted-color tabular-nums"
+          :class="compact ? 'w-32' : 'w-40 sm:w-72'"
         >
-          {{ data.schedule?.jobTemplate?.jobTypeId }}
-        </RouterLink>
-      </template>
-    </Column>
-    <Column header="Scheduling">
-      <template #body="{ data }">
-        <span class="font-mono text-sm">{{ schedulingSummary(data.schedule?.scheduling) }}</span>
-      </template>
-    </Column>
-    <Column header="Status">
-      <template #body="{ data }">
-        <Tag
-          :value="scheduleStatusInfo[data.status as ScheduleStatus].label"
-          :severity="scheduleStatusInfo[data.status as ScheduleStatus].severity"
-          :icon="scheduleStatusInfo[data.status as ScheduleStatus].icon"
-          class="whitespace-nowrap"
-        />
-      </template>
-    </Column>
-    <Column header="Created">
-      <template #body="{ data }">
-        <span v-tooltip.top="formatTimestamp(data.createdAt)" class="whitespace-nowrap">
-          {{ formatRelative(data.createdAt) }}
-        </span>
-      </template>
-    </Column>
-    <Column v-if="!compact" header="Stopped">
-      <template #body="{ data }">
-        <span v-tooltip.top="formatTimestamp(data.stoppedAt)" class="whitespace-nowrap">
-          {{ formatRelative(data.stoppedAt) }}
-        </span>
-      </template>
-    </Column>
-    <Column v-if="!compact" header="Labels">
-      <template #body="{ data }">
-        <div class="flex flex-wrap gap-1">
-          <Tag
-            v-for="label in data.schedule?.labels"
-            :key="label.key"
-            :value="`${label.key}=${label.value}`"
-            severity="secondary"
-            class="font-normal! whitespace-nowrap"
-          />
+          <template v-if="!compact && list.loadedAt.value !== undefined">
+            Updated {{ formatClock(list.loadedAt.value) }}
+          </template>
         </div>
       </template>
-    </Column>
-    <Column v-if="!compact" header-style="width: 3rem">
-      <template #body="{ data }">
-        <Button
-          v-if="data.status === ScheduleStatus.ACTIVE"
-          v-tooltip.left="'Stop schedule'"
-          icon="pi pi-stop-circle"
-          severity="danger"
-          text
-          rounded
-          size="small"
-          aria-label="Stop schedule"
-          @click="stopOne(data)"
-        />
-      </template>
-    </Column>
-  </DataTable>
 
-  <StopSchedulesDialog v-model="stopRequest" @stopped="list.reload" />
+      <Column v-if="!compact" selection-mode="multiple" frozen header-style="width: 3rem" />
+      <Column header="ID" header-style="width: 8rem">
+        <template #body="{ data }">
+          <CopyableId :id="data.id" short :to="`/schedules/${data.id}`" />
+        </template>
+      </Column>
+      <Column :header="showJobType ? 'Schedule' : 'Labels'">
+        <template #body="{ data }">
+          <div class="flex min-w-0 flex-col gap-1">
+            <RouterLink
+              v-if="showJobType"
+              v-tooltip.top="{ value: data.schedule?.jobTemplate?.jobTypeId, showDelay: 400 }"
+              :to="`/job-types/${data.schedule?.jobTemplate?.jobTypeId}`"
+              class="truncate font-mono text-sm hover:underline"
+            >
+              {{ data.schedule?.jobTemplate?.jobTypeId }}
+            </RouterLink>
+            <LabelList
+              v-if="data.schedule?.labels.length"
+              :labels="data.schedule.labels"
+              :max="compact ? 2 : 4"
+              :selectable="labelsFilterable"
+              :link="labelsFilterable ? undefined : labelLink"
+              :hint="
+                labelsFilterable
+                  ? 'Click to filter by this label'
+                  : 'Show schedules with this label'
+              "
+              @select="filterByLabel"
+            />
+            <span v-else-if="!showJobType" class="text-muted-color">-</span>
+          </div>
+        </template>
+      </Column>
+      <Column header="Scheduling" :header-style="compact ? 'width: 10rem' : 'width: 13rem'">
+        <template #body="{ data }">
+          <span
+            v-tooltip.top="{ value: schedulingSummary(data.schedule?.scheduling), showDelay: 400 }"
+            class="block truncate font-mono text-sm"
+          >
+            {{ schedulingSummary(data.schedule?.scheduling) }}
+          </span>
+        </template>
+      </Column>
+      <Column header="Status" header-style="width: 8rem">
+        <template #body="{ data }">
+          <Tag
+            :value="scheduleStatusInfo[data.status as ScheduleStatus].label"
+            :severity="scheduleStatusInfo[data.status as ScheduleStatus].severity"
+            :icon="scheduleStatusInfo[data.status as ScheduleStatus].icon"
+            class="whitespace-nowrap"
+          />
+        </template>
+      </Column>
+      <Column v-if="!compact" header="Created" header-style="width: 9rem">
+        <template #body="{ data }">
+          <span v-tooltip.top="formatTimestamp(data.createdAt)" class="block truncate text-sm">
+            {{ formatRelative(data.createdAt) }}
+          </span>
+        </template>
+      </Column>
+      <Column v-if="!compact" header="Stopped" header-style="width: 9rem">
+        <template #body="{ data }">
+          <span v-tooltip.top="formatTimestamp(data.stoppedAt)" class="block truncate text-sm">
+            {{ formatRelative(data.stoppedAt) }}
+          </span>
+        </template>
+      </Column>
+      <Column v-if="!compact" frozen align-frozen="right" header-style="width: 3.5rem">
+        <template #body="{ data }">
+          <Button
+            v-if="data.status === ScheduleStatus.ACTIVE"
+            v-tooltip.left="'Stop schedule'"
+            icon="pi pi-stop-circle"
+            severity="danger"
+            text
+            rounded
+            size="small"
+            aria-label="Stop schedule"
+            @click="stopOne(data)"
+          />
+        </template>
+      </Column>
+    </DataTable>
+  </div>
+
+  <StopSchedulesDialog v-model="stopRequest" @stopped="reload(true)" />
 </template>

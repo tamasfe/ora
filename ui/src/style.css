@@ -1,6 +1,44 @@
 @import "tailwindcss";
 @import "tailwindcss-primeui";
 
+/* The page doesn't shift horizontally when a scrollbar appears. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   @apply bg-surface-50 text-color dark:bg-surface-950;
+}
+
+/*
+ * Rows of a previous page or filters while the new ones are loading,
+ * the contents are faded instead of the rows, frozen cells would become see-through otherwise.
+ */
+.row-stale > td > * {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+/*
+ * Scrolled cells with positioned content (e.g. buttons) would be painted over frozen cells,
+ * header cells have the same z-index.
+ */
+.p-datatable-scrollable td.p-datatable-frozen-column {
+  z-index: 1;
+}
+
+/*
+ * The selected row highlight is translucent in dark mode,
+ * frozen cells need an opaque base so that scrolled cells don't show through.
+ */
+.p-datatable-scrollable
+  .p-datatable-tbody
+  > tr.p-datatable-row-selected
+  > td.p-datatable-frozen-column {
+  background:
+    linear-gradient(
+      var(--p-datatable-row-selected-background),
+      var(--p-datatable-row-selected-background)
+    ),
+    var(--p-datatable-row-background);
 }

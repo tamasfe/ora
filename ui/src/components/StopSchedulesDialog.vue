@@ -4,6 +4,8 @@ import { useToast } from "primevue/usetoast";
 import type { ScheduleFilters } from "../api/ora/admin/v1/schedules_pb";
 import { useOraAdminClient } from "../grpc";
 import { useErrorToast } from "../util/errors";
+import { formatCount, formatLatency, formatSeconds } from "../util/format";
+import { useStopwatch } from "../util/time";
 
 export interface StopSchedulesRequest {
   filters: ScheduleFilters;
@@ -22,7 +24,7 @@ const toast = useToast();
 const reportError = useErrorToast();
 
 const cancelActiveJobs = ref(false);
-const stopping = ref(false);
+const stopping = useStopwatch();
 
 watch(request, () => (cancelActiveJobs.value = false));
 
@@ -31,24 +33,21 @@ async function stop() {
     return;
   }
 
-  stopping.value = true;
   try {
-    const res = await client.stopSchedules({
-      filters: request.value.filters,
-      cancelActiveJobs: cancelActiveJobs.value,
-    });
+    const filters = request.value.filters;
+    const { result, ms } = await stopping.time(() =>
+      client.stopSchedules({ filters, cancelActiveJobs: cancelActiveJobs.value }),
+    );
     toast.add({
       severity: "success",
       summary: "Schedules stopped",
-      detail: `${res.cancelledScheduleIds.length} schedule(s) stopped.`,
+      detail: `${formatCount(result.cancelledScheduleIds.length)} schedule(s) stopped in ${formatLatency(ms)}.`,
       life: 5000,
     });
     request.value = undefined;
-    emit("stopped", res.cancelledScheduleIds);
+    emit("stopped", result.cancelledScheduleIds);
   } catch (error) {
     reportError(error, "Failed to stop schedules");
-  } finally {
-    stopping.value = false;
   }
 }
 </script>
@@ -72,8 +71,23 @@ async function stop() {
       </label>
     </div>
     <template #footer>
-      <Button label="Keep" severity="secondary" outlined @click="request = undefined" />
-      <Button label="Stop schedules" severity="danger" :loading="stopping" @click="stop" />
+      <Button
+        label="Keep"
+        severity="secondary"
+        outlined
+        :disabled="stopping.running.value"
+        @click="request = undefined"
+      />
+      <Button
+        :label="
+          (stopping.elapsed.value ?? 0) >= 1000
+            ? `Stopping… ${formatSeconds(stopping.elapsed.value ?? 0)}`
+            : 'Stop schedules'
+        "
+        severity="danger"
+        :loading="stopping.running.value"
+        @click="stop"
+      />
     </template>
   </Dialog>
 </template>

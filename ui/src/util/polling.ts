@@ -1,4 +1,6 @@
-import { onUnmounted, watch, type Ref } from "vue";
+import { onScopeDispose, watch, type Ref } from "vue";
+import type { LoadState } from ".";
+import { useDocumentVisible } from "./time";
 
 export const refreshIntervalOptions = [
   { label: "Off", value: 0 },
@@ -6,29 +8,38 @@ export const refreshIntervalOptions = [
   { label: "30s", value: 30000 },
 ];
 
+/** The longest delay between reloads after repeated failures. */
+const maxBackoff = 60_000;
+
 /**
- * Repeatedly calls the given function while the interval is positive.
+ * Reloads the targets while the interval is positive.
+ *
+ * Each target is reloaded `interval` milliseconds after its previous request finished,
+ * so slow requests are never interrupted and a slow target doesn't hold back the others.
+ * Polling pauses while the page is hidden and backs off after failures.
  */
-export function usePolling(f: () => void, interval: Ref<number>) {
-  let handle: ReturnType<typeof setInterval> | undefined;
+export function usePolling(targets: LoadState | LoadState[], interval: Readonly<Ref<number>>) {
+  const visible = useDocumentVisible();
 
-  const stop = () => {
-    if (handle !== undefined) {
-      clearInterval(handle);
-      handle = undefined;
-    }
-  };
+  for (const target of Array.isArray(targets) ? targets : [targets]) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-  watch(
-    interval,
-    value => {
-      stop();
-      if (value > 0) {
-        handle = setInterval(f, value);
-      }
-    },
-    { immediate: true },
-  );
+    watch(
+      [interval, visible, target.enabled, target.loading, target.settledAt],
+      ([ms, isVisible, enabled, loading, settledAt]) => {
+        clearTimeout(timer);
 
-  onUnmounted(stop);
+        if (ms <= 0 || !isVisible || !enabled || loading) {
+          return;
+        }
+
+        const delay = Math.min(ms * 2 ** target.failures.value, Math.max(ms, maxBackoff));
+        const elapsed = settledAt === undefined ? delay : Date.now() - settledAt;
+        timer = setTimeout(() => target.reload(), Math.max(0, delay - elapsed));
+      },
+      { immediate: true },
+    );
+
+    onScopeDispose(() => clearTimeout(timer));
+  }
 }

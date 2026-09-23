@@ -32,6 +32,15 @@ export const executionStatusInfo: Record<ExecutionStatus, StatusInfo> = {
   [ExecutionStatus.CANCELLED]: { label: "Cancelled", severity: "secondary", icon: "pi pi-ban" },
 };
 
+/** Names of execution statuses in URLs. */
+export const executionStatusNames: Record<string, ExecutionStatus> = {
+  pending: ExecutionStatus.PENDING,
+  in_progress: ExecutionStatus.IN_PROGRESS,
+  succeeded: ExecutionStatus.SUCCEEDED,
+  failed: ExecutionStatus.FAILED,
+  cancelled: ExecutionStatus.CANCELLED,
+};
+
 /** Execution statuses that can be selected in filters. */
 export const executionStatusOptions = [
   ExecutionStatus.PENDING,
@@ -49,6 +58,12 @@ export const scheduleStatusInfo: Record<ScheduleStatus, StatusInfo> = {
   },
   [ScheduleStatus.ACTIVE]: { label: "Active", severity: "success", icon: "pi pi-play-circle" },
   [ScheduleStatus.STOPPED]: { label: "Stopped", severity: "secondary", icon: "pi pi-stop-circle" },
+};
+
+/** Names of schedule statuses in URLs. */
+export const scheduleStatusNames: Record<string, ScheduleStatus> = {
+  active: ScheduleStatus.ACTIVE,
+  stopped: ScheduleStatus.STOPPED,
 };
 
 /** Schedule statuses that can be selected in filters. */

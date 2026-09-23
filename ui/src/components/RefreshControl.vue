@@ -1,30 +1,17 @@
 <script setup lang="ts">
-import { useRoute } from "vue-router";
-import { refreshIntervalOptions, usePolling } from "../util/polling";
-import { useLocalStorageRef } from "../util/storage";
+import { refreshIntervalOptions } from "../util/polling";
 
 const props = defineProps<{
+  /** A refresh is in progress, refreshing again is not possible until it finishes. */
   loading?: boolean;
-  /**
-   * Distinguishes multiple controls on the same page,
-   * the setting is remembered per page type and ID.
-   */
-  id?: string;
 }>();
+
+/** The auto refresh interval in milliseconds, zero is off. */
+const interval = defineModel<number>({ required: true });
 
 const emit = defineEmits<{
   refresh: [];
 }>();
-
-const route = useRoute();
-
-const interval = useLocalStorageRef(
-  `refresh:${String(route.name)}${props.id ? `:${props.id}` : ""}`,
-  0,
-  (value): value is number => refreshIntervalOptions.some(option => option.value === value),
-);
-
-usePolling(() => emit("refresh"), interval);
 </script>
 
 <template>
@@ -32,7 +19,7 @@ usePolling(() => emit("refresh"), interval);
     <Button
       v-tooltip.bottom="'Refresh'"
       icon="pi pi-refresh"
-      :loading="props.loading && interval === 0"
+      :loading="props.loading"
       severity="secondary"
       text
       rounded

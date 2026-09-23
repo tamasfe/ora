@@ -22,6 +22,11 @@ const cronExamples = [
   <div class="flex flex-col gap-6">
     <Fieldset legend="Scheduling">
       <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-1">
+          <label class="font-medium">Schedule labels</label>
+          <LabelsInput v-model="draft.labels" />
+        </div>
+
         <SelectButton
           v-model="draft.policy"
           :options="policyOptions"
@@ -112,11 +117,6 @@ const cronExamples = [
             end-placeholder="Indefinitely"
           />
           <small class="text-muted-color">No jobs are created outside of this time range.</small>
-        </div>
-
-        <div class="flex flex-col gap-1">
-          <label class="text-sm">Schedule labels</label>
-          <LabelsInput v-model="draft.labels" />
         </div>
       </div>
     </Fieldset>

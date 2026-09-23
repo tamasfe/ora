@@ -5,6 +5,7 @@ import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { timestampMs } from "@bufbuild/protobuf/wkt";
 import type { Execution } from "../../api/ora/admin/v1/executions_pb";
+import type { Label } from "../../api/ora/common/v1/label_pb";
 import { useOraAdminClient } from "../../grpc";
 import { useLoader } from "../../util";
 import { useJobTypes } from "../../util/data";
@@ -12,13 +13,18 @@ import { useErrorToast } from "../../util/errors";
 import {
   formatDuration,
   formatElapsed,
+  formatLatency,
   formatRelative,
   formatTimestamp,
   prettyJson,
 } from "../../util/format";
 import { backoffStrategyLabel, hasTimeout, timeoutBaseTimeLabel } from "../../util/job";
+import { labelsToFilters } from "../../util/labels";
+import { usePolling } from "../../util/polling";
+import { jobsLink, useRefreshInterval } from "../../util/route";
 import { parseSchema, validateJson } from "../../util/schema";
 import { executionEndedAt, executionStatusInfo, isJobActive, jobStatus } from "../../util/status";
+import { useStopwatch } from "../../util/time";
 
 const route = useRoute("/jobs/[id]");
 const router = useRouter();
@@ -28,19 +34,31 @@ const toast = useToast();
 const reportError = useErrorToast();
 const { byId } = useJobTypes();
 
-const loader = useLoader(async signal => {
-  const res = await client.listJobs(
-    { filters: { jobIds: [route.params.id] }, pagination: { pageSize: 1 } },
-    { signal },
-  );
-  return res.jobs[0] ?? null;
-});
+// Reading the route in the loader would reload on any query change.
+const id = computed(() => route.params.id);
+const refresh = useRefreshInterval();
 
-const job = computed(() => loader.data.value);
+const loader = useLoader(
+  () => id.value,
+  async (jobId, signal) => {
+    const res = await client.listJobs(
+      { filters: { jobIds: [jobId] }, pagination: { pageSize: 1 } },
+      { signal },
+    );
+    return res.jobs[0] ?? null;
+  },
+);
+
+usePolling(loader, refresh);
+
+/** The job, not shown while another job is loading. */
+const job = computed(() => (loader.stale.value ? undefined : (loader.data.value ?? undefined)));
+const notFound = computed(() => !loader.stale.value && loader.data.value === null);
 const definition = computed(() => job.value?.job);
 const jobType = computed(() => byId.value.get(definition.value?.jobTypeId ?? ""));
 const status = computed(() => (job.value ? executionStatusInfo[jobStatus(job.value)] : undefined));
 const outputSchema = computed(() => parseSchema(jobType.value?.outputSchemaJson));
+const active = computed(() => !!job.value && isJobActive(job.value));
 
 /** Executions in chronological order with their attempt numbers. */
 const executions = computed(() =>
@@ -52,14 +70,15 @@ const executions = computed(() =>
     .reverse(),
 );
 
+const executionRows = 10;
 const expandedRows = ref<Record<string, boolean>>({});
 
 // Expand the latest execution by default.
 watch(
   () => executions.value[0]?.execution.id,
-  id => {
-    if (id && Object.keys(expandedRows.value).length === 0) {
-      expandedRows.value = { [id]: true };
+  latest => {
+    if (latest && Object.keys(expandedRows.value).length === 0) {
+      expandedRows.value = { [latest]: true };
     }
   },
 );
@@ -71,6 +90,12 @@ function outputValidation(execution: Execution) {
   return validateJson(execution.outputJson, outputSchema.value);
 }
 
+function labelLink(label: Label) {
+  return jobsLink({ labels: [{ key: label.key, value: label.value }] });
+}
+
+const cancelling = useStopwatch();
+
 function cancel() {
   confirm.require({
     header: "Cancel job",
@@ -80,9 +105,16 @@ function cancel() {
     acceptProps: { label: "Cancel job", severity: "danger" },
     accept: async () => {
       try {
-        await client.cancelJobs({ filters: { jobIds: [route.params.id] } });
-        toast.add({ severity: "success", summary: "Job cancelled", life: 5000 });
-        loader.reload();
+        const { ms } = await cancelling.time(() =>
+          client.cancelJobs({ filters: { jobIds: [id.value] } }),
+        );
+        toast.add({
+          severity: "success",
+          summary: "Job cancelled",
+          detail: `Cancelled in ${formatLatency(ms)}.`,
+          life: 5000,
+        });
+        loader.reload(true);
       } catch (error) {
         reportError(error, "Failed to cancel job");
       }
@@ -97,16 +129,14 @@ function cancel() {
       <div class="flex min-w-0 items-center gap-2">
         <Button icon="pi pi-arrow-left" severity="secondary" text rounded @click="router.back()" />
         <h1 class="text-2xl font-semibold">Job</h1>
-        <CopyableId :id="route.params.id" class="text-muted-color" />
+        <CopyableId :id="id" class="text-muted-color" />
         <Tag v-if="status" :value="status.label" :severity="status.severity" :icon="status.icon" />
+        <Skeleton v-else-if="!notFound" width="6rem" height="1.75rem" />
       </div>
-      <div class="flex items-center gap-2">
-        <RefreshControl :loading="loader.loading.value" @refresh="loader.reload" />
-        <RouterLink
-          v-slot="{ navigate }"
-          :to="{ path: '/jobs/new', query: { from: route.params.id } }"
-          custom
-        >
+      <div class="flex flex-wrap items-center gap-2">
+        <LoadStatus :state="loader" verb="load" updated class="min-w-56 text-right" />
+        <RefreshControl v-model="refresh" :loading="loader.busy.value" @refresh="loader.reload()" />
+        <RouterLink v-slot="{ navigate }" :to="{ path: '/jobs/new', query: { from: id } }" custom>
           <Button
             label="Clone"
             icon="pi pi-clone"
@@ -117,24 +147,49 @@ function cancel() {
           />
         </RouterLink>
         <Button
-          v-if="job && isJobActive(job)"
           label="Cancel"
           icon="pi pi-ban"
           severity="danger"
+          :disabled="!active || cancelling.running.value"
+          :loading="cancelling.running.value"
           @click="cancel"
         />
       </div>
     </div>
 
-    <Message v-if="loader.data.value === null" severity="warn">Job not found.</Message>
-    <ProgressBar v-else-if="!job && loader.loading.value" mode="indeterminate" class="h-1!" />
+    <Message v-if="notFound" severity="warn">Job not found.</Message>
 
-    <template v-if="job && definition">
+    <template v-else>
+      <div class="flex min-h-7 flex-wrap items-center gap-2">
+        <span class="text-sm text-muted-color"><i class="pi pi-tags mr-1" />Labels</span>
+        <template v-if="definition">
+          <LabelList
+            v-if="definition.labels.length > 0"
+            :labels="definition.labels"
+            size="normal"
+            :link="labelLink"
+            hint="Show jobs with this label"
+          />
+          <span v-else class="text-sm text-muted-color">None</span>
+          <RouterLink
+            v-if="definition.labels.length > 1"
+            :to="jobsLink({ labels: labelsToFilters(definition.labels) })"
+            class="text-sm text-primary hover:underline"
+          >
+            Jobs with the same labels
+          </RouterLink>
+        </template>
+        <Skeleton v-else width="16rem" height="1.5rem" />
+      </div>
+
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <template #title>Details</template>
           <template #content>
-            <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm">
+            <dl
+              v-if="job && definition"
+              class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 text-sm"
+            >
               <dt class="text-muted-color">Job type</dt>
               <dd>
                 <RouterLink
@@ -192,37 +247,42 @@ function cancel() {
                   >)
                 </span>
               </dd>
-              <dt class="text-muted-color">Labels</dt>
-              <dd class="flex flex-wrap gap-1">
-                <Tag
-                  v-for="label in definition.labels"
-                  :key="label.key"
-                  :value="`${label.key}=${label.value}`"
-                  severity="secondary"
-                  class="font-normal!"
-                />
-                <span v-if="definition.labels.length === 0">-</span>
-              </dd>
             </dl>
+            <div v-else class="flex flex-col gap-3">
+              <Skeleton v-for="i in 6" :key="i" height="1.25rem" />
+            </div>
           </template>
         </Card>
 
         <Card>
           <template #title>Input payload</template>
           <template #content>
-            <JsonEditor :model-value="prettyJson(definition.inputPayloadJson)" readonly />
+            <JsonEditor
+              v-if="definition"
+              :model-value="prettyJson(definition.inputPayloadJson)"
+              readonly
+            />
+            <Skeleton v-else height="8rem" />
           </template>
         </Card>
       </div>
 
       <Card>
-        <template #title>Executions</template>
+        <template #title>
+          Executions
+          <span v-if="job" class="text-base font-normal text-muted-color tabular-nums"
+            >({{ executions.length }})</span
+          >
+        </template>
         <template #content>
           <DataTable
+            v-if="job"
             v-model:expanded-rows="expandedRows"
             :value="executions"
             data-key="execution.id"
             size="small"
+            :paginator="executions.length > executionRows"
+            :rows="executionRows"
           >
             <template #empty>
               <div class="py-4 text-center text-muted-color">No executions yet.</div>
@@ -264,21 +324,29 @@ function cancel() {
               </template>
             </Column>
             <Column header="Target time">
-              <template #body="{ data }">{{
-                formatTimestamp(data.execution.targetExecutionTime)
-              }}</template>
+              <template #body="{ data }">
+                <span class="tabular-nums">{{
+                  formatTimestamp(data.execution.targetExecutionTime)
+                }}</span>
+              </template>
             </Column>
             <Column header="Started">
-              <template #body="{ data }">{{ formatTimestamp(data.execution.startedAt) }}</template>
+              <template #body="{ data }">
+                <span class="tabular-nums">{{ formatTimestamp(data.execution.startedAt) }}</span>
+              </template>
             </Column>
             <Column header="Ended">
-              <template #body="{ data }">{{
-                formatTimestamp(executionEndedAt(data.execution))
-              }}</template>
+              <template #body="{ data }">
+                <span class="tabular-nums">{{
+                  formatTimestamp(executionEndedAt(data.execution))
+                }}</span>
+              </template>
             </Column>
             <Column header="Duration">
               <template #body="{ data }">
-                {{ formatElapsed(data.execution.startedAt, executionEndedAt(data.execution)) }}
+                <span class="tabular-nums">{{
+                  formatElapsed(data.execution.startedAt, executionEndedAt(data.execution))
+                }}</span>
               </template>
             </Column>
 
@@ -331,6 +399,9 @@ function cancel() {
               </div>
             </template>
           </DataTable>
+          <div v-else class="flex flex-col gap-3">
+            <Skeleton v-for="i in 3" :key="i" height="2rem" />
+          </div>
         </template>
       </Card>
     </template>

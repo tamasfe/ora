@@ -1,10 +1,3 @@
-<script setup lang="ts">
-import { ScheduleFiltersSchema } from "../../api/ora/admin/v1/schedules_pb";
-import { useRouteQueryMessage } from "../../util/route";
-
-const filters = useRouteQueryMessage(ScheduleFiltersSchema);
-</script>
-
 <template>
   <div class="flex flex-col gap-4">
     <div class="flex items-center justify-between">
@@ -13,6 +6,6 @@ const filters = useRouteQueryMessage(ScheduleFiltersSchema);
         <Button label="New schedule" icon="pi pi-plus" @click="navigate" />
       </RouterLink>
     </div>
-    <SchedulesTable v-model:filters="filters" />
+    <SchedulesTable query-prefix="" />
   </div>
 </template>

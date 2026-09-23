@@ -3,7 +3,6 @@ import { computed, ref } from "vue";
 import { create } from "@bufbuild/protobuf";
 import { JobFiltersSchema, type JobFilters } from "../api/ora/admin/v1/jobs_pb";
 import { useJobTypes } from "../util/data";
-import { labelsToRows, rowsToLabelFilters } from "../util/labels";
 import { executionStatusOptions } from "../util/status";
 
 const props = defineProps<{
@@ -13,9 +12,7 @@ const props = defineProps<{
 
 const model = defineModel<JobFilters>({ required: true });
 
-const { jobTypes } = useJobTypes();
-
-const showMore = ref(false);
+const { jobTypes, byId, loaded } = useJobTypes();
 
 function visible(key: keyof JobFilters) {
   return !props.hidden?.includes(key);
@@ -32,25 +29,35 @@ const idFilters = [
   { key: "executionIds", label: "Execution IDs" },
 ] as const;
 
-const activeCount = computed(() => {
-  const f = model.value;
-  return [
-    f.jobIds.length,
-    f.jobTypeIds.length,
-    f.scheduleIds.length,
-    f.executorIds.length,
-    f.executionIds.length,
-    f.executionStatuses.length,
-    f.labels.length,
-    f.targetExecutionTime ? 1 : 0,
-    f.createdAt ? 1 : 0,
-  ].filter(n => n > 0).length;
-});
+function isSet(key: keyof JobFilters): boolean {
+  const value = model.value[key];
+  return visible(key) && (Array.isArray(value) ? value.length > 0 : value !== undefined);
+}
 
-const labelRows = computed({
-  get: () => labelsToRows(model.value.labels),
-  set: rows => set("labels", rowsToLabelFilters(rows)),
-});
+/** Filters in the collapsible section. */
+const moreKeys = [
+  "jobIds",
+  "scheduleIds",
+  "executorIds",
+  "executionIds",
+  "targetExecutionTime",
+  "createdAt",
+] as const;
+
+const moreCount = computed(() => moreKeys.filter(isSet).length);
+const activeCount = computed(
+  () =>
+    moreCount.value + (["labels", "jobTypeIds", "executionStatuses"] as const).filter(isSet).length,
+);
+
+// Filters from a shared link should be visible.
+const showMore = ref(moreCount.value > 0);
+
+/** Selected job types that are not known (yet) are listed as well, so that they can be displayed. */
+const jobTypeOptions = computed(() => [
+  ...jobTypes.value,
+  ...model.value.jobTypeIds.filter(id => !byId.value.has(id)).map(id => ({ id, description: "" })),
+]);
 
 function clear() {
   const cleared = create(JobFiltersSchema);
@@ -65,17 +72,24 @@ function clear() {
 <template>
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center gap-2">
+      <LabelFilterInput
+        v-if="visible('labels')"
+        :model-value="model.labels"
+        class="min-w-72 flex-[1_1_24rem]"
+        @update:model-value="set('labels', $event)"
+      />
       <MultiSelect
         v-if="visible('jobTypeIds')"
         :model-value="model.jobTypeIds"
-        :options="jobTypes"
+        :options="jobTypeOptions"
         option-label="id"
         option-value="id"
         placeholder="Job types"
         filter
+        :loading="!loaded"
         :max-selected-labels="2"
+        :virtual-scroller-options="jobTypeOptions.length > 50 ? { itemSize: 40 } : undefined"
         show-clear
-        size="small"
         class="w-64"
         @update:model-value="set('jobTypeIds', $event)"
       />
@@ -88,7 +102,6 @@ function clear() {
         placeholder="Status"
         :max-selected-labels="2"
         show-clear
-        size="small"
         class="w-56"
         @update:model-value="set('executionStatuses', $event)"
       >
@@ -101,8 +114,7 @@ function clear() {
         :icon="showMore ? 'pi pi-chevron-up' : 'pi pi-filter'"
         severity="secondary"
         text
-        size="small"
-        :badge="activeCount > 0 ? String(activeCount) : undefined"
+        :badge="moreCount > 0 ? String(moreCount) : undefined"
         @click="showMore = !showMore"
       />
       <Button
@@ -111,7 +123,6 @@ function clear() {
         icon="pi pi-filter-slash"
         severity="secondary"
         text
-        size="small"
         @click="clear"
       />
     </div>
@@ -125,7 +136,6 @@ function clear() {
             multiple
             :typeahead="false"
             placeholder="Type an ID and press enter"
-            size="small"
             fluid
             @update:model-value="set(idFilter.key, $event ?? [])"
           />
@@ -144,10 +154,6 @@ function clear() {
           :model-value="model.createdAt"
           @update:model-value="set('createdAt', $event)"
         />
-      </div>
-      <div v-if="visible('labels')" class="flex flex-col gap-1">
-        <label class="text-sm text-muted-color">Labels</label>
-        <LabelsInput v-model="labelRows" filter />
       </div>
     </div>
   </div>

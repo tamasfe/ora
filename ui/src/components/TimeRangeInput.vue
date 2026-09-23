@@ -43,7 +43,6 @@ const end = computed({
       hour-format="24"
       show-button-bar
       :placeholder="props.startPlaceholder"
-      size="small"
       class="min-w-48 flex-1"
     />
     <span class="text-muted-color">–</span>
@@ -53,7 +52,6 @@ const end = computed({
       hour-format="24"
       show-button-bar
       :placeholder="props.endPlaceholder"
-      size="small"
       class="min-w-48 flex-1"
     />
   </div>
