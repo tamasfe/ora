@@ -7,12 +7,34 @@ import PrimeVue from "primevue/config";
 import Aura from "@primeuix/themes/aura";
 import { definePreset } from "@primeuix/themes";
 import ConfirmationService from "primevue/confirmationservice";
+import ToastService from "primevue/toastservice";
+import Tooltip from "primevue/tooltip";
 
 import "primeicons/primeicons.css";
 import { oraAdminClient } from "./grpc";
 
+/**
+ * The path the UI is served under, set by the server via the <base> element.
+ */
+function basePath(): string {
+  const href = document.querySelector("base")?.href;
+  return href ? new URL(href, location.href).pathname : "/";
+}
+
+/**
+ * The URL of the Ora API, the server can set it via a meta tag,
+ * by default the API is expected to be served on the same origin as the UI.
+ */
+function apiUrl(): string {
+  const configured = document
+    .querySelector<HTMLMetaElement>('meta[name="ora-api-url"]')
+    ?.content.trim();
+
+  return configured || import.meta.env.VITE_ORA_API_URL || location.origin;
+}
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(basePath()),
   routes,
 });
 
@@ -45,6 +67,8 @@ createApp(App)
       preset,
     },
   })
-  .use(oraAdminClient("http://127.0.0.1:50051"))
+  .use(oraAdminClient(apiUrl()))
   .use(ConfirmationService)
+  .use(ToastService)
+  .directive("tooltip", Tooltip)
   .mount("#app");

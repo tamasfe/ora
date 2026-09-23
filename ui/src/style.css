@@ -1,1 +1,6 @@
 @import "tailwindcss";
+@import "tailwindcss-primeui";
+
+body {
+  @apply bg-surface-50 text-color dark:bg-surface-950;
+}

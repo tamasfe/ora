@@ -9,3 +9,4 @@ perf.data*
 .venv
 __pycache__
 uv.
+/crates/ora-ui/dist
