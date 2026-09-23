@@ -10,6 +10,10 @@ const relativeFormat = new Intl.RelativeTimeFormat(undefined, {
   numeric: "auto",
 });
 
+const clockFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
+
+const countFormat = new Intl.NumberFormat();
+
 /**
  * Formats a timestamp as a local date and time.
  */
@@ -74,6 +78,42 @@ export function formatMs(ms: number): string {
   }
 
   return parts.join(" ");
+}
+
+/**
+ * Formats the duration of a request, e.g. "45 ms" or "1.3 s".
+ */
+export function formatLatency(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)} ms`;
+  }
+
+  if (ms < 10_000) {
+    return `${(ms / 1000).toFixed(1)} s`;
+  }
+
+  return formatSeconds(ms);
+}
+
+/**
+ * Formats the time spent on an operation in progress in whole seconds, e.g. "12 s" or "2m 5s".
+ */
+export function formatSeconds(ms: number): string {
+  return ms < 60_000 ? `${Math.floor(ms / 1000)} s` : formatMs(Math.floor(ms / 1000) * 1000);
+}
+
+/**
+ * Formats a point in time (milliseconds since the epoch) as a local time of day.
+ */
+export function formatClock(ms: number): string {
+  return clockFormat.format(ms);
+}
+
+/**
+ * Formats a number with digit grouping, e.g. "12,345".
+ */
+export function formatCount(count: number): string {
+  return countFormat.format(count);
 }
 
 /**

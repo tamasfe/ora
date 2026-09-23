@@ -126,8 +126,8 @@ pub(crate) async fn job_details(
                 ) {
                     select.and_where(Expr::cust_with_values(
                         r#"
-                            (ora.job.target_execution_time >= to_timestamp($1::DOUBLE PRECISION)
-                                AND ora.job.id > $2::UUID)
+                            (ora.job.target_execution_time, ora.job.id)
+                                > (to_timestamp($1::DOUBLE PRECISION), $2::UUID)
                         "#,
                         [
                             Value::from(systemtime_to_ts(last_target_execution_time)),
@@ -146,10 +146,13 @@ pub(crate) async fn job_details(
                     page_token.last_target_execution_time,
                     page_token.last_job_id,
                 ) {
+                    // The time is descending but ties are ordered by ascending IDs,
+                    // so a row comparison doesn't work here.
                     select.and_where(Expr::cust_with_values(
                         r#"
-                            (ora.job.target_execution_time <= to_timestamp($1::DOUBLE PRECISION)
-                                AND ora.job.id > $2::UUID)
+                            (ora.job.target_execution_time < to_timestamp($1::DOUBLE PRECISION)
+                                OR (ora.job.target_execution_time = to_timestamp($1::DOUBLE PRECISION)
+                                    AND ora.job.id > $2::UUID))
                         "#,
                         [
                             Value::from(systemtime_to_ts(last_target_execution_time)),

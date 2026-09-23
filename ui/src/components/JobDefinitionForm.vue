@@ -77,12 +77,14 @@ const targetTimeOptions = [
         placeholder="Select a job type"
         filter
         :loading="!loaded"
+        :virtual-scroller-options="jobTypes.length > 50 ? { itemSize: 56 } : undefined"
         fluid
       >
         <template #option="{ option }">
-          <div class="flex flex-col">
-            <span class="font-mono">{{ option.id }}</span>
-            <span v-if="option.description" class="text-sm text-muted-color">
+          <!-- Fixed height, as virtual scrolling needs items of the same size. -->
+          <div class="flex h-10 min-w-0 flex-col justify-center">
+            <span class="truncate font-mono">{{ option.id }}</span>
+            <span v-if="option.description" class="truncate text-sm text-muted-color">
               {{ option.description }}
             </span>
           </div>
@@ -97,6 +99,11 @@ const targetTimeOptions = [
       >
         No connected executor supports this job type, jobs will wait until one connects.
       </Message>
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <label class="font-medium">Labels</label>
+      <LabelsInput v-model="draft.labels" />
     </div>
 
     <div class="flex flex-col gap-1">
@@ -167,11 +174,6 @@ const targetTimeOptions = [
           placeholder="Select a time"
         />
       </div>
-    </div>
-
-    <div class="flex flex-col gap-1">
-      <label class="font-medium">Labels</label>
-      <LabelsInput v-model="draft.labels" />
     </div>
 
     <Accordion v-model:value="expandedSections" multiple>

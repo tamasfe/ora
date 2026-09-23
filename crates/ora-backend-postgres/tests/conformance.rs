@@ -3,10 +3,16 @@
 use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime};
 use tokio_postgres::NoTls;
 
+/// The database to run the tests in, its `ora` schema is dropped by each test.
+fn database_url() -> String {
+    std::env::var("ORA_TEST_DATABASE_URL")
+        .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/postgres".to_string())
+}
+
 #[tokio::test]
 async fn smoke() {
     let mut cfg = Config::new();
-    cfg.url = Some("postgresql://postgres:postgres@localhost:5432/postgres".to_string());
+    cfg.url = Some(database_url());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
@@ -30,7 +36,7 @@ async fn smoke() {
 #[tokio::test]
 async fn queries() {
     let mut cfg = Config::new();
-    cfg.url = Some("postgresql://postgres:postgres@localhost:5432/postgres".to_string());
+    cfg.url = Some(database_url());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
@@ -54,7 +60,7 @@ async fn queries() {
 #[tokio::test]
 async fn pagination_and_ordering() {
     let mut cfg = Config::new();
-    cfg.url = Some("postgresql://postgres:postgres@localhost:5432/postgres".to_string());
+    cfg.url = Some(database_url());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });
@@ -78,7 +84,7 @@ async fn pagination_and_ordering() {
 #[tokio::test]
 async fn schedules() {
     let mut cfg = Config::new();
-    cfg.url = Some("postgresql://postgres:postgres@localhost:5432/postgres".to_string());
+    cfg.url = Some(database_url());
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });

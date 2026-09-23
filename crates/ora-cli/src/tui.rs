@@ -29,19 +29,13 @@ pub(crate) async fn run(client: AdminClient) -> eyre::Result<()> {
 
     // Without this a paste arrives as the keys it is made of, and the
     // newline at the end of one submits the form it was pasted into.
-    let bracketed = crossterm::execute!(
-        std::io::stdout(),
-        crossterm::event::EnableBracketedPaste
-    )
-    .is_ok();
+    let bracketed =
+        crossterm::execute!(std::io::stdout(), crossterm::event::EnableBracketedPaste).is_ok();
 
     let result = App::new(client).run(terminal).await;
 
     if bracketed {
-        let _ = crossterm::execute!(
-            std::io::stdout(),
-            crossterm::event::DisableBracketedPaste
-        );
+        let _ = crossterm::execute!(std::io::stdout(), crossterm::event::DisableBracketedPaste);
     }
 
     ratatui::restore();

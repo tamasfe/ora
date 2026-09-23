@@ -15,7 +15,10 @@ use crate::{
     executions::{
         ExecutionStatus, FailedExecution, RetriedExecution, StartedExecution, SucceededExecution,
     },
-    jobs::{JobDefinition, JobFilters, JobTypeId, NewJob, RetryPolicy, TimeoutPolicy},
+    jobs::{
+        JobDefinition, JobDetails, JobFilters, JobOrderBy, JobTypeId, NewJob, RetryPolicy,
+        TimeoutPolicy,
+    },
     schedules::{MissedTimePolicy, SchedulingPolicy},
 };
 
@@ -604,6 +607,106 @@ pub async fn pagination_and_ordering(backend: &impl Backend) {
             assert_eq!(job.job.job_type_id, reference_jobs[i].job_type_id);
         }
     }
+
+    {
+        let all_jobs = list_all_jobs(backend, JobOrderBy::TargetExecutionTimeAsc, 2).await;
+        assert_eq!(all_jobs.len(), job_definitions.len());
+
+        let mut reference_jobs = job_definitions.clone();
+        reference_jobs.reverse();
+        for (i, job) in all_jobs.iter().enumerate() {
+            assert_eq!(job.job.job_type_id, reference_jobs[i].job_type_id);
+        }
+    }
+
+    // Target times that are not in creation order and have ties,
+    // pages must continue right after the last job of the previous page.
+    let tied_definitions = (0..12)
+        .map(|i| JobDefinition {
+            job_type_id: JobTypeId::new(format!("Tied{i}")).unwrap(),
+            target_execution_time: UNIX_EPOCH + Duration::from_secs(1000 + (i * 7) % 5),
+            input_payload_json: r#"{"task": "clean"}"#.to_string(),
+            labels: vec![],
+            timeout_policy: TimeoutPolicy {
+                timeout: Duration::from_secs(20),
+                base_time: crate::jobs::TimeoutBaseTime::StartTime,
+            },
+            retry_policy: RetryPolicy {
+                retries: 0,
+                ..Default::default()
+            },
+        })
+        .collect::<Vec<_>>();
+    backend
+        .add_jobs(&new_jobs(&tied_definitions), None)
+        .await
+        .expect("Failed to add jobs");
+
+    let all_jobs = list_all_jobs(backend, JobOrderBy::CreatedAtAsc, 100).await;
+    assert_eq!(
+        all_jobs.len(),
+        job_definitions.len() + tied_definitions.len()
+    );
+
+    for order_by in [
+        JobOrderBy::TargetExecutionTimeAsc,
+        JobOrderBy::TargetExecutionTimeDesc,
+    ] {
+        let mut expected = all_jobs
+            .iter()
+            .map(|job| (job.job.target_execution_time, job.id.0))
+            .collect::<Vec<_>>();
+
+        // Ties are always ordered by ascending IDs.
+        match order_by {
+            JobOrderBy::TargetExecutionTimeDesc => {
+                expected.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            }
+            _ => expected.sort(),
+        }
+
+        let paged = list_all_jobs(backend, order_by.clone(), 2)
+            .await
+            .iter()
+            .map(|job| (job.job.target_execution_time, job.id.0))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            paged, expected,
+            "unexpected jobs when paging by {order_by:?}"
+        );
+    }
+}
+
+/// Lists all jobs by following the page tokens.
+async fn list_all_jobs(
+    backend: &impl Backend,
+    order_by: JobOrderBy,
+    page_size: u32,
+) -> Vec<JobDetails> {
+    let mut all_jobs = Vec::new();
+    let mut next_page_token = None;
+
+    loop {
+        let (jobs, page_token) = backend
+            .list_jobs(
+                JobFilters::default(),
+                Some(order_by.clone()),
+                page_size,
+                next_page_token,
+            )
+            .await
+            .expect("Failed to list jobs");
+        assert!(jobs.len() <= page_size as usize);
+        all_jobs.extend(jobs);
+
+        match page_token {
+            Some(token) => next_page_token = Some(token),
+            None => break,
+        }
+    }
+
+    all_jobs
 }
 
 pub async fn schedules(backend: &impl Backend) {

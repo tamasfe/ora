@@ -1,10 +1,3 @@
-<script setup lang="ts">
-import { JobFiltersSchema } from "../../api/ora/admin/v1/jobs_pb";
-import { useRouteQueryMessage } from "../../util/route";
-
-const filters = useRouteQueryMessage(JobFiltersSchema);
-</script>
-
 <template>
   <div class="flex flex-col gap-4">
     <div class="flex items-center justify-between">
@@ -13,6 +6,6 @@ const filters = useRouteQueryMessage(JobFiltersSchema);
         <Button label="New job" icon="pi pi-plus" @click="navigate" />
       </RouterLink>
     </div>
-    <JobsTable v-model:filters="filters" />
+    <JobsTable query-prefix="" />
   </div>
 </template>

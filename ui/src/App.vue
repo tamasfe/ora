@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { useRoute } from "vue-router";
+import { useInvalidQueryParams } from "./util/query";
 
 const route = useRoute();
 
@@ -15,6 +17,11 @@ const items = [
 function isActive(path: string) {
   return path === "/" ? route.path === "/" : route.path.startsWith(path);
 }
+
+// A mistyped parameter (e.g. from an edited link) silently widens filters otherwise.
+const invalidParams = useInvalidQueryParams();
+const invalidKey = computed(() => invalidParams.value.join("&"));
+const dismissedKey = ref<string>();
 </script>
 
 <template>
@@ -41,7 +48,17 @@ function isActive(path: string) {
       </template>
     </Menubar>
 
-    <main class="mx-auto max-w-7xl p-4 md:p-6">
+    <main class="mx-auto max-w-screen-2xl p-4 md:p-6">
+      <Message
+        v-if="invalidParams.length > 0 && dismissedKey !== invalidKey"
+        severity="warn"
+        closable
+        class="mb-4"
+        @close="dismissedKey = invalidKey"
+      >
+        Some URL parameters are invalid and were ignored:
+        <span class="font-mono">{{ invalidParams.join(", ") }}</span>
+      </Message>
       <RouterView />
     </main>
 

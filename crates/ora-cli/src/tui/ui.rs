@@ -121,7 +121,10 @@ fn render_tabs(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) {
     while !actions.is_empty() && width(&actions) > right.width as usize {
         actions.remove(0);
 
-        if actions.first().is_some_and(|span| span.content.trim().is_empty()) {
+        if actions
+            .first()
+            .is_some_and(|span| span.content.trim().is_empty())
+        {
             actions.remove(0);
         }
     }
@@ -174,7 +177,8 @@ fn action_spans(app: &App) -> Vec<Span<'static>> {
     // The row has no margin of its own to keep it off the edge.
     spans.push(Span::from(" "));
 
-    spans.into_iter()
+    spans
+        .into_iter()
         .map(|span| span.style(Style::new().fg(tailwind::GRAY.c500)))
         .collect()
 }
