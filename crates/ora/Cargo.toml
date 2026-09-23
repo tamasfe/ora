@@ -65,11 +65,13 @@ required-features = ["server", "executor"]
 workspace = true
 
 [dev-dependencies]
+axum = { version = "0.8.8", default-features = false, features = ["tokio", "http1", "http2"] }
 deadpool-postgres = "0.14.1"
 http = "1.4.0"
 ora-backend-postgres = { path = "../ora-backend-postgres" }
-tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "net"] }
 tonic-web = "0.14.5"
-tower-http = { version = "0.6.8", features = ["cors", "trace"] }
+tower-http = { version = "0.7.1", features = ["cors", "trace"] }
 tracing-flame = "0.2.0"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+ora-ui = { version = "0.1.0", path = "../ora-ui" }

@@ -38,6 +38,83 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/executors/': RouteRecordInfo<
+      '/executors/',
+      '/executors',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/executors/[id]': RouteRecordInfo<
+      '/executors/[id]',
+      '/executors/:id',
+      { id: ParamValue<true> },
+      { id: ParamValue<false> },
+      | never
+    >,
+    '/job-types/': RouteRecordInfo<
+      '/job-types/',
+      '/job-types',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/job-types/[id]': RouteRecordInfo<
+      '/job-types/[id]',
+      '/job-types/:id',
+      { id: ParamValue<true> },
+      { id: ParamValue<false> },
+      | never
+    >,
+    '/jobs/': RouteRecordInfo<
+      '/jobs/',
+      '/jobs',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/jobs/[id]': RouteRecordInfo<
+      '/jobs/[id]',
+      '/jobs/:id',
+      { id: ParamValue<true> },
+      { id: ParamValue<false> },
+      | never
+    >,
+    '/jobs/new': RouteRecordInfo<
+      '/jobs/new',
+      '/jobs/new',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/maintenance': RouteRecordInfo<
+      '/maintenance',
+      '/maintenance',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/schedules/': RouteRecordInfo<
+      '/schedules/',
+      '/schedules',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/schedules/[id]': RouteRecordInfo<
+      '/schedules/[id]',
+      '/schedules/:id',
+      { id: ParamValue<true> },
+      { id: ParamValue<false> },
+      | never
+    >,
+    '/schedules/new': RouteRecordInfo<
+      '/schedules/new',
+      '/schedules/new',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -54,6 +131,94 @@ declare module 'vue-router/auto-routes' {
     'src/views/index.vue': {
       routes:
         | '/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/executors/index.vue': {
+      routes:
+        | '/executors/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/executors/[id].vue': {
+      routes:
+        | '/executors/[id]'
+      views:
+        | never
+      pathParamNames:
+        | 'id'
+    }
+    'src/views/job-types/index.vue': {
+      routes:
+        | '/job-types/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/job-types/[id].vue': {
+      routes:
+        | '/job-types/[id]'
+      views:
+        | never
+      pathParamNames:
+        | 'id'
+    }
+    'src/views/jobs/index.vue': {
+      routes:
+        | '/jobs/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/jobs/[id].vue': {
+      routes:
+        | '/jobs/[id]'
+      views:
+        | never
+      pathParamNames:
+        | 'id'
+    }
+    'src/views/jobs/new.vue': {
+      routes:
+        | '/jobs/new'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/maintenance.vue': {
+      routes:
+        | '/maintenance'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/schedules/index.vue': {
+      routes:
+        | '/schedules/'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/views/schedules/[id].vue': {
+      routes:
+        | '/schedules/[id]'
+      views:
+        | never
+      pathParamNames:
+        | 'id'
+    }
+    'src/views/schedules/new.vue': {
+      routes:
+        | '/schedules/new'
       views:
         | never
       pathParamNames:

@@ -11,9 +11,9 @@ use ora_backend_postgres::PostgresBackend;
 use ora_server::{
     ServerBuilder, ServerOptions, proto::admin::v1::admin_service_server::AdminServiceServer,
 };
+use ora_ui::UiOptions;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tonic::transport::Server;
 use tonic_web::GrpcWebLayer;
 use tower_http::{
     LatencyUnit,
@@ -97,11 +97,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .spawn();
 
-    let addr = "0.0.0.0:50051".parse()?;
-    let greeter = server.grpc();
+    let addr: std::net::SocketAddr = std::env::var("ORA_ADDR")
+        .unwrap_or_else(|_| "0.0.0.0:50051".into())
+        .parse()?;
+    let admin_service = AdminServiceServer::new(server.grpc());
 
-    Server::builder()
-        .accept_http1(true)
+    let app = tonic::service::Routes::new(admin_service)
+        .into_axum_router()
+        .layer(GrpcWebLayer::new())
         .layer(
             TraceLayer::new_for_grpc()
                 .on_request(DefaultOnRequest::new().level(Level::INFO))
@@ -111,16 +114,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .latency_unit(LatencyUnit::Micros),
                 ),
         )
+        .route(
+            "/",
+            axum::routing::get(|| async { axum::response::Redirect::temporary("/ui") }),
+        )
+        .route(
+            "/ui/",
+            axum::routing::get(|| async { axum::response::Redirect::temporary("/ui") }),
+        )
+        .nest("/ui", ora_ui::router(UiOptions::default()))
         .layer(
             CorsLayer::new()
                 .allow_headers(Any)
                 .allow_methods([Method::GET, Method::POST])
-                .allow_origin(Any),
-        )
-        .layer(GrpcWebLayer::new())
-        .add_service(AdminServiceServer::new(greeter))
-        .serve(addr)
-        .await?;
+                .allow_origin(Any)
+                .expose_headers(Any),
+        );
+
+    tracing::info!(%addr, "serving the API and the web UI at /ui");
+    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
 
     Ok(())
 }
