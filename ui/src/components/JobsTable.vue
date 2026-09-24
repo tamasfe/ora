@@ -27,7 +27,13 @@ import { pageSizeOptions, useTokenPagination } from "../util/pagination";
 import { usePolling } from "../util/polling";
 import { param, useRouteQuery, useRouteQueryFields } from "../util/query";
 import { jobFilterFields, jobOrders, jobsLink, queryKey, useRefreshInterval } from "../util/route";
-import { executionStatusInfo, isJobActive, jobStatus } from "../util/status";
+import {
+  executionStatusInfo,
+  isJobActive,
+  jobEndedAt,
+  jobStartedAt,
+  jobStatus,
+} from "../util/status";
 import { useStopwatch } from "../util/time";
 
 const props = withDefaults(
@@ -282,7 +288,7 @@ defineExpose({ reload });
       :current-page-report-template="pagination.report.value"
       :size="compact ? 'small' : undefined"
       :row-class="rowClass"
-      :table-style="{ tableLayout: 'fixed', minWidth: compact ? '34rem' : '72rem' }"
+      :table-style="{ tableLayout: 'fixed', minWidth: compact ? '40rem' : '78rem' }"
       scrollable
       @page="pagination.onPage"
     >
@@ -360,9 +366,9 @@ defineExpose({ reload });
 
       <!-- Both sides have the same width, so that the page links don't move. -->
       <template #paginatorstart>
-        <div class="flex flex-col items-start gap-0.5" :class="compact ? 'w-32' : 'w-40 sm:w-72'">
-          <LoadStatus :state="list" verb="list" />
-          <LoadStatus :state="count" verb="count" />
+        <div class="flex items-center gap-3" :class="compact ? 'w-32' : 'w-40 sm:w-72'">
+          <LoadStatus :state="list" verb="list" icon />
+          <LoadStatus :state="count" verb="count" icon />
         </div>
       </template>
       <template #paginatorend>
@@ -415,6 +421,16 @@ defineExpose({ reload });
             :severity="executionStatusInfo[jobStatus(data)].severity"
             :icon="executionStatusInfo[jobStatus(data)].icon"
             class="whitespace-nowrap"
+          />
+        </template>
+      </Column>
+      <Column header="Duration" header-style="width: 7rem">
+        <template #body="{ data }">
+          <ElapsedTime
+            :start="jobStartedAt(data)"
+            :end="jobEndedAt(data)"
+            :live="isJobActive(data)"
+            class="text-sm"
           />
         </template>
       </Column>

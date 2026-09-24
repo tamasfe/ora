@@ -126,10 +126,10 @@ async fn serve(
         }
 
         // Missing files should not be answered with the application.
-        if asset_path
-            .rsplit('/')
-            .next()
-            .is_some_and(|name| name.contains('.'))
+        // Only bundled assets and top-level files (e.g. `favicon.ico`) are files,
+        // other paths can contain dots, e.g. job type IDs in `job-types/text.CountChars`.
+        if asset_path.starts_with("assets/")
+            || (!asset_path.contains('/') && asset_path.contains('.'))
         {
             return StatusCode::NOT_FOUND.into_response();
         }
@@ -264,7 +264,7 @@ mod tests {
     async fn serves_index_nested() {
         let app = Router::new().nest("/ui", router(UiOptions::default()));
 
-        for path in ["/ui", "/ui/jobs/123"] {
+        for path in ["/ui", "/ui/jobs/123", "/ui/job-types/text.CountChars"] {
             let (status, _, body) = get(app.clone(), path).await;
             assert_eq!(status, StatusCode::OK, "{path}");
             assert!(body.contains(r#"<base href="/ui/" />"#), "{path}");
@@ -275,8 +275,10 @@ mod tests {
     async fn serves_assets() {
         let app = Router::new().nest("/ui", router(UiOptions::default()));
 
-        let (status, _, _) = get(app.clone(), "/ui/assets/missing.js").await;
-        assert_eq!(status, StatusCode::NOT_FOUND);
+        for path in ["/ui/assets/missing.js", "/ui/missing.ico"] {
+            let (status, _, _) = get(app.clone(), path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+        }
 
         let script = ASSETS
             .get_dir("assets")

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useConfirm } from "primevue/useconfirm";
 import { useToast } from "primevue/usetoast";
 import { timestampMs } from "@bufbuild/protobuf/wkt";
-import type { Execution } from "../../api/ora/admin/v1/executions_pb";
+import { ExecutionStatus, type Execution } from "../../api/ora/admin/v1/executions_pb";
 import type { Label } from "../../api/ora/common/v1/label_pb";
 import { useOraAdminClient } from "../../grpc";
 import { useLoader } from "../../util";
@@ -12,8 +12,8 @@ import { useJobTypes } from "../../util/data";
 import { useErrorToast } from "../../util/errors";
 import {
   formatDuration,
-  formatElapsed,
   formatLatency,
+  formatMs,
   formatRelative,
   formatTimestamp,
   prettyJson,
@@ -23,7 +23,14 @@ import { labelsToFilters } from "../../util/labels";
 import { usePolling } from "../../util/polling";
 import { jobsLink, useRefreshInterval } from "../../util/route";
 import { parseSchema, validateJson } from "../../util/schema";
-import { executionEndedAt, executionStatusInfo, isJobActive, jobStatus } from "../../util/status";
+import {
+  executionEndedAt,
+  executionStatusInfo,
+  isJobActive,
+  jobEndedAt,
+  jobStartedAt,
+  jobStatus,
+} from "../../util/status";
 import { useStopwatch } from "../../util/time";
 
 const route = useRoute("/jobs/[id]");
@@ -59,6 +66,8 @@ const jobType = computed(() => byId.value.get(definition.value?.jobTypeId ?? "")
 const status = computed(() => (job.value ? executionStatusInfo[jobStatus(job.value)] : undefined));
 const outputSchema = computed(() => parseSchema(jobType.value?.outputSchemaJson));
 const active = computed(() => !!job.value && isJobActive(job.value));
+const startedAt = computed(() => (job.value ? jobStartedAt(job.value) : undefined));
+const endedAt = computed(() => (job.value ? jobEndedAt(job.value) : undefined));
 
 /** Executions in chronological order with their attempt numbers. */
 const executions = computed(() =>
@@ -88,6 +97,16 @@ function outputValidation(execution: Execution) {
     return undefined;
   }
   return validateJson(execution.outputJson, outputSchema.value);
+}
+
+/** The time between the target time and the start of an execution. */
+function startDelay(execution: Execution) {
+  if (!execution.startedAt || !execution.targetExecutionTime) {
+    return "-";
+  }
+  return formatMs(
+    Math.max(0, timestampMs(execution.startedAt) - timestampMs(execution.targetExecutionTime)),
+  );
 }
 
 function labelLink(label: Label) {
@@ -211,6 +230,29 @@ function cancel() {
                 {{ formatTimestamp(job.createdAt) }}
                 <span class="text-muted-color">({{ formatRelative(job.createdAt) }})</span>
               </dd>
+              <dt class="text-muted-color">Started</dt>
+              <dd>
+                <template v-if="startedAt">
+                  {{ formatTimestamp(startedAt) }}
+                  <span class="text-muted-color">({{ formatRelative(startedAt) }})</span>
+                </template>
+                <span v-else>-</span>
+              </dd>
+              <dt class="text-muted-color">Finished</dt>
+              <dd>
+                <template v-if="endedAt">
+                  {{ formatTimestamp(endedAt) }}
+                  <span class="text-muted-color">({{ formatRelative(endedAt) }})</span>
+                </template>
+                <span v-else>-</span>
+              </dd>
+              <dt class="text-muted-color">Duration</dt>
+              <dd>
+                <ElapsedTime :start="startedAt" :end="endedAt" :live="active" />
+                <span v-if="executions.length > 1" class="text-muted-color">
+                  (over {{ executions.length }} attempts)
+                </span>
+              </dd>
               <dt class="text-muted-color">Schedule</dt>
               <dd>
                 <CopyableId
@@ -249,7 +291,7 @@ function cancel() {
               </dd>
             </dl>
             <div v-else class="flex flex-col gap-3">
-              <Skeleton v-for="i in 6" :key="i" height="1.25rem" />
+              <Skeleton v-for="i in 9" :key="i" height="1.25rem" />
             </div>
           </template>
         </Card>
@@ -344,9 +386,11 @@ function cancel() {
             </Column>
             <Column header="Duration">
               <template #body="{ data }">
-                <span class="tabular-nums">{{
-                  formatElapsed(data.execution.startedAt, executionEndedAt(data.execution))
-                }}</span>
+                <ElapsedTime
+                  :start="data.execution.startedAt"
+                  :end="executionEndedAt(data.execution)"
+                  :live="data.execution.status === ExecutionStatus.IN_PROGRESS"
+                />
               </template>
             </Column>
 
@@ -357,6 +401,10 @@ function cancel() {
                   <dd><CopyableId :id="data.execution.id" /></dd>
                   <dt class="text-muted-color">Created</dt>
                   <dd>{{ formatTimestamp(data.execution.createdAt) }}</dd>
+                  <dt class="text-muted-color">Start delay</dt>
+                  <dd v-tooltip.top="'Time between the target time and the start'" class="w-fit">
+                    {{ startDelay(data.execution) }}
+                  </dd>
                 </dl>
                 <Message v-if="data.execution.failureReason" severity="error" :closable="false">
                   <pre class="font-mono text-sm whitespace-pre-wrap">{{

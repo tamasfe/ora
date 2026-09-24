@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import type { ExecutionStatus } from "../../api/ora/admin/v1/executions_pb";
+import { ScheduleStatus } from "../../api/ora/admin/v1/schedules_pb";
+import { useCountsInterval, useJobTypeCounts } from "../../util/counts";
 import { useExecutors, useJobTypes } from "../../util/data";
-import { prettyJson, shortId } from "../../util/format";
+import { formatCount, prettyJson, shortId } from "../../util/format";
 import { usePolling } from "../../util/polling";
 import { param, useRouteQuery } from "../../util/query";
-import { useRefreshInterval } from "../../util/route";
+import { jobsLink, schedulesLink, useRefreshInterval } from "../../util/route";
 
 const route = useRoute("/job-types/[id]");
 const router = useRouter();
@@ -16,8 +19,12 @@ const tab = useRouteQuery("tab", param.oneOf({ jobs: "jobs", schedules: "schedul
 
 const jobTypes = useJobTypes();
 const executors = useExecutors();
+const counts = useJobTypeCounts(() => [id.value]);
 
 usePolling(executors, refresh);
+usePolling(counts.state, useCountsInterval(refresh));
+
+const jobTypeCounts = computed(() => counts.counts.value.get(id.value));
 
 const jobType = computed(() => jobTypes.byId.value.get(id.value));
 const jobTypeExecutors = computed(() => executors.byJobType.value.get(id.value) ?? []);
@@ -32,6 +39,7 @@ const schedulesTable = ref<{ reload(): void }>();
 function reload() {
   jobTypes.reload();
   executors.reload();
+  counts.state.reload();
   jobsTable.value?.reload();
   schedulesTable.value?.reload();
 }
@@ -47,7 +55,7 @@ function reload() {
       <div class="flex flex-wrap items-center gap-2">
         <RefreshControl
           v-model="refresh"
-          :loading="jobTypes.busy.value || executors.busy.value"
+          :loading="jobTypes.busy.value || executors.busy.value || counts.state.busy.value"
           @refresh="reload"
         />
         <RouterLink
@@ -101,6 +109,32 @@ function reload() {
       </RouterLink>
       <Skeleton v-if="!executors.loaded.value" width="6rem" height="1.5rem" />
       <Tag v-else-if="jobTypeExecutors.length === 0" value="None connected" severity="warn" />
+    </div>
+
+    <div class="flex min-h-7 flex-wrap items-center gap-x-6 gap-y-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-sm text-muted-color">Jobs:</span>
+        <JobStatusCounts
+          :counts="jobTypeCounts?.jobs"
+          :failed="!!counts.state.error.value"
+          :link="
+            (status: ExecutionStatus) => jobsLink({ jobTypeIds: [id], executionStatuses: [status] })
+          "
+        />
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-muted-color">Active schedules:</span>
+        <RouterLink
+          v-if="jobTypeCounts"
+          :to="schedulesLink({ jobTypeIds: [id], statuses: [ScheduleStatus.ACTIVE] })"
+          class="text-sm text-primary tabular-nums hover:underline"
+        >
+          {{ formatCount(jobTypeCounts.activeSchedules) }}
+        </RouterLink>
+        <span v-else-if="counts.state.error.value" class="text-muted-color">–</span>
+        <Skeleton v-else width="2rem" />
+      </div>
+      <LoadStatus :state="counts.state" verb="count" />
     </div>
 
     <div v-if="jobType" class="grid grid-cols-1 gap-4 lg:grid-cols-2">

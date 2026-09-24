@@ -14,6 +14,11 @@ const clockFormat = new Intl.DateTimeFormat(undefined, { timeStyle: "medium" });
 
 const countFormat = new Intl.NumberFormat();
 
+const compactCountFormat = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 /**
  * Formats a timestamp as a local date and time.
  */
@@ -117,6 +122,13 @@ export function formatCount(count: number): string {
 }
 
 /**
+ * Formats a number in a short form for dense layouts, e.g. "12K" or "1.2M".
+ */
+export function formatCompactCount(count: number): string {
+  return compactCountFormat.format(count);
+}
+
+/**
  * Formats a protobuf duration in a human-readable way.
  */
 export function formatDuration(d?: Duration): string {
@@ -125,17 +137,6 @@ export function formatDuration(d?: Duration): string {
   }
 
   return formatMs(durationMs(d));
-}
-
-/**
- * Returns the time between two timestamps in a human-readable way.
- */
-export function formatElapsed(start?: Timestamp, end?: Timestamp): string {
-  if (!start || !end) {
-    return "-";
-  }
-
-  return formatMs(timestampDate(end).getTime() - timestampDate(start).getTime());
 }
 
 /**

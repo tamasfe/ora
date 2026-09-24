@@ -117,3 +117,30 @@ export function isJobActive(job: Job): boolean {
 export function executionEndedAt(execution: Execution) {
   return execution.succeededAt ?? execution.failedAt ?? execution.cancelledAt;
 }
+
+/**
+ * Returns the time the first execution of a job has started (if any).
+ */
+export function jobStartedAt(job: Job) {
+  let first: Execution["startedAt"];
+
+  for (const execution of job.executions) {
+    if (
+      execution.startedAt &&
+      (!first || timestampMs(execution.startedAt) < timestampMs(first))
+    ) {
+      first = execution.startedAt;
+    }
+  }
+
+  return first;
+}
+
+/**
+ * Returns the time a job has finished, the end of its latest execution
+ * if the job is no longer active.
+ */
+export function jobEndedAt(job: Job) {
+  const last = lastExecution(job);
+  return last && !isJobActive(job) ? executionEndedAt(last) : undefined;
+}

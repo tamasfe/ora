@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import type { ExecutionStatus } from "../../api/ora/admin/v1/executions_pb";
+import { ScheduleStatus } from "../../api/ora/admin/v1/schedules_pb";
+import { useCountsInterval, useJobTypeCounts } from "../../util/counts";
 import { useExecutors, useJobTypes } from "../../util/data";
-import { formatClock, formatCount, shortId } from "../../util/format";
+import { formatClock, formatCompactCount, formatCount, shortId } from "../../util/format";
 import { pageSizeOptions } from "../../util/pagination";
 import { usePolling } from "../../util/polling";
 import { param, useRouteQuery } from "../../util/query";
@@ -15,15 +18,6 @@ const rows = useRouteQuery("rows", param.int(pageSizeOptions), 20);
 
 // Job types appear as executors connect, always show the latest list here.
 jobTypes.reload();
-
-usePolling([jobTypes, executors], refresh);
-
-const busy = computed(() => jobTypes.busy.value || executors.busy.value);
-
-function reload() {
-  jobTypes.reload();
-  executors.reload();
-}
 
 /** Executors shown for each job type, the rest can be found on the executors page. */
 const maxExecutors = 3;
@@ -40,6 +34,30 @@ const filtered = computed(() => {
       jobType.description?.toLowerCase().includes(query),
   );
 });
+
+/** The index of the first row on the current page. */
+const first = ref(0);
+watch(search, () => (first.value = 0));
+
+// Counting takes a request for each job type and status, only the visible job types are counted.
+const counts = useJobTypeCounts(() =>
+  filtered.value.slice(first.value, first.value + rows.value).map(jobType => jobType.id),
+);
+
+usePolling([jobTypes, executors], refresh);
+usePolling(counts.state, useCountsInterval(refresh));
+
+const busy = computed(() => jobTypes.busy.value || executors.busy.value || counts.state.busy.value);
+
+function reload() {
+  jobTypes.reload();
+  executors.reload();
+  counts.state.reload();
+}
+
+function activeSchedules(jobTypeId: string) {
+  return counts.counts.value.get(jobTypeId)?.activeSchedules;
+}
 </script>
 
 <template>
@@ -53,6 +71,7 @@ const filtered = computed(() => {
         data-key="id"
         paginator
         v-model:rows="rows"
+        v-model:first="first"
         :rows-per-page-options="pageSizeOptions"
       >
         <template #header>
@@ -93,7 +112,10 @@ const filtered = computed(() => {
         </template>
 
         <template #paginatorstart>
-          <div class="w-40 sm:w-64"><LoadStatus :state="jobTypes.state" verb="list" /></div>
+          <div class="flex w-40 items-center gap-3 sm:w-64">
+            <LoadStatus :state="jobTypes.state" verb="list" icon />
+            <LoadStatus :state="counts.state" verb="count" icon />
+          </div>
         </template>
         <template #paginatorend>
           <div class="w-40 text-right text-xs text-muted-color tabular-nums sm:w-64">
@@ -145,6 +167,33 @@ const filtered = computed(() => {
                 severity="warn"
               />
             </div>
+          </template>
+        </Column>
+        <Column header="Jobs">
+          <template #body="{ data }">
+            <JobStatusCounts
+              nowrap
+              :counts="counts.counts.value.get(data.id)?.jobs"
+              :failed="!!counts.state.error.value"
+              :link="
+                (status: ExecutionStatus) =>
+                  jobsLink({ jobTypeIds: [data.id], executionStatuses: [status] })
+              "
+            />
+          </template>
+        </Column>
+        <Column header="Active schedules" header-class="whitespace-nowrap">
+          <template #body="{ data }">
+            <RouterLink
+              v-if="activeSchedules(data.id) !== undefined"
+              v-tooltip.top="`${formatCount(activeSchedules(data.id) ?? 0)} active schedule(s)`"
+              :to="schedulesLink({ jobTypeIds: [data.id], statuses: [ScheduleStatus.ACTIVE] })"
+              class="text-primary tabular-nums hover:underline"
+            >
+              {{ formatCompactCount(activeSchedules(data.id) ?? 0) }}
+            </RouterLink>
+            <span v-else-if="counts.state.error.value" class="text-muted-color">–</span>
+            <Skeleton v-else width="2rem" />
           </template>
         </Column>
         <Column header-class="w-0">

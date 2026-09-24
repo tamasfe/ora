@@ -326,9 +326,9 @@ defineExpose({ reload });
 
       <!-- Both sides have the same width, so that the page links don't move. -->
       <template #paginatorstart>
-        <div class="flex flex-col items-start gap-0.5" :class="compact ? 'w-32' : 'w-40 sm:w-72'">
-          <LoadStatus :state="list" verb="list" />
-          <LoadStatus :state="count" verb="count" />
+        <div class="flex items-center gap-3" :class="compact ? 'w-32' : 'w-40 sm:w-72'">
+          <LoadStatus :state="list" verb="list" icon />
+          <LoadStatus :state="count" verb="count" icon />
         </div>
       </template>
       <template #paginatorend>

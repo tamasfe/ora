@@ -10,12 +10,14 @@ const props = defineProps<{
   verb: "list" | "count" | "load";
   /** Also show when the data was last updated. */
   updated?: boolean;
+  /** Prefix the duration with an icon of the verb, to tell apart statuses shown together. */
+  icon?: boolean;
 }>();
 
 const verbs = {
-  list: ["Listing", "Listed"],
-  count: ["Counting", "Counted"],
-  load: ["Loading", "Loaded"],
+  list: { active: "Listing", done: "Listed", icon: "pi-list" },
+  count: { active: "Counting", done: "Counted", icon: "pi-hashtag" },
+  load: { active: "Loading", done: "Loaded", icon: "pi-download" },
 } as const;
 
 /** The elapsed time is only shown for requests that take a while. */
@@ -37,26 +39,44 @@ const elapsed = computed(() => {
 const error = computed(() => props.state.error.value);
 const duration = computed(() => props.state.duration.value);
 const loadedAt = computed(() => props.state.loadedAt.value);
+
+/** Only the durations are shown, the full description is in the tooltip. */
+const description = computed(() => {
+  const verb = verbs[props.verb];
+
+  if (elapsed.value !== undefined) {
+    return `${verb.active}… ${formatSeconds(elapsed.value)}`;
+  }
+
+  if (error.value) {
+    return `${verb.active} failed: ${errorMessage(error.value)}`;
+  }
+
+  if (duration.value !== undefined && loadedAt.value !== undefined) {
+    return `${verb.done} in ${formatLatency(duration.value)} at ${formatClock(loadedAt.value)}`;
+  }
+
+  return undefined;
+});
 </script>
 
 <template>
   <span
     v-if="props.state.enabled.value"
-    class="inline-block h-4 text-xs leading-4 whitespace-nowrap text-muted-color tabular-nums"
+    v-tooltip.top="description"
+    :aria-label="description"
+    class="inline-flex h-4 items-center gap-1 text-xs leading-4 whitespace-nowrap text-muted-color tabular-nums"
   >
     <template v-if="elapsed !== undefined">
-      <i class="pi pi-spin pi-spinner mr-1 text-[0.625rem]!" />{{ verbs[props.verb][0] }}…
-      {{ formatSeconds(elapsed) }}
+      <i class="pi pi-spin pi-spinner text-[0.625rem]!" />{{ formatSeconds(elapsed) }}
     </template>
-    <span v-else-if="error" v-tooltip.top="errorMessage(error)" class="text-red-500">
-      <i class="pi pi-exclamation-triangle mr-1 text-[0.625rem]!" />{{ verbs[props.verb][0] }}
-      failed
-    </span>
+    <i v-else-if="error" class="pi pi-exclamation-triangle text-[0.625rem]! text-red-500" />
     <template v-else-if="duration !== undefined">
-      {{ verbs[props.verb][1] }} in {{ formatLatency(duration)
-      }}<template v-if="props.updated && loadedAt !== undefined">
-        · updated {{ formatClock(loadedAt) }}</template
-      >
+      <i v-if="props.icon" class="pi text-[0.625rem]!" :class="verbs[props.verb].icon" />
+      {{ formatLatency(duration) }}
+      <template v-if="props.updated && loadedAt !== undefined">
+        · updated {{ formatClock(loadedAt) }}
+      </template>
     </template>
   </span>
 </template>
