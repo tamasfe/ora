@@ -46,6 +46,9 @@ pub(crate) async fn cancel_jobs(
         .table(("ora", "execution"))
         .value("cancelled_at", Expr::cust("NOW()"))
         .and_where(Expr::col(("ora", "execution", "job_id")).in_subquery(select_job_ids(&filters)))
+        // Only the active execution is cancelled, earlier (failed) executions are kept as-is,
+        // so that each job is returned once.
+        .and_where(Expr::cust("ora.execution.status < 2"))
         .returning(sea_query::ReturningClause::Columns(vec![
             ("ora", "execution", "job_id").into(),
             ("ora", "execution", "id").into(),
@@ -321,14 +324,25 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
 }
 
 pub(crate) async fn job_count(tx: &DbTransaction<'_>, filters: JobFilters) -> crate::Result<i64> {
-    let (query, values) = select_job_ids(&filters)
-        .clear_selects()
-        .expr(Expr::count(Expr::col(Asterisk)))
+    let (mut select, executions_joined) = filtered_jobs(&filters);
+
+    let (query, values) = select
+        .expr(count_jobs(executions_joined))
         .build_postgres(PostgresQueryBuilder);
 
     let stmt = tx.prepare_owned(query).await?;
     let count: i64 = tx.query_one(&stmt, &values.as_params()).await?.get(0);
     Ok(count)
+}
+
+/// Counts the jobs of a query from [`filtered_jobs`].
+fn count_jobs(executions_joined: bool) -> Expr {
+    if executions_joined {
+        // Jobs are repeated for each matching execution.
+        Expr::cust("COUNT(DISTINCT ora.job.id)")
+    } else {
+        Expr::count(Expr::col(Asterisk))
+    }
 }
 
 pub(crate) async fn job_ids(
@@ -350,6 +364,25 @@ pub(crate) async fn job_ids(
 }
 
 fn select_job_ids(filters: &JobFilters) -> SelectStatement {
+    let (mut select, executions_joined) = filtered_jobs(filters);
+
+    select.expr_as(Expr::col(("ora", "job", "id")), "job_id");
+
+    // Only the executions join can repeat a job ID. De-duplicating
+    // sorts the whole matching set before any LIMIT applies, so one
+    // page of a job type with a lot of history pays for all of it.
+    if executions_joined {
+        select.distinct();
+    }
+
+    select
+}
+
+/// Selects the jobs matching the filters from `ora.job`, without selecting any columns.
+///
+/// Also returns whether executions are joined, which repeats jobs for
+/// each matching execution.
+fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
     let JobFilters {
         job_ids,
         job_type_ids,
@@ -362,10 +395,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
         schedule_ids,
     } = filters;
 
-    let mut select = SelectStatement::new()
-        .expr_as(Expr::col(("ora", "job", "id")), "job_id")
-        .from(("ora", "job"))
-        .take();
+    let mut select = SelectStatement::new().from(("ora", "job")).take();
 
     let mut executions_joined = false;
 
@@ -467,53 +497,7 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
     }
 
     if let Some(statuses) = execution_statuses {
-        // The below 20 or so lines are just query optimizations.
-        let active_only = statuses
-            .iter()
-            .all(|s| matches!(s, ExecutionStatus::Pending | ExecutionStatus::InProgress));
-        let inactive_only = statuses.iter().all(|s| {
-            matches!(
-                s,
-                ExecutionStatus::Succeeded | ExecutionStatus::Failed | ExecutionStatus::Cancelled
-            )
-        });
-
-        let active_statuses = [ExecutionStatus::Pending, ExecutionStatus::InProgress];
-        let inactive_statuses = [
-            ExecutionStatus::Succeeded,
-            ExecutionStatus::Failed,
-            ExecutionStatus::Cancelled,
-        ];
-
-        let exhaustive = (active_only && active_statuses.iter().all(|s| statuses.contains(s)))
-            || (inactive_only && inactive_statuses.iter().all(|s| statuses.contains(s)));
-
-        if active_only {
-            select.and_where(Expr::cust("ora.job.inactive_since IS NULL"));
-        } else if inactive_only {
-            select.and_where(Expr::cust("ora.job.inactive_since IS NOT NULL"));
-        }
-
-        // Checking active/inactive is not enough,
-        // we need to filter further based on the last execution status.
-        if !exhaustive {
-            let status_values: Vec<i16> = statuses.iter().map(|s| *s as i16).collect();
-
-            select.and_where(Expr::cust_with_values(
-                r#"
-                (
-                    SELECT
-                        status
-                    FROM
-                        ora.execution
-                    WHERE
-                        ora.execution.job_id = ora.job.id
-                    ORDER BY ora.execution.id DESC
-                    LIMIT 1
-                ) = ANY($1::SMALLINT[])"#,
-                [status_values],
-            ));
-        }
+        select.and_where(status_filter(statuses));
     }
 
     if let Some(labels) = labels {
@@ -549,14 +533,67 @@ fn select_job_ids(filters: &JobFilters) -> SelectStatement {
         ));
     }
 
-    // Only the executions join can repeat a job ID. De-duplicating
-    // sorts the whole matching set before any LIMIT applies, so one
-    // page of a job type with a lot of history pays for all of it.
-    if executions_joined {
-        select.distinct();
+    (select, executions_joined)
+}
+
+/// Filters jobs by the status of their latest execution.
+fn status_filter(statuses: &[ExecutionStatus]) -> Expr {
+    let active_statuses = [ExecutionStatus::Pending, ExecutionStatus::InProgress];
+    let inactive_statuses = [
+        ExecutionStatus::Succeeded,
+        ExecutionStatus::Failed,
+        ExecutionStatus::Cancelled,
+    ];
+
+    let status_values = |candidates: &[ExecutionStatus]| -> Vec<i16> {
+        candidates
+            .iter()
+            .filter(|s| statuses.contains(s))
+            .map(|s| PgExecutionStatus::from(*s) as i16)
+            .collect()
+    };
+
+    let active_values = status_values(&active_statuses);
+    let inactive_values = status_values(&inactive_statuses);
+
+    if active_values.len() == active_statuses.len()
+        && inactive_values.len() == inactive_statuses.len()
+    {
+        return Expr::cust("TRUE");
     }
 
-    select
+    // Active jobs have no stored status, their executions are only needed
+    // if a subset of the active statuses is requested.
+    let active = match active_values.len() {
+        0 => None,
+        n if n == active_statuses.len() => {
+            Some(Expr::col(("ora", "job", "inactive_status")).is_null())
+        }
+        _ => Some(Expr::col(("ora", "job", "inactive_status")).is_null().and(
+            Expr::cust_with_values(
+                "ora.job.id IN (SELECT job_id FROM ora.execution WHERE status = ANY($1::SMALLINT[]))",
+                [active_values],
+            ),
+        )),
+    };
+
+    let inactive = match inactive_values.len() {
+        0 => None,
+        n if n == inactive_statuses.len() => {
+            Some(Expr::col(("ora", "job", "inactive_status")).is_not_null())
+        }
+        _ => Some(Expr::cust_with_values(
+            "ora.job.inactive_status = ANY($1::SMALLINT[])",
+            [inactive_values],
+        )),
+    };
+
+    match (active, inactive) {
+        (Some(active), Some(inactive)) => active.or(inactive),
+        (Some(filter), None) | (None, Some(filter)) => filter,
+        // No statuses match nothing.
+        (None, None) => Expr::cust("FALSE"),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

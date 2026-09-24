@@ -318,14 +318,20 @@ pub(super) fn select_schedule_ids(filters: &ScheduleFilters) -> SelectStatement 
     }
 
     if let Some(statuses) = statuses {
-        for status in statuses {
-            match status {
-                ScheduleStatus::Active => {
-                    select.and_where(Expr::col(("ora", "schedule", "stopped_at")).is_null());
-                }
-                ScheduleStatus::Stopped => {
-                    select.and_where(Expr::col(("ora", "schedule", "stopped_at")).is_not_null());
-                }
+        let active = statuses.contains(&ScheduleStatus::Active);
+        let stopped = statuses.contains(&ScheduleStatus::Stopped);
+
+        match (active, stopped) {
+            (true, true) => {}
+            (true, false) => {
+                select.and_where(Expr::col(("ora", "schedule", "stopped_at")).is_null());
+            }
+            (false, true) => {
+                select.and_where(Expr::col(("ora", "schedule", "stopped_at")).is_not_null());
+            }
+            // No statuses match nothing.
+            (false, false) => {
+                select.and_where(Expr::cust("FALSE"));
             }
         }
     }

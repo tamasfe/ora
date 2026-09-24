@@ -104,3 +104,27 @@ async fn schedules() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn counts() {
+    let mut cfg = Config::new();
+    cfg.url = Some(database_url());
+    cfg.manager = Some(ManagerConfig {
+        recycling_method: RecyclingMethod::Fast,
+    });
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+
+    pool.get()
+        .await
+        .unwrap()
+        .execute("DROP SCHEMA IF EXISTS ora CASCADE", &[])
+        .await
+        .unwrap();
+
+    ora_backend::test::counts(
+        &ora_backend_postgres::PostgresBackend::new(pool)
+            .await
+            .unwrap(),
+    )
+    .await;
+}

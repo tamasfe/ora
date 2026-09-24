@@ -9,8 +9,8 @@ use ora_backend::{
     Backend,
     common::{NextPageToken, TimeRange},
     executions::{
-        ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, RetriedExecution,
-        StartedExecution, SucceededExecution,
+        ExecutionId, ExecutionStatus, FailedExecution, InProgressExecution, ReadyExecution,
+        RetriedExecution, StartedExecution, SucceededExecution,
     },
     executors::ExecutorId,
     jobs::{
@@ -29,6 +29,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{DbPool, DbTransaction},
+    models::PgExecutionStatus,
     query::{
         jobs::{cancel_jobs, job_count},
         schedules::schedule_count,
@@ -400,6 +401,7 @@ impl Backend for PostgresBackend {
         mark_jobs_inactive(
             &tx,
             &jobs.iter().map(|j| (j.job_id, now)).collect::<Vec<_>>(),
+            ExecutionStatus::Cancelled,
         )
         .await?;
         tx.commit().await?;
@@ -923,7 +925,7 @@ impl Backend for PostgresBackend {
             ));
         }
 
-        mark_jobs_inactive(&tx, &jobs).await?;
+        mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Succeeded).await?;
 
         tx.commit().await?;
 
@@ -940,7 +942,7 @@ impl Backend for PostgresBackend {
 
         let jobs = executions_failed(&tx, executions).await?;
 
-        mark_jobs_inactive(&tx, &jobs).await?;
+        mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Failed).await?;
 
         tx.commit().await?;
 
@@ -1339,7 +1341,12 @@ async fn add_executions(tx: &DbTransaction<'_>, executions: &[NewExecution]) -> 
     Ok(())
 }
 
-async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[(JobId, SystemTime)]) -> Result<()> {
+/// Marks the jobs as finished with the given status.
+async fn mark_jobs_inactive(
+    tx: &DbTransaction<'_>,
+    jobs: &[(JobId, SystemTime)],
+    status: ExecutionStatus,
+) -> Result<()> {
     if jobs.is_empty() {
         return Ok(());
     }
@@ -1357,7 +1364,9 @@ async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[(JobId, SystemTime)]
             .prepare(
                 r#"--sql
                 UPDATE ora.job
-                SET inactive_since = to_timestamp(t.inactive_since)
+                SET
+                    inactive_since = to_timestamp(t.inactive_since),
+                    inactive_status = $3::SMALLINT
                 FROM
                     UNNEST(
                         $1::UUID[],
@@ -1369,8 +1378,15 @@ async fn mark_jobs_inactive(tx: &DbTransaction<'_>, jobs: &[(JobId, SystemTime)]
             )
             .await?;
 
-        tx.execute(&stmt, &[&col_job_id, &col_inactive_since])
-            .await?;
+        tx.execute(
+            &stmt,
+            &[
+                &col_job_id,
+                &col_inactive_since,
+                &(PgExecutionStatus::from(status) as i16),
+            ],
+        )
+        .await?;
     }
 
     {
