@@ -27,7 +27,8 @@
 //! ```
 //!
 //! By default the UI expects the API on the same origin, see [`UiOptions::api_url`]
-//! if it is served from elsewhere.
+//! if it is served from elsewhere, and [`UiOptions::api_credentials`] if the API
+//! on the other origin requires cookies (e.g. a session behind authentication).
 
 use axum::{
     Router,
@@ -53,6 +54,14 @@ pub struct UiOptions {
     ///
     /// If not set, the API is expected to be served on the same origin as the UI.
     pub api_url: Option<String>,
+    /// Whether the browser should send credentials (cookies, HTTP authentication)
+    /// with API requests when [`api_url`](Self::api_url) is on a different origin.
+    /// Same-origin requests always include them.
+    ///
+    /// The API must then allow credentials via CORS (`Access-Control-Allow-Credentials: true`
+    /// with an explicit, non-wildcard origin), and cookies must be allowed in
+    /// cross-site requests if the origins are not on the same site (`SameSite=None; Secure`).
+    pub api_credentials: bool,
 }
 
 struct UiState {
@@ -79,13 +88,16 @@ where
         .and_then(|file| file.contents_utf8())
         .unwrap_or_default();
 
-    let index = index.replace(
-        API_URL_MARKER,
-        &format!(
-            r#"<meta name="ora-api-url" content="{}" />"#,
-            escape_attribute(options.api_url.as_deref().unwrap_or_default())
-        ),
+    let mut api_meta = format!(
+        r#"<meta name="ora-api-url" content="{}" />"#,
+        escape_attribute(options.api_url.as_deref().unwrap_or_default())
     );
+
+    if options.api_credentials {
+        api_meta.push_str(r#"<meta name="ora-api-credentials" content="include" />"#);
+    }
+
+    let index = index.replace(API_URL_MARKER, &api_meta);
 
     let state = Arc::new(UiState { index });
 
@@ -208,6 +220,7 @@ mod tests {
     fn options() -> UiOptions {
         UiOptions {
             api_url: Some("https://api.example.com/?a=\"b\"".into()),
+            api_credentials: false,
         }
     }
 
@@ -232,6 +245,19 @@ mod tests {
         assert!(body.contains(
             r#"<meta name="ora-api-url" content="https://api.example.com/?a=&quot;b&quot;" />"#
         ));
+        assert!(!body.contains("ora-api-credentials"));
+    }
+
+    #[tokio::test]
+    async fn configures_api_credentials() {
+        let app = router(UiOptions {
+            api_credentials: true,
+            ..options()
+        });
+
+        let (status, _, body) = get(app, "/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains(r#"<meta name="ora-api-credentials" content="include" />"#));
     }
 
     #[tokio::test]

@@ -5,11 +5,23 @@ import { AdminService } from "./api/ora/admin/v1/admin_pb";
 
 const clientSymbol = Symbol("gRPC Client");
 
-export function oraAdminClient(url: string): Plugin {
+export interface OraAdminClientOptions {
+  /**
+   * Whether to send credentials (e.g. cookies) with the requests,
+   * `"include"` is required for cross-origin APIs behind authentication.
+   */
+  credentials?: RequestCredentials;
+}
+
+export function oraAdminClient(
+  url: string,
+  { credentials }: OraAdminClientOptions = {},
+): Plugin {
   return {
     install(app) {
       const transport = createGrpcWebTransport({
         baseUrl: url,
+        fetch: (input, init) => globalThis.fetch(input, { ...init, credentials }),
       });
 
       app.provide(clientSymbol, createClient(AdminService, transport));

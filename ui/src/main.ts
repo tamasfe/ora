@@ -33,6 +33,19 @@ function apiUrl(): string {
   return configured || import.meta.env.VITE_ORA_API_URL || location.origin;
 }
 
+/**
+ * Whether credentials (e.g. cookies) are sent to an API on a different origin,
+ * the server can enable it via a meta tag.
+ */
+function apiCredentials(): RequestCredentials {
+  const configured =
+    document
+      .querySelector<HTMLMetaElement>('meta[name="ora-api-credentials"]')
+      ?.content.trim() || import.meta.env.VITE_ORA_API_CREDENTIALS;
+
+  return configured === "include" ? "include" : "same-origin";
+}
+
 const router = createRouter({
   history: createWebHistory(basePath()),
   routes,
@@ -67,7 +80,7 @@ createApp(App)
       preset,
     },
   })
-  .use(oraAdminClient(apiUrl()))
+  .use(oraAdminClient(apiUrl(), { credentials: apiCredentials() }))
   .use(ConfirmationService)
   .use(ToastService)
   .directive("tooltip", Tooltip)

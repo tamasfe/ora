@@ -27,6 +27,24 @@ See `crates/ora/examples/server.rs` for a complete example.
 
 - By default the UI expects the API on the same origin, set `UiOptions::api_url` otherwise
   (the API must then allow the UI's origin via CORS and expose the `grpc-status` and `grpc-message` headers).
+- If the API on the other origin requires cookies (e.g. a session behind authentication),
+  set `UiOptions::api_credentials`, browsers do not send cookies to other origins otherwise.
+  The API's CORS policy must allow credentials, which rules out wildcards:
+
+  ```rust,ignore
+  CorsLayer::new()
+      .allow_origin(AllowOrigin::mirror_request()) // or the UI's origin
+      .allow_credentials(true)
+      .allow_methods([Method::POST])
+      .allow_headers(AllowHeaders::mirror_request())
+      .expose_headers([
+          HeaderName::from_static("grpc-status"),
+          HeaderName::from_static("grpc-message"),
+          HeaderName::from_static("grpc-status-details-bin"),
+      ])
+  ```
+
+  If the two origins are not on the same site, the session cookie must also be `SameSite=None; Secure`.
 - Nested routers do not match the path with a trailing slash (e.g. `/ui/`),
   add a redirect route for it if needed:
   `.route("/ui/", get(|| async { Redirect::permanent("/ui") }))`.
