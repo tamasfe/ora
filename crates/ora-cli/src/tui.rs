@@ -736,7 +736,9 @@ impl App {
                     JobOrderBy::TargetExecutionTimeAsc => JobOrderBy::TargetExecutionTimeDesc,
                     JobOrderBy::TargetExecutionTimeDesc => JobOrderBy::CreatedAtAsc,
                     JobOrderBy::CreatedAtAsc => JobOrderBy::CreatedAtDesc,
-                    JobOrderBy::CreatedAtDesc => JobOrderBy::TargetExecutionTimeAsc,
+                    JobOrderBy::CreatedAtDesc => JobOrderBy::PriorityDesc,
+                    JobOrderBy::PriorityDesc => JobOrderBy::PriorityAsc,
+                    JobOrderBy::PriorityAsc => JobOrderBy::TargetExecutionTimeAsc,
                 };
                 self.reload();
             }
@@ -1472,6 +1474,20 @@ fn policies(
     ))
 }
 
+/// The priority option every job and schedule shares.
+fn priority(form: &ui::Form) -> Result<i32, String> {
+    let priority = form.option("priority");
+
+    if priority.trim().is_empty() {
+        return Ok(0);
+    }
+
+    priority
+        .trim()
+        .parse::<i32>()
+        .map_err(|error| format!("invalid priority: {error}"))
+}
+
 /// Fill in the options every job and schedule shares.
 fn fill_policies(
     form: &mut ui::Form,
@@ -1491,10 +1507,17 @@ fn fill_policies(
     }
 }
 
+fn fill_priority(form: &mut ui::Form, priority: i32) {
+    if priority != 0 {
+        form.set_option("priority", priority.to_string());
+    }
+}
+
 fn fill_from_job(form: &mut ui::Form, job: &ora::proto::jobs::v1::Job) {
     form.prefill_input(&job.input_payload_json);
     form.set_pairs_option("labels", label_rows(&job.labels));
     fill_policies(form, job.timeout_policy.as_ref(), job.retry_policy.as_ref());
+    fill_priority(form, job.priority);
 }
 
 fn fill_from_schedule(form: &mut ui::Form, schedule: &ora::proto::schedules::v1::Schedule) {
@@ -1503,6 +1526,7 @@ fn fill_from_schedule(form: &mut ui::Form, schedule: &ora::proto::schedules::v1:
     if let Some(job) = schedule.job_template.as_ref() {
         form.prefill_input(&job.input_payload_json);
         fill_policies(form, job.timeout_policy.as_ref(), job.retry_policy.as_ref());
+        fill_priority(form, job.priority);
     }
 
     form.set_pairs_option("labels", label_rows(&schedule.labels));
@@ -1547,6 +1571,7 @@ fn build_job(form: &ui::Form) -> Result<ora::proto::jobs::v1::Job, String> {
         labels: parse_labels(&form.pairs_option("labels")),
         timeout_policy: Some(timeout_policy),
         retry_policy: Some(retry_policy),
+        priority: priority(form)?,
     })
 }
 
@@ -1593,6 +1618,7 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
             labels: vec![],
             timeout_policy: Some(timeout_policy),
             retry_policy: Some(retry_policy),
+            priority: priority(form)?,
         }),
         labels: parse_labels(&form.pairs_option("labels")),
         time_range: None,

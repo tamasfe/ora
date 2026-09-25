@@ -227,6 +227,8 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
                 JobOrderBy::CreatedAtAsc => "created ↑",
                 JobOrderBy::TargetExecutionTimeAsc => "target ↑",
                 JobOrderBy::TargetExecutionTimeDesc => "target ↓",
+                JobOrderBy::PriorityAsc => "priority ↑",
+                JobOrderBy::PriorityDesc => "priority ↓",
             },
         ),
         Tab::Schedules => (

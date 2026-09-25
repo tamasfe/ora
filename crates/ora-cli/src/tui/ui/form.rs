@@ -1027,6 +1027,12 @@ fn option_fields(kind: FormKind) -> Vec<Field> {
         FieldKind::Integer,
         "How many times to retry a failed run.",
     ));
+    fields.push(Field::option(
+        "priority",
+        "priority",
+        FieldKind::Integer,
+        "Runs with a higher priority are executed first. Empty means 0.",
+    ));
 
     fields
 }

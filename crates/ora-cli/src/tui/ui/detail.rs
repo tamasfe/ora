@@ -225,6 +225,7 @@ fn job_overview(job: &Job) -> Vec<Line<'static>> {
     if let Some(def) = job.job.as_ref() {
         lines.push(field("Type", def.job_type_id.clone()));
         lines.push(field("Target", format_time(def.target_execution_time)));
+        lines.push(field("Priority", def.priority.to_string()));
         lines.extend(timeout_retry_lines(
             def.timeout_policy.as_ref(),
             def.retry_policy.as_ref(),
@@ -368,6 +369,7 @@ fn schedule_overview(schedule: &Schedule) -> Vec<Line<'static>> {
         }
 
         if let Some(template) = def.job_template.as_ref() {
+            lines.push(field("Priority", template.priority.to_string()));
             lines.extend(timeout_retry_lines(
                 template.timeout_policy.as_ref(),
                 template.retry_policy.as_ref(),
