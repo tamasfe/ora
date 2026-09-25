@@ -37,7 +37,10 @@ impl ::prost::Name for ExecutorConnectionResponse {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExecutorMessage {
     /// The message.
-    #[prost(oneof = "executor_message::ExecutorMessageKind", tags = "1, 2, 3, 4")]
+    #[prost(
+        oneof = "executor_message::ExecutorMessageKind",
+        tags = "1, 2, 3, 4, 5, 6"
+    )]
     pub executor_message_kind: ::core::option::Option<executor_message::ExecutorMessageKind>,
 }
 /// Nested message and enum types in `ExecutorMessage`.
@@ -62,6 +65,14 @@ pub mod executor_message {
         /// The execution has failed.
         #[prost(message, tag = "4")]
         ExecutionFailed(super::ExecutionFailed),
+        /// The executor accepted an execution offered
+        /// by the server via `ExecutionReady`.
+        #[prost(message, tag = "5")]
+        ExecutionAccepted(super::ExecutionAccepted),
+        /// The executor rejected an execution offered
+        /// by the server via `ExecutionReady`.
+        #[prost(message, tag = "6")]
+        ExecutionRejected(super::ExecutionRejected),
     }
 }
 impl ::prost::Name for ExecutorMessage {
@@ -84,6 +95,17 @@ pub struct ExecutorCapabilities {
     /// The job queue configurations of the executor.
     #[prost(message, repeated, tag = "2")]
     pub job_queues: ::prost::alloc::vec::Vec<ExecutorJobQueue>,
+    /// Whether the executor performs a handshake for every execution
+    /// before it is assigned to the executor.
+    ///
+    /// If set, the executor must respond to every `ExecutionReady`
+    /// message with either `ExecutionAccepted` or `ExecutionRejected`,
+    /// executions are only assigned to the executor once accepted.
+    ///
+    /// If not set, executions are assigned to the executor
+    /// as soon as they are sent.
+    #[prost(bool, tag = "3")]
+    pub execution_handshake: bool,
 }
 impl ::prost::Name for ExecutorCapabilities {
     const NAME: &'static str = "ExecutorCapabilities";
@@ -126,6 +148,61 @@ impl ::prost::Name for ExecutorHeartbeat {
     }
     fn type_url() -> ::prost::alloc::string::String {
         "/ora.executors.v1.ExecutorHeartbeat".into()
+    }
+}
+/// The executor accepted an offered execution.
+///
+/// The execution is assigned to the executor, and
+/// the executor is expected to run it.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExecutionAccepted {
+    /// The ID of the job execution.
+    #[prost(string, tag = "1")]
+    pub execution_id: ::prost::alloc::string::String,
+    /// The time when the job execution was accepted.
+    ///
+    /// This is informational only, the start time of the execution
+    /// is the time when the server sent the execution to the executor.
+    #[prost(message, optional, tag = "2")]
+    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
+}
+impl ::prost::Name for ExecutionAccepted {
+    const NAME: &'static str = "ExecutionAccepted";
+    const PACKAGE: &'static str = "ora.executors.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.executors.v1.ExecutionAccepted".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.executors.v1.ExecutionAccepted".into()
+    }
+}
+/// The executor rejected an offered execution.
+///
+/// The execution is not assigned to the executor,
+/// it remains pending and might be offered again
+/// to this or other executors later.
+///
+/// Rejections do not count as execution attempts.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct ExecutionRejected {
+    /// The ID of the job execution.
+    #[prost(string, tag = "1")]
+    pub execution_id: ::prost::alloc::string::String,
+    /// The time when the job execution was rejected.
+    #[prost(message, optional, tag = "2")]
+    pub timestamp: ::core::option::Option<::prost_types::Timestamp>,
+    /// The reason for the rejection, if any.
+    #[prost(string, optional, tag = "3")]
+    pub reason: ::core::option::Option<::prost::alloc::string::String>,
+}
+impl ::prost::Name for ExecutionRejected {
+    const NAME: &'static str = "ExecutionRejected";
+    const PACKAGE: &'static str = "ora.executors.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.executors.v1.ExecutionRejected".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.executors.v1.ExecutionRejected".into()
     }
 }
 /// A job execution has succeeded.
@@ -190,9 +267,14 @@ pub mod server_message {
         #[prost(message, tag = "1")]
         Properties(super::ExecutorProperties),
         /// A job execution is ready to be executed by the executor.
+        ///
+        /// If the executor has `execution_handshake` enabled,
+        /// this is an offer that must be accepted or rejected.
         #[prost(message, tag = "2")]
         ExecutionReady(super::ExecutionReady),
         /// The job execution was cancelled and should be dropped by the executor.
+        ///
+        /// This is also sent if an offered execution was withdrawn.
         #[prost(message, tag = "3")]
         ExecutionCancelled(super::ExecutionCancelled),
     }
@@ -236,6 +318,11 @@ impl ::prost::Name for ExecutorProperties {
     }
 }
 /// A job execution is ready to be executed by the executor.
+///
+/// If the executor has `execution_handshake` enabled,
+/// the executor must respond with either `ExecutionAccepted`
+/// or `ExecutionRejected` in a timely manner, otherwise
+/// the offer is withdrawn by the server.
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ExecutionReady {
     /// The ID of the job.

@@ -151,6 +151,8 @@ impl TryFrom<proto::admin::v1::JobFilters> for ora_backend::jobs::JobFilters {
                         .collect::<Result<_, _>>()?,
                 )
             },
+            min_priority: value.min_priority,
+            max_priority: value.max_priority,
         })
     }
 }
@@ -172,6 +174,12 @@ impl TryFrom<proto::admin::v1::JobOrderBy> for Option<ora_backend::jobs::JobOrde
             }
             proto::admin::v1::JobOrderBy::TargetExecutionTimeDesc => {
                 Ok(Some(ora_backend::jobs::JobOrderBy::TargetExecutionTimeDesc))
+            }
+            proto::admin::v1::JobOrderBy::PriorityAsc => {
+                Ok(Some(ora_backend::jobs::JobOrderBy::PriorityAsc))
+            }
+            proto::admin::v1::JobOrderBy::PriorityDesc => {
+                Ok(Some(ora_backend::jobs::JobOrderBy::PriorityDesc))
             }
         }
     }
@@ -264,6 +272,7 @@ impl TryFrom<proto::jobs::v1::Job> for ora_backend::jobs::JobDefinition {
             timeout_policy: value.timeout_policy.unwrap_or_default().into(),
             retry_policy: value.retry_policy.unwrap_or_default().into(),
             labels: value.labels.into_iter().map(Into::into).collect(),
+            priority: value.priority,
         })
     }
 }
@@ -277,6 +286,7 @@ impl From<ora_backend::jobs::JobDefinition> for proto::jobs::v1::Job {
             timeout_policy: Some(value.timeout_policy.into()),
             retry_policy: Some(value.retry_policy.into()),
             labels: value.labels.into_iter().map(Into::into).collect(),
+            priority: value.priority,
         }
     }
 }

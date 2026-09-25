@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     pin::pin,
     sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime},
@@ -11,20 +12,44 @@ use ora_backend::{
     jobs::{CancelledJob, JobId, JobType, RetryPolicy},
 };
 use rand::seq::SliceRandom;
-use tokio::{spawn, time::sleep_until};
+use tokio::{
+    spawn,
+    sync::{Notify, futures::Notified},
+    time::sleep_until,
+};
 use tonic::Status;
 use uuid::Uuid;
 use wgroup::{WaitGroupHandle, WaitGuard};
 
-use crate::proto::{
-    admin,
-    executors::v1::{
-        ExecutionCancelled, ExecutionReady, ExecutorProperties,
-        executor_message::ExecutorMessageKind, server_message::ServerMessageKind,
+use crate::{
+    proto::{
+        admin,
+        executors::v1::{
+            ExecutionCancelled, ExecutionReady, ExecutorProperties,
+            executor_message::ExecutorMessageKind, server_message::ServerMessageKind,
+        },
     },
+    util::deadline_after,
 };
 
 const MAX_HEARTBEAT_INTERVAL: Duration = Duration::from_mins(1);
+
+/// The time executors have to accept or reject an offered execution,
+/// after which the offer is withdrawn.
+const OFFER_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// The interval of checking for expired offers.
+const OFFER_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+
+/// The time no executions are offered to a job queue
+/// of an executor after it rejected an execution.
+///
+/// The backoff is doubled for every consecutive rejection.
+const MIN_REJECTION_BACKOFF: Duration = Duration::from_secs(1);
+
+/// The maximum time no executions are offered to a job queue
+/// of an executor after consecutive rejections.
+const MAX_REJECTION_BACKOFF: Duration = Duration::from_secs(30);
 
 pub(crate) enum ExecutorEvent {
     JobTypesAdded {
@@ -57,22 +82,98 @@ pub(crate) struct ExecutorPool {
     executors: Arc<Mutex<Vec<Executor>>>,
     /// Events when certain actions happen in the executor pool.
     events: flume::Sender<ExecutorEvent>,
+    /// Executions accepted by executors that should be started in the backend.
+    ///
+    /// These are separate from the other events so that starting executions
+    /// is not delayed by processing execution results.
+    accepted: flume::Sender<StartedExecution>,
+    /// Notified when accepted executions were started in the backend
+    /// (or could not be started).
+    starts_recorded: Arc<Notify>,
+    /// Notified when executors might be able to accept
+    /// executions they could not before.
+    executor_available: Arc<Notify>,
+    /// Accepted executions that must not be offered again.
+    accepted_executions: Arc<Mutex<AcceptedExecutions>>,
     wg: WaitGroupHandle,
     shutdown_grace_period: Duration,
+}
+
+/// The result of offering ready executions to executors.
+#[derive(Debug, Default)]
+pub(crate) struct OfferedExecutions {
+    /// The number of executions offered to executors.
+    pub(crate) offered_count: usize,
+    /// The IDs of executions that were not offered,
+    /// either because no executor could accept them,
+    /// or because they are already offered to or accepted by an executor.
+    pub(crate) not_offered: Vec<ExecutionId>,
+}
+
+/// Executions accepted by executors that might still
+/// be returned as ready by the backend.
+///
+/// Accepted executions are only started in the backend after some delay,
+/// and ready executions fetched earlier might be stale, these executions
+/// must not be offered again even if they are not in the pool anymore
+/// (e.g. because they finished in the meantime).
+#[derive(Debug, Default)]
+struct AcceptedExecutions {
+    /// The accepted executions and the time when they were started
+    /// in the backend (if they were).
+    executions: HashMap<ExecutionId, Option<Instant>>,
 }
 
 impl ExecutorPool {
     pub(crate) fn new(
         events: flume::Sender<ExecutorEvent>,
+        accepted: flume::Sender<StartedExecution>,
         wg: WaitGroupHandle,
         shutdown_grace_period: Duration,
     ) -> Self {
         Self {
             events,
+            accepted,
+            starts_recorded: Default::default(),
             executors: Default::default(),
+            executor_available: Default::default(),
+            accepted_executions: Default::default(),
             wg,
             shutdown_grace_period,
         }
+    }
+
+    /// Wait until executors might be able to accept more executions,
+    /// either because executions finished or new executors connected.
+    ///
+    /// Only changes after this function is called are observed.
+    pub(crate) fn executor_available(&self) -> Notified<'_> {
+        self.executor_available.notified()
+    }
+
+    /// Whether any executor can accept an execution of any job type.
+    #[must_use]
+    pub(crate) fn has_capacity(&self) -> bool {
+        let executors = self.executors.lock().unwrap();
+        let now = Instant::now();
+        executors
+            .iter()
+            .flat_map(|executor| &executor.job_queues)
+            .any(|queue| queue.has_capacity(now))
+    }
+
+    /// The earliest time when a job queue of an executor
+    /// that rejected executions can be offered executions again.
+    #[must_use]
+    pub(crate) fn earliest_backoff_end(&self) -> Option<Instant> {
+        let executors = self.executors.lock().unwrap();
+        let now = Instant::now();
+        executors
+            .iter()
+            .flat_map(|executor| &executor.job_queues)
+            .filter_map(|queue| queue.backoff_until)
+            .filter(|until| *until > now)
+            .min()
     }
 
     pub(crate) fn add_executor(
@@ -98,8 +199,10 @@ impl ExecutorPool {
             name: None,
             job_queues: Vec::new(),
             last_heartbeat: SystemTime::now(),
+            last_heartbeat_at: Instant::now(),
             messages: server_messages,
             initialized: false,
+            execution_handshake: false,
         };
         self.executors.lock().unwrap().push(executor);
 
@@ -108,42 +211,67 @@ impl ExecutorPool {
             self.executors.clone(),
             executor_messages,
             self.events.clone(),
+            self.accepted.clone(),
+            self.executor_available.clone(),
+            self.accepted_executions.clone(),
             self.wg.add_with(&format!("executor-{id}")),
             self.shutdown_grace_period,
         ));
     }
 
-    /// Try to schedule ready executions to available executors.
+    /// Try to offer ready executions to available executors.
     ///
-    /// Returns both the assigned executions
-    /// and the IDs of executions that could not be assigned.
-    pub(crate) fn try_assign(
+    /// The executions are assigned to the executors only once they accept them,
+    /// which is reported by [`ExecutorEvent::ExecutionAccepted`] events.
+    ///
+    /// The `fetched_at` time must be taken before the ready executions
+    /// were fetched from the backend, executions that were started in the backend
+    /// since are not offered again.
+    pub(crate) fn try_offer(
         &self,
         executions: Vec<ReadyExecution>,
-    ) -> (Vec<StartedExecution>, Vec<ReadyExecution>) {
-        let mut scheduled_executions = Vec::new();
-        let mut unscheduled_executions = Vec::new();
+        fetched_at: Instant,
+    ) -> OfferedExecutions {
+        let mut offered = OfferedExecutions::default();
 
         if executions.is_empty() {
-            tracing::debug!("no ready executions to schedule");
-            return (scheduled_executions, unscheduled_executions);
+            tracing::debug!("no ready executions to offer");
+            return offered;
         }
 
         let mut executors = self.executors.lock().unwrap();
+        let mut accepted_executions = self.accepted_executions.lock().unwrap();
+
+        // Executions started before the ready executions were fetched
+        // are not returned by the backend anymore.
+        accepted_executions
+            .executions
+            .retain(|_, started_at| started_at.is_none_or(|started_at| started_at >= fetched_at));
+
+        let held_execution_ids = executors
+            .iter()
+            .flat_map(|executor| &executor.job_queues)
+            .flat_map(|queue| &queue.executions)
+            .map(|execution| execution.execution_id)
+            .chain(accepted_executions.executions.keys().copied())
+            .collect::<HashSet<_>>();
+
         let mut executors = executors.iter_mut().collect::<Vec<_>>();
 
+        let now = Instant::now();
+
         'executions_loop: for execution in executions {
+            if held_execution_ids.contains(&execution.execution_id) {
+                offered.not_offered.push(execution.execution_id);
+                continue;
+            }
+
             // We shuffle the executors to ensure fairness.
             executors.shuffle(&mut rand::rng());
 
-            let now = SystemTime::now();
-
             for executor in &mut executors {
                 let suitable_queue = executor.job_queues.iter_mut().find(|queue| {
-                    queue.has_capacity()
-                        && queue.job_type.id == execution.job_type_id
-                        // this should normally not happen, but just in case
-                        && !queue.executions.iter().any(|e| e.execution_id == execution.execution_id)
+                    queue.has_capacity(now) && queue.job_type.id == execution.job_type_id
                 });
 
                 let Some(queue) = suitable_queue else {
@@ -167,26 +295,140 @@ impl ExecutorPool {
                     continue;
                 }
 
+                // Executors without the execution handshake
+                // accept every execution sent to them.
+                let state = if executor.execution_handshake {
+                    ExecutionState::Offered {
+                        deadline: now + OFFER_TIMEOUT,
+                        offered_at: SystemTime::now(),
+                    }
+                } else {
+                    accepted_executions
+                        .executions
+                        .insert(execution.execution_id, None);
+
+                    if self
+                        .accepted
+                        .send(StartedExecution {
+                            execution_id: execution.execution_id,
+                            executor_id: executor.id,
+                            started_at: SystemTime::now(),
+                        })
+                        .is_err()
+                    {
+                        tracing::debug!("internal accepted executions channel closed");
+                    }
+
+                    ExecutionState::Accepted
+                };
+
                 queue.add_execution(ExecutorExecution {
                     job_id: execution.job_id,
                     execution_id: execution.execution_id,
                     retry_policy: execution.retry_policy.clone(),
                     attempt_number: execution.attempt_number,
+                    state,
                 });
 
-                scheduled_executions.push(StartedExecution {
-                    execution_id: execution.execution_id,
-                    executor_id: executor.id,
-                    started_at: now,
-                });
+                offered.offered_count += 1;
 
                 continue 'executions_loop;
             }
 
-            unscheduled_executions.push(execution);
+            offered.not_offered.push(execution.execution_id);
         }
 
-        (scheduled_executions, unscheduled_executions)
+        offered
+    }
+
+    /// The IDs of executions that are offered to executors
+    /// or were accepted but not yet started in the backend.
+    ///
+    /// These executions are still pending in the backend,
+    /// but must not be offered again.
+    pub(crate) fn in_flight_execution_ids(&self) -> Vec<ExecutionId> {
+        let executors = self.executors.lock().unwrap();
+        let accepted_executions = self.accepted_executions.lock().unwrap();
+
+        executors
+            .iter()
+            .flat_map(|executor| &executor.job_queues)
+            .flat_map(|queue| &queue.executions)
+            .filter(|execution| !execution.is_accepted())
+            .map(|execution| execution.execution_id)
+            .chain(
+                accepted_executions
+                    .executions
+                    .iter()
+                    .filter(|(_, started_at)| started_at.is_none())
+                    .map(|(execution_id, _)| *execution_id),
+            )
+            .collect()
+    }
+
+    /// Mark accepted executions as started in the backend.
+    pub(crate) fn accepted_executions_started(&self, execution_ids: &[ExecutionId]) {
+        {
+            let mut accepted_executions = self.accepted_executions.lock().unwrap();
+            let now = Instant::now();
+
+            for execution_id in execution_ids {
+                if let Some(started_at) = accepted_executions.executions.get_mut(execution_id) {
+                    *started_at = Some(now);
+                }
+            }
+        }
+
+        self.starts_recorded.notify_waiters();
+    }
+
+    /// Forget accepted executions that could not be started in the backend,
+    /// so that they can be offered again.
+    pub(crate) fn accepted_executions_not_started(&self, execution_ids: &[ExecutionId]) {
+        {
+            let mut accepted_executions = self.accepted_executions.lock().unwrap();
+
+            for execution_id in execution_ids {
+                accepted_executions.executions.remove(execution_id);
+            }
+        }
+
+        self.starts_recorded.notify_waiters();
+    }
+
+    /// Wait until the given executions are not waiting to be started
+    /// in the backend anymore, but at most for the given duration.
+    ///
+    /// Returns `false` if the timeout elapsed.
+    pub(crate) async fn wait_for_starts(
+        &self,
+        execution_ids: &[ExecutionId],
+        timeout: Duration,
+    ) -> bool {
+        let deadline = tokio::time::Instant::now() + timeout;
+
+        loop {
+            // Created before checking so that no notification is missed.
+            let starts_recorded = self.starts_recorded.notified();
+
+            let start_pending = {
+                let accepted_executions = self.accepted_executions.lock().unwrap();
+                execution_ids.iter().any(|execution_id| {
+                    matches!(accepted_executions.executions.get(execution_id), Some(None))
+                })
+            };
+
+            if !start_pending {
+                return true;
+            }
+
+            if tokio::time::timeout_at(deadline, starts_recorded)
+                .await
+                .is_err()
+            {
+                return false;
+            }
+        }
     }
 
     /// List all executors in the pool.
@@ -236,14 +478,46 @@ impl ExecutorPool {
             .collect::<Vec<_>>()
     }
 
+    /// Whether there are no executors in the pool.
+    #[must_use]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.executors.lock().unwrap().is_empty()
+    }
+
+    /// The grace period executors are given on shutdown.
+    #[must_use]
+    pub(crate) fn shutdown_grace_period(&self) -> Duration {
+        self.shutdown_grace_period
+    }
+
+    /// Wait until there are no executors in the pool,
+    /// but at most for the given duration.
+    pub(crate) async fn wait_empty(&self, timeout: Duration) {
+        let deadline = deadline_after(timeout);
+
+        while !self.is_empty() && Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     /// Cancel in-progress executions of the given cancelled jobs.
-    #[tracing::instrument(skip_all)]
     pub(crate) fn cancel_executions(&self, jobs: &[CancelledJob]) {
+        self.cancel_execution_ids(
+            &jobs
+                .iter()
+                .map(|job| job.last_execution_id)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    /// Cancel the given executions on the executors they are assigned to,
+    /// freeing up their capacity.
+    #[tracing::instrument(skip_all)]
+    pub(crate) fn cancel_execution_ids(&self, execution_ids: &[ExecutionId]) {
         let mut executors = self.executors.lock().unwrap();
+        let mut cancelled_any = false;
 
-        'jobs: for job in jobs {
-            let execution_id = job.last_execution_id;
-
+        'executions: for &execution_id in execution_ids {
             for executor in &mut *executors {
                 for q in &mut executor.job_queues {
                     let Some(idx) = q
@@ -255,6 +529,7 @@ impl ExecutorPool {
                     };
 
                     q.executions.swap_remove(idx);
+                    cancelled_any = true;
 
                     _ = executor
                         .messages
@@ -262,11 +537,15 @@ impl ExecutorPool {
                             execution_id: execution_id.to_string(),
                         }));
 
-                    continue 'jobs;
+                    continue 'executions;
                 }
             }
 
             tracing::debug!(%execution_id, "execution not assigned to any executors");
+        }
+
+        if cancelled_any {
+            self.executor_available.notify_waiters();
         }
     }
 }
@@ -278,24 +557,95 @@ pub(crate) struct Executor {
     name: Option<String>,
     job_queues: Vec<ExecutorJobQueue>,
     last_heartbeat: SystemTime,
+    /// The time of the last heartbeat for detecting timeouts,
+    /// unaffected by changes of the system clock.
+    last_heartbeat_at: Instant,
     messages: flume::Sender<ServerMessageKind>,
     initialized: bool,
+    /// Whether the executor accepts or rejects offered executions
+    /// before they are assigned to it.
+    execution_handshake: bool,
 }
 
 impl Executor {
+    /// The executions accepted by this executor.
     pub(crate) fn assigned_executions(&self) -> Vec<ExecutorExecution> {
         self.job_queues
             .iter()
-            .flat_map(|queue| queue.executions.iter().cloned())
+            .flat_map(|queue| queue.executions.iter())
+            .filter(|execution| execution.is_accepted())
+            .cloned()
             .collect()
     }
 
-    /// The count of active executions assigned to this executor.
+    /// The count of executions accepted by this executor.
     pub(crate) fn assigned_execution_count(&self) -> usize {
         self.job_queues
             .iter()
-            .map(|queue| queue.executions.len())
-            .sum()
+            .flat_map(|queue| queue.executions.iter())
+            .filter(|execution| execution.is_accepted())
+            .count()
+    }
+
+    /// Find an execution offered to or accepted by this executor.
+    fn find_execution_mut(
+        &mut self,
+        execution_id: ExecutionId,
+    ) -> Option<(&mut ExecutorJobQueue, usize)> {
+        self.job_queues.iter_mut().find_map(|queue| {
+            let idx = queue
+                .executions
+                .iter()
+                .position(|e| e.execution_id == execution_id)?;
+            Some((queue, idx))
+        })
+    }
+
+    /// Remove an execution offered to or accepted by this executor.
+    fn remove_execution(&mut self, execution_id: ExecutionId) -> Option<ExecutorExecution> {
+        let (queue, idx) = self.find_execution_mut(execution_id)?;
+        Some(queue.executions.swap_remove(idx))
+    }
+
+    /// Withdraw offered executions from the executor.
+    ///
+    /// If `expired_at` is given, only offers that expired by then are
+    /// withdrawn, and they count as rejections.
+    ///
+    /// Returns the number of withdrawn offers.
+    fn withdraw_offers(&mut self, expired_at: Option<Instant>) -> usize {
+        let mut withdrawn_count = 0;
+
+        for queue in &mut self.job_queues {
+            let mut queue_withdrawn_count = 0;
+
+            queue.executions.retain(|execution| {
+                let ExecutionState::Offered { deadline, .. } = execution.state else {
+                    return true;
+                };
+
+                if expired_at.is_some_and(|expired_at| deadline > expired_at) {
+                    return true;
+                }
+
+                _ = self
+                    .messages
+                    .send(ServerMessageKind::ExecutionCancelled(ExecutionCancelled {
+                        execution_id: execution.execution_id.to_string(),
+                    }));
+
+                queue_withdrawn_count += 1;
+                false
+            });
+
+            if queue_withdrawn_count > 0 && expired_at.is_some() {
+                queue.rejected();
+            }
+
+            withdrawn_count += queue_withdrawn_count;
+        }
+
+        withdrawn_count
     }
 }
 
@@ -304,10 +654,15 @@ impl Executor {
 struct ExecutorJobQueue {
     /// The job type this queue is for.
     job_type: JobType,
-    /// The list of executions in the queue.
+    /// The list of executions offered to or accepted by the executor.
     executions: Vec<ExecutorExecution>,
     /// The maximum number of executions allowed in this queue.
     max_executions: u64,
+    /// No executions are offered until this time
+    /// because the executor rejected executions.
+    backoff_until: Option<Instant>,
+    /// The number of consecutive rejections.
+    consecutive_rejections: u32,
 }
 
 impl ExecutorJobQueue {
@@ -316,27 +671,69 @@ impl ExecutorJobQueue {
             job_type,
             executions: Vec::new(),
             max_executions,
+            backoff_until: None,
+            consecutive_rejections: 0,
         }
     }
 
     #[inline]
-    fn has_capacity(&self) -> bool {
+    fn has_capacity(&self, now: Instant) -> bool {
         (self.executions.len() as u64) < self.max_executions
+            && self.backoff_until.is_none_or(|until| until <= now)
     }
 
     #[inline]
     fn add_execution(&mut self, execution_id: ExecutorExecution) {
         self.executions.push(execution_id);
     }
+
+    /// The executor accepted an execution of this queue.
+    fn accepted(&mut self) {
+        self.consecutive_rejections = 0;
+        self.backoff_until = None;
+    }
+
+    /// The executor rejected an execution of this queue,
+    /// so no executions are offered for a while.
+    fn rejected(&mut self) {
+        let backoff = MIN_REJECTION_BACKOFF
+            .saturating_mul(2u32.saturating_pow(self.consecutive_rejections))
+            .min(MAX_REJECTION_BACKOFF);
+
+        self.consecutive_rejections = self.consecutive_rejections.saturating_add(1);
+        self.backoff_until = Some(Instant::now() + backoff);
+    }
 }
 
-/// An execution assigned to an executor.
+/// An execution offered to or accepted by an executor.
 #[derive(Debug, Clone)]
 pub(crate) struct ExecutorExecution {
     pub(crate) job_id: JobId,
     pub(crate) execution_id: ExecutionId,
     pub(crate) retry_policy: RetryPolicy,
     pub(crate) attempt_number: u64,
+    state: ExecutionState,
+}
+
+impl ExecutorExecution {
+    fn is_accepted(&self) -> bool {
+        matches!(self.state, ExecutionState::Accepted)
+    }
+}
+
+/// The state of an execution in the executor pool.
+#[derive(Debug, Clone, Copy)]
+enum ExecutionState {
+    /// The execution was offered to the executor,
+    /// which must accept or reject it until the deadline.
+    Offered {
+        deadline: Instant,
+        /// The time the execution was offered,
+        /// it is considered the start time of the execution if accepted.
+        offered_at: SystemTime,
+    },
+    /// The execution was accepted by the executor.
+    Accepted,
 }
 
 /// Run the message loop for an executor.
@@ -346,6 +743,9 @@ async fn executor_loop(
     executors: Arc<Mutex<Vec<Executor>>>,
     executor_messages: impl Stream<Item = ExecutorMessageKind> + Send + 'static,
     events: flume::Sender<ExecutorEvent>,
+    accepted: flume::Sender<StartedExecution>,
+    executor_available: Arc<Notify>,
+    accepted_executions: Arc<Mutex<AcceptedExecutions>>,
     wg: WaitGuard,
     shutdown_grace_period: Duration,
 ) {
@@ -354,12 +754,16 @@ async fn executor_loop(
     let mut check_interval = tokio::time::interval(MAX_HEARTBEAT_INTERVAL);
     check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
+    let mut offer_check_interval = tokio::time::interval(OFFER_CHECK_INTERVAL);
+    offer_check_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
     let mut executor_messages = pin!(executor_messages);
 
     let mut shutdown_deadline: Option<Instant> = None;
 
     loop {
         let next_tick = check_interval.tick();
+        let next_offer_check = offer_check_interval.tick();
         let next_message = executor_messages.next();
 
         let message = if let Some(shutdown_deadline) = shutdown_deadline {
@@ -414,11 +818,18 @@ async fn executor_loop(
                         break;
                     }
 
-                    let executors = executors.lock().unwrap();
-                    let Some(executor) = executors.iter().find(|e| e.id == executor_id) else {
+                    let mut executors = executors.lock().unwrap();
+                    let Some(executor) = executors.iter_mut().find(|e| e.id == executor_id) else {
                         tracing::debug!("executor was dropped");
                         break;
                     };
+
+                    // No new executions are accepted during shutdown.
+                    let withdrawn_count = executor.withdraw_offers(None);
+
+                    if withdrawn_count > 0 {
+                        tracing::debug!(withdrawn_count, "withdrew offered executions before shutdown");
+                    }
 
                     if executor.assigned_execution_count() > 0 {
                         tracing::info!(
@@ -426,7 +837,7 @@ async fn executor_loop(
                             grace_period = ?shutdown_grace_period,
                             "waiting for executor to finish executions before shutdown",
                         );
-                        shutdown_deadline = Some(Instant::now() + shutdown_grace_period);
+                        shutdown_deadline = Some(deadline_after(shutdown_grace_period));
                         continue;
                     }
 
@@ -439,7 +850,7 @@ async fn executor_loop(
                         break;
                     };
 
-                    if SystemTime::now().duration_since(executor.last_heartbeat).unwrap_or_default() > MAX_HEARTBEAT_INTERVAL {
+                    if executor.last_heartbeat_at.elapsed() > MAX_HEARTBEAT_INTERVAL {
                         tracing::warn!("executor heartbeat timeout, disconnecting");
                         drop_executor(executor_id, &mut executors, &events);
                         break;
@@ -449,6 +860,25 @@ async fn executor_loop(
                         tracing::debug!("executor outbound channel disconnected");
                         drop_executor(executor_id, &mut executors, &events);
                         break;
+                    }
+
+                    continue;
+                }
+                _ = next_offer_check => {
+                    let mut executors = executors.lock().unwrap();
+                    let Some(executor) = executors.iter_mut().find(|e| e.id == executor_id) else {
+                        tracing::debug!("executor was dropped");
+                        break;
+                    };
+
+                    let expired_count = executor.withdraw_offers(Some(Instant::now()));
+
+                    if expired_count > 0 {
+                        tracing::warn!(
+                            expired_count,
+                            "executor did not respond to offered executions in time, withdrew them"
+                        );
+                        executor_available.notify_waiters();
                     }
 
                     continue;
@@ -487,6 +917,7 @@ async fn executor_loop(
                 }
 
                 executor.name = Some(executor_capabilities.name);
+                executor.execution_handshake = executor_capabilities.execution_handshake;
 
                 let job_queues = executor_capabilities
                     .job_queues
@@ -536,6 +967,7 @@ async fn executor_loop(
                 };
 
                 executor.initialized = true;
+                executor_available.notify_waiters();
                 tracing::info!(
                     executor_name = executor.name.as_deref().unwrap_or(""),
                     job_type_count,
@@ -544,6 +976,102 @@ async fn executor_loop(
             }
             ExecutorMessageKind::Heartbeat(_) => {
                 executor.last_heartbeat = SystemTime::now();
+                executor.last_heartbeat_at = Instant::now();
+            }
+            ExecutorMessageKind::ExecutionAccepted(execution_accepted) => {
+                let Ok(execution_id) = execution_accepted.execution_id.parse::<Uuid>() else {
+                    tracing::error!("invalid execution ID");
+                    drop_executor(executor_id, &mut executors, &events);
+                    break;
+                };
+
+                let execution_id = ExecutionId(execution_id);
+
+                let cancel = |executor: &Executor| {
+                    _ = executor
+                        .messages
+                        .send(ServerMessageKind::ExecutionCancelled(ExecutionCancelled {
+                            execution_id: execution_id.to_string(),
+                        }));
+                };
+
+                let Some((queue, idx)) = executor.find_execution_mut(execution_id) else {
+                    // The offer was withdrawn (e.g. it expired or the job was cancelled),
+                    // the executor must not run it.
+                    tracing::debug!(%execution_id, "executor accepted an execution that was not offered to it");
+                    cancel(executor);
+                    continue;
+                };
+
+                let ExecutionState::Offered { offered_at, .. } = queue.executions[idx].state else {
+                    tracing::warn!(%execution_id, "executor accepted an execution multiple times");
+                    continue;
+                };
+
+                // The start time is the time when the execution was sent to the executor
+                // by the server (like before executions were explicitly accepted),
+                // as timeouts are measured by the server, and the executor
+                // might report results with timestamps before the acceptance is received.
+                let started_at = offered_at;
+
+                if shutdown_deadline.is_some() {
+                    tracing::debug!(%execution_id, "executor accepted an execution during shutdown");
+                    queue.executions.swap_remove(idx);
+                    cancel(executor);
+                    continue;
+                }
+
+                queue.executions[idx].state = ExecutionState::Accepted;
+                queue.accepted();
+
+                accepted_executions
+                    .lock()
+                    .unwrap()
+                    .executions
+                    .insert(execution_id, None);
+
+                if accepted
+                    .send(StartedExecution {
+                        execution_id,
+                        executor_id,
+                        started_at,
+                    })
+                    .is_err()
+                {
+                    tracing::debug!("internal accepted executions channel closed");
+                    break;
+                }
+            }
+            ExecutorMessageKind::ExecutionRejected(execution_rejected) => {
+                let Ok(execution_id) = execution_rejected.execution_id.parse::<Uuid>() else {
+                    tracing::error!("invalid execution ID");
+                    drop_executor(executor_id, &mut executors, &events);
+                    break;
+                };
+
+                let execution_id = ExecutionId(execution_id);
+
+                let Some((queue, idx)) = executor.find_execution_mut(execution_id) else {
+                    tracing::debug!(%execution_id, "executor rejected an execution that was not offered to it");
+                    continue;
+                };
+
+                if queue.executions[idx].is_accepted() {
+                    tracing::warn!(%execution_id, "executor rejected an execution it already accepted, ignoring");
+                    continue;
+                }
+
+                // The execution is still pending in the backend,
+                // it will be offered again later.
+                queue.executions.swap_remove(idx);
+                queue.rejected();
+                executor_available.notify_waiters();
+
+                tracing::debug!(
+                    %execution_id,
+                    reason = execution_rejected.reason.as_deref().unwrap_or_default(),
+                    "executor rejected execution"
+                );
             }
             ExecutorMessageKind::ExecutionSucceeded(execution_succeeded) => {
                 let Ok(execution_id) = execution_succeeded.execution_id.parse::<Uuid>() else {
@@ -553,22 +1081,27 @@ async fn executor_loop(
 
                 let execution_id = ExecutionId(execution_id);
 
-                let Some(execution) = executor.job_queues.iter_mut().find_map(|q| {
-                    let idx = q
-                        .executions
-                        .iter()
-                        .position(|e| e.execution_id == execution_id)?;
-
-                    Some(q.executions.swap_remove(idx))
-                }) else {
+                let Some(execution) = executor.remove_execution(execution_id) else {
                     // this can happen when an execution gets cancelled
                     tracing::debug!("executor completed execution that was not assigned to it");
                     continue;
                 };
 
+                executor_available.notify_waiters();
+
+                if !execution.is_accepted() {
+                    tracing::warn!(
+                        %execution_id,
+                        "executor completed an execution without accepting it"
+                    );
+                    continue;
+                }
+
                 let timestamp = match execution_succeeded.timestamp {
+                    // Timestamps in the future (e.g. due to clock skew)
+                    // might not be representable by the backend.
                     Some(ts) => match SystemTime::try_from(ts) {
-                        Ok(ts) => ts,
+                        Ok(ts) => ts.min(SystemTime::now()),
                         Err(error) => {
                             tracing::error!("invalid execution success timestamp: {error}");
                             break;
@@ -601,22 +1134,27 @@ async fn executor_loop(
 
                 let execution_id = ExecutionId(execution_id);
 
-                let Some(execution) = executor.job_queues.iter_mut().find_map(|q| {
-                    let idx = q
-                        .executions
-                        .iter()
-                        .position(|e| e.execution_id == execution_id)?;
-
-                    Some(q.executions.swap_remove(idx))
-                }) else {
+                let Some(execution) = executor.remove_execution(execution_id) else {
                     // this can happen when an execution gets cancelled
                     tracing::debug!("executor completed execution that was not assigned to it");
                     continue;
                 };
 
+                executor_available.notify_waiters();
+
+                if !execution.is_accepted() {
+                    tracing::warn!(
+                        %execution_id,
+                        "executor completed an execution without accepting it"
+                    );
+                    continue;
+                }
+
                 let timestamp = match execution_failed.timestamp {
+                    // Timestamps in the future (e.g. due to clock skew)
+                    // might not be representable by the backend.
                     Some(ts) => match SystemTime::try_from(ts) {
-                        Ok(ts) => ts,
+                        Ok(ts) => ts.min(SystemTime::now()),
                         Err(error) => {
                             tracing::error!("invalid execution failure timestamp: {error}");
                             break;
@@ -640,6 +1178,12 @@ async fn executor_loop(
                     break;
                 }
             }
+        }
+
+        // There is no need to wait for the rest of the grace period.
+        if shutdown_deadline.is_some() && executor.assigned_execution_count() == 0 {
+            tracing::info!("executor finished its executions before shutdown");
+            break;
         }
     }
 

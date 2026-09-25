@@ -3,7 +3,8 @@ use std::time::SystemTime;
 use crate::{
     grpc::GrpcImpl,
     proto::admin::v1::{self, admin_service_server::AdminService},
-    util::{deduplicate_labels, inherit_labels, validate_json},
+    server::validate_schedule,
+    util::{deduplicate_labels, inherit_labels, validate_json, validate_labels, validate_time},
 };
 use ora_backend::{
     Backend,
@@ -13,6 +14,19 @@ use ora_backend::{
 use tonic::{Request, Response, Status, async_trait};
 
 use crate::grpc::conv::ResultErrExt;
+
+/// The page size used if none is given.
+const DEFAULT_PAGE_SIZE: u32 = 50;
+/// The largest page size allowed, so that a single request
+/// can not load everything at once.
+const MAX_PAGE_SIZE: u32 = 1000;
+
+fn page_size(requested: u32) -> u32 {
+    match requested {
+        0 => DEFAULT_PAGE_SIZE,
+        n => n.min(MAX_PAGE_SIZE),
+    }
+}
 
 #[async_trait]
 impl<B> AdminService for GrpcImpl<B>
@@ -56,6 +70,12 @@ where
 
         for job in &mut jobs {
             deduplicate_labels(&mut job.labels);
+
+            validate_labels(&job.labels).map_err(Status::invalid_argument)?;
+
+            validate_time(job.target_execution_time).map_err(|e| {
+                Status::invalid_argument(format!("invalid target_execution_time: {e}"))
+            })?;
 
             validate_json(&job.input_payload_json).map_err(|e| {
                 Status::invalid_argument(format!(
@@ -121,7 +141,7 @@ where
             .list_jobs(
                 filters.try_into()?,
                 order_by,
-                pagination.page_size,
+                page_size(pagination.page_size),
                 pagination.next_page_token.map(NextPageToken),
             )
             .await
@@ -203,8 +223,38 @@ where
             .map(TryInto::try_into)
             .collect::<Result<Vec<_>, _>>()?;
 
+        let now = SystemTime::now();
+
         for schedule in &mut schedules {
             deduplicate_labels(&mut schedule.labels);
+            deduplicate_labels(&mut schedule.job_template.labels);
+
+            validate_labels(&schedule.labels).map_err(Status::invalid_argument)?;
+
+            // Template labels are only used once jobs are created,
+            // they would fail the creation of jobs for other schedules as well.
+            validate_labels(&schedule.job_template.labels).map_err(Status::invalid_argument)?;
+
+            for (time, name) in [
+                (schedule.time_range.start, "start"),
+                (schedule.time_range.end, "end"),
+            ] {
+                if let Some(time) = time {
+                    validate_time(time).map_err(|e| {
+                        Status::invalid_argument(format!("invalid {name} time: {e}"))
+                    })?;
+                }
+            }
+
+            validate_json(&schedule.job_template.input_payload_json).map_err(|e| {
+                Status::invalid_argument(format!(
+                    "invalid JSON payload for job template '{}': {e}",
+                    schedule.job_template.job_type_id
+                ))
+            })?;
+
+            validate_schedule(now, schedule)
+                .map_err(|e| Status::invalid_argument(format!("invalid schedule: {e}")))?;
         }
 
         if request.inherit_labels.unwrap_or(true) {
@@ -255,7 +305,7 @@ where
             .list_schedules(
                 filters.try_into()?,
                 order_by,
-                pagination.page_size,
+                page_size(pagination.page_size),
                 pagination.next_page_token.map(NextPageToken),
             )
             .await
@@ -307,13 +357,16 @@ where
             .err_status()?;
 
         if request.cancel_active_jobs {
-            self.backend
+            let cancelled_jobs = self
+                .backend
                 .cancel_jobs(JobFilters {
                     schedule_ids: Some(stopped_schedules.iter().map(|s| s.schedule_id).collect()),
                     ..Default::default()
                 })
                 .await
                 .err_status()?;
+
+            self.executor_pool.cancel_executions(&cancelled_jobs);
         }
 
         Ok(Response::new(v1::StopSchedulesResponse {
