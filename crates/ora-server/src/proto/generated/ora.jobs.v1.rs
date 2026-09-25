@@ -56,6 +56,16 @@ pub struct Job {
     /// Retry policy for the job.
     #[prost(message, optional, tag = "6")]
     pub retry_policy: ::core::option::Option<RetryPolicy>,
+    /// The priority of the job.
+    ///
+    /// When executor capacity is limited, ready executions
+    /// of jobs with higher priority are scheduled first.
+    /// Jobs with equal priority are scheduled in the order
+    /// they were created.
+    ///
+    /// The default priority is 0, negative values are allowed.
+    #[prost(int32, tag = "7")]
+    pub priority: i32,
 }
 impl ::prost::Name for Job {
     const NAME: &'static str = "Job";

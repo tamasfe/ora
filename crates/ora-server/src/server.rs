@@ -10,7 +10,10 @@ use crate::{
     executor_pool::ExecutorPool,
     server::{
         delete_history::delete_history_loop,
-        executions::{execution_timeouts_loop, executor_events_loop, ready_executions_loop},
+        executions::{
+            execution_starts_loop, execution_timeouts_loop, executor_events_loop,
+            ready_executions_loop,
+        },
         schedules::schedule_new_jobs_loop,
     },
 };
@@ -18,6 +21,8 @@ use crate::{
 mod delete_history;
 mod executions;
 mod schedules;
+
+pub(crate) use schedules::validate_schedule;
 
 pub(crate) fn spawn_server<B>(
     backend: std::sync::Arc<B>,
@@ -32,10 +37,16 @@ where
         Either::Right(handle) => handle.clone(),
     };
 
-    let (executor_pool, executor_events) = {
-        let (send, recv) = flume::unbounded();
-        let pool = ExecutorPool::new(send, handle.clone(), options.shutdown_grace_period);
-        (pool, recv)
+    let (executor_pool, executor_events, accepted_executions) = {
+        let (events_send, events_recv) = flume::unbounded();
+        let (accepted_send, accepted_recv) = flume::unbounded();
+        let pool = ExecutorPool::new(
+            events_send,
+            accepted_send,
+            handle.clone(),
+            options.shutdown_grace_period,
+        );
+        (pool, events_recv, accepted_recv)
     };
 
     spawn(ready_executions_loop(
@@ -43,8 +54,15 @@ where
         executor_pool.clone(),
         handle.add_with("ready_executions"),
     ));
+    spawn(execution_starts_loop(
+        backend.clone(),
+        executor_pool.clone(),
+        accepted_executions,
+        handle.add_with("execution_starts"),
+    ));
     spawn(executor_events_loop(
         backend.clone(),
+        executor_pool.clone(),
         executor_events,
         handle.add_with("executor_events"),
     ));

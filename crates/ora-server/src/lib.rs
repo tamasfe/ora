@@ -126,6 +126,26 @@ impl<B> ServerHandle<B> {
             Either::Right(handle) => handle.add(),
         }
     }
+
+    // Not part of the public API.
+    //
+    // Resolves once all executors disconnected, but at most
+    // after the shutdown grace period (and a small margin),
+    // executor connections must be kept open until then.
+    #[doc(hidden)]
+    pub fn executors_disconnected_internal(&self) -> impl Future<Output = ()> + Send + 'static {
+        let executor_pool = self.executor_pool.clone();
+
+        async move {
+            executor_pool
+                .wait_empty(
+                    executor_pool
+                        .shutdown_grace_period()
+                        .saturating_add(Duration::from_secs(5)),
+                )
+                .await;
+        }
+    }
 }
 
 impl<B> ServerHandle<B>

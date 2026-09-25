@@ -17,7 +17,7 @@ prost-types.workspace = true
 tonic-prost.workspace = true
 tonic = { version = "0.14.2", default-features = false, features = ["codegen"] }
 uuid.workspace = true
-tokio = { version = "1.49.0", features = ["rt", "macros", "time"] }
+tokio = { version = "1.49.0", features = ["rt", "macros", "time", "sync"] }
 tracing.workspace = true
 rand = "0.10.0"
 serde = "1.0.228"

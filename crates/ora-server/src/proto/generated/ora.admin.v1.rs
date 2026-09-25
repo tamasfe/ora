@@ -207,6 +207,12 @@ pub struct JobFilters {
     /// Filter by labels.
     #[prost(message, repeated, tag = "9")]
     pub labels: ::prost::alloc::vec::Vec<super::super::common::v1::LabelFilter>,
+    /// Filter by minimum priority (inclusive).
+    #[prost(int32, optional, tag = "10")]
+    pub min_priority: ::core::option::Option<i32>,
+    /// Filter by maximum priority (inclusive).
+    #[prost(int32, optional, tag = "11")]
+    pub max_priority: ::core::option::Option<i32>,
 }
 impl ::prost::Name for JobFilters {
     const NAME: &'static str = "JobFilters";
@@ -232,6 +238,10 @@ pub enum JobOrderBy {
     TargetExecutionTimeAsc = 3,
     /// Order by target execution time descending.
     TargetExecutionTimeDesc = 4,
+    /// Order by priority ascending.
+    PriorityAsc = 5,
+    /// Order by priority descending.
+    PriorityDesc = 6,
 }
 impl JobOrderBy {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -245,6 +255,8 @@ impl JobOrderBy {
             Self::CreatedAtDesc => "JOB_ORDER_BY_CREATED_AT_DESC",
             Self::TargetExecutionTimeAsc => "JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC",
             Self::TargetExecutionTimeDesc => "JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC",
+            Self::PriorityAsc => "JOB_ORDER_BY_PRIORITY_ASC",
+            Self::PriorityDesc => "JOB_ORDER_BY_PRIORITY_DESC",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -255,6 +267,8 @@ impl JobOrderBy {
             "JOB_ORDER_BY_CREATED_AT_DESC" => Some(Self::CreatedAtDesc),
             "JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC" => Some(Self::TargetExecutionTimeAsc),
             "JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC" => Some(Self::TargetExecutionTimeDesc),
+            "JOB_ORDER_BY_PRIORITY_ASC" => Some(Self::PriorityAsc),
+            "JOB_ORDER_BY_PRIORITY_DESC" => Some(Self::PriorityDesc),
             _ => None,
         }
     }
