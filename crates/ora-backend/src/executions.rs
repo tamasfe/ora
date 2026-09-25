@@ -98,6 +98,8 @@ pub struct ReadyExecution {
     pub retry_policy: RetryPolicy,
     /// The target execution time for the execution.
     pub target_execution_time: SystemTime,
+    /// The priority of the job this execution belongs to.
+    pub priority: i32,
 }
 
 /// An execution assigned to an executor.
@@ -148,7 +150,11 @@ pub struct InProgressExecution {
     pub job_id: JobId,
     /// The executor ID handling the execution.
     pub executor_id: ExecutorId,
-    /// The target execution time for the execution.
+    /// The target execution time of the job.
+    ///
+    /// This is not the target execution time of the execution,
+    /// timeouts based on it apply to the job as a whole,
+    /// so retries do not extend them.
     pub target_execution_time: SystemTime,
     /// The time the execution was assigned to the executor.
     pub started_at: SystemTime,

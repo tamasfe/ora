@@ -46,6 +46,10 @@ pub trait Backend: Send + Sync + 'static {
     ///
     /// For each new job an execution must also be created.
     ///
+    /// Jobs that belong to a schedule are only added if the schedule
+    /// is active and has no active job, otherwise they are skipped
+    /// and are not part of the returned IDs.
+    ///
     /// If `if_not_exists` is provided and any jobs exist
     /// matching the given filters, no new jobs must be added
     /// and an empty list must be returned.
@@ -112,12 +116,17 @@ pub trait Backend: Send + Sync + 'static {
 
     /// Return ready executions.
     ///
-    /// The executions must be ordered by their ID.
+    /// The executions must be ordered by their priority descending,
+    /// executions with equal priority must be ordered by their ID.
     ///
     /// The batch size of ready executions returned by the stream
     /// is backend-dependent.
+    ///
+    /// Executions with the provided IDs must not be returned,
+    /// these are already being handled (e.g. offered to executors).
     fn ready_executions(
         &self,
+        ignore: &[ExecutionId],
     ) -> impl Stream<Item = Result<Vec<ReadyExecution>, Self::Error>> + Send;
 
     /// Wait for executions to be ready.
@@ -139,10 +148,17 @@ pub trait Backend: Send + Sync + 'static {
     /// The given executions have started.
     ///
     /// The backend must update the execution records accordingly.
+    ///
+    /// Only pending executions can be started, the IDs of the
+    /// executions that were actually started are returned,
+    /// others (e.g. cancelled in the meantime) must be ignored.
+    ///
+    /// Executions already started by the same executor
+    /// must be returned as well, so that the call can be retried.
     fn executions_started(
         &self,
         executions: &[StartedExecution],
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Vec<ExecutionId>, Self::Error>> + Send;
 
     /// The given executions have successfully completed.
     fn executions_succeeded(

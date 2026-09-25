@@ -160,6 +160,12 @@ pub struct JobDefinition {
     pub timeout_policy: TimeoutPolicy,
     /// The retry policy for the job.
     pub retry_policy: RetryPolicy,
+    /// The priority of the job.
+    ///
+    /// Ready executions of jobs with higher priority
+    /// are scheduled first.
+    #[serde(default)]
+    pub priority: i32,
 }
 
 /// Details of a job.
@@ -254,6 +260,12 @@ pub struct JobFilters {
     pub labels: Option<Vec<LabelFilter>>,
     /// Filter by schedule IDs.
     pub schedule_ids: Option<Vec<ScheduleId>>,
+    /// Filter by minimum priority (inclusive).
+    #[serde(default)]
+    pub min_priority: Option<i32>,
+    /// Filter by maximum priority (inclusive).
+    #[serde(default)]
+    pub max_priority: Option<i32>,
 }
 
 /// The ordering options for listing jobs.
@@ -267,6 +279,10 @@ pub enum JobOrderBy {
     CreatedAtAsc,
     /// Order by creation time descending.
     CreatedAtDesc,
+    /// Order by priority ascending.
+    PriorityAsc,
+    /// Order by priority descending.
+    PriorityDesc,
 }
 
 /// A new job.
@@ -311,5 +327,29 @@ impl AddedJobs {
             AddedJobs::Added(ids) => ids,
             AddedJobs::Existing(_) => &[],
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn job_definition_without_priority() {
+        // Job templates of schedules are stored as JSON,
+        // older ones do not have a priority.
+        let job: JobDefinition = serde_json::from_str(
+            r#"{
+                "job_type_id": "Test",
+                "target_execution_time": { "secs_since_epoch": 0, "nanos_since_epoch": 0 },
+                "input_payload_json": "{}",
+                "labels": [],
+                "timeout_policy": { "timeout": { "secs": 0, "nanos": 0 }, "base_time": "StartTime" },
+                "retry_policy": { "retries": 0 }
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(job.priority, 0);
     }
 }
