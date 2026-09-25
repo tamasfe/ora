@@ -46,6 +46,10 @@ message JobFilters {
   optional ora.common.v1.TimeRange created_at = 8;
   // Filter by labels.
   repeated ora.common.v1.LabelFilter labels = 9;
+  // Filter by minimum priority (inclusive).
+  optional int32 min_priority = 10;
+  // Filter by maximum priority (inclusive).
+  optional int32 max_priority = 11;
 }
 
 // Ordering options for listing jobs.
@@ -60,4 +64,8 @@ enum JobOrderBy {
   JOB_ORDER_BY_TARGET_EXECUTION_TIME_ASC = 3;
   // Order by target execution time descending.
   JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC = 4;
+  // Order by priority ascending.
+  JOB_ORDER_BY_PRIORITY_ASC = 5;
+  // Order by priority descending.
+  JOB_ORDER_BY_PRIORITY_DESC = 6;
 }

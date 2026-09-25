@@ -42,6 +42,15 @@ message Job {
   TimeoutPolicy timeout_policy = 5;
   // Retry policy for the job.
   RetryPolicy retry_policy = 6;
+  // The priority of the job.
+  //
+  // When executor capacity is limited, ready executions
+  // of jobs with higher priority are scheduled first.
+  // Jobs with equal priority are scheduled in the order
+  // they were created.
+  //
+  // The default priority is 0, negative values are allowed.
+  int32 priority = 7;
 }
 
 // Timeout policy for a job.
