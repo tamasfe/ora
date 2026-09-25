@@ -41,6 +41,12 @@ message ExecutorMessage {
     ExecutionSucceeded execution_succeeded = 3;
     // The execution has failed.
     ExecutionFailed execution_failed = 4;
+    // The executor accepted an execution offered
+    // by the server via `ExecutionReady`.
+    ExecutionAccepted execution_accepted = 5;
+    // The executor rejected an execution offered
+    // by the server via `ExecutionReady`.
+    ExecutionRejected execution_rejected = 6;
   }
 }
 
@@ -51,6 +57,16 @@ message ExecutorCapabilities {
   string name = 1;
   // The job queue configurations of the executor.
   repeated ExecutorJobQueue job_queues = 2;
+  // Whether the executor performs a handshake for every execution
+  // before it is assigned to the executor.
+  //
+  // If set, the executor must respond to every `ExecutionReady`
+  // message with either `ExecutionAccepted` or `ExecutionRejected`,
+  // executions are only assigned to the executor once accepted.
+  //
+  // If not set, executions are assigned to the executor
+  // as soon as they are sent.
+  bool execution_handshake = 3;
 }
 
 // A job queue configuration of the executor.
@@ -63,6 +79,36 @@ message ExecutorJobQueue {
 
 // The heartbeat content.
 message ExecutorHeartbeat {}
+
+// The executor accepted an offered execution.
+//
+// The execution is assigned to the executor, and
+// the executor is expected to run it.
+message ExecutionAccepted {
+  // The ID of the job execution.
+  string execution_id = 1;
+  // The time when the job execution was accepted.
+  //
+  // This is informational only, the start time of the execution
+  // is the time when the server sent the execution to the executor.
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+// The executor rejected an offered execution.
+//
+// The execution is not assigned to the executor,
+// it remains pending and might be offered again
+// to this or other executors later.
+//
+// Rejections do not count as execution attempts.
+message ExecutionRejected {
+  // The ID of the job execution.
+  string execution_id = 1;
+  // The time when the job execution was rejected.
+  google.protobuf.Timestamp timestamp = 2;
+  // The reason for the rejection, if any.
+  optional string reason = 3;
+}
 
 // A job execution has succeeded.
 message ExecutionSucceeded {
@@ -91,8 +137,13 @@ message ServerMessage {
     // The properties of the executor.
     ExecutorProperties properties = 1;
     // A job execution is ready to be executed by the executor.
+    //
+    // If the executor has `execution_handshake` enabled,
+    // this is an offer that must be accepted or rejected.
     ExecutionReady execution_ready = 2;
     // The job execution was cancelled and should be dropped by the executor.
+    //
+    // This is also sent if an offered execution was withdrawn.
     ExecutionCancelled execution_cancelled = 3;
   }
 }
@@ -114,6 +165,11 @@ message ExecutorProperties {
 }
 
 // A job execution is ready to be executed by the executor.
+//
+// If the executor has `execution_handshake` enabled,
+// the executor must respond with either `ExecutionAccepted`
+// or `ExecutionRejected` in a timely manner, otherwise
+// the offer is withdrawn by the server.
 message ExecutionReady {
   // The ID of the job.
   string job_id = 1;
