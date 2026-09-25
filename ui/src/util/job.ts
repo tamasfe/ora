@@ -64,6 +64,8 @@ export interface JobDraft {
   backoff?: Duration;
   maxBackoff?: Duration;
   backoffStrategy: BackoffStrategy;
+  /** Jobs with higher priority are executed first. */
+  priority: number;
 }
 
 export function newJobDraft(jobTypeId = ""): JobDraft {
@@ -77,6 +79,7 @@ export function newJobDraft(jobTypeId = ""): JobDraft {
     timeoutBaseTime: TimeoutBaseTime.UNSPECIFIED,
     retries: 0,
     backoffStrategy: BackoffStrategy.UNSPECIFIED,
+    priority: 0,
   };
 }
 
@@ -100,6 +103,7 @@ export function jobDraftFromJob(job: Job): JobDraft {
     backoff: job.retryPolicy?.backoffDuration,
     maxBackoff: job.retryPolicy?.maxBackoffDuration,
     backoffStrategy: job.retryPolicy?.backoffStrategy ?? BackoffStrategy.UNSPECIFIED,
+    priority: job.priority,
   };
 }
 
@@ -137,6 +141,7 @@ export function jobDraftToJob(draft: JobDraft): MessageInitShape<typeof JobSchem
       maxBackoffDuration:
         draft.backoffStrategy === BackoffStrategy.EXPONENTIAL ? draft.maxBackoff : undefined,
     },
+    priority: draft.priority,
   };
 }
 

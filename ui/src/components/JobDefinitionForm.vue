@@ -176,6 +176,23 @@ const targetTimeOptions = [
       </div>
     </div>
 
+    <div class="flex flex-col gap-1">
+      <label for="priority" class="font-medium">Priority</label>
+      <InputNumber
+        v-model="draft.priority"
+        input-id="priority"
+        :min="-2147483648"
+        :max="2147483647"
+        :use-grouping="false"
+        :allow-empty="false"
+        show-buttons
+        class="w-48"
+      />
+      <small class="text-muted-color">
+        When executors are busy, jobs with a higher priority are executed first.
+      </small>
+    </div>
+
     <Accordion v-model:value="expandedSections" multiple>
       <AccordionPanel value="timeout">
         <AccordionHeader>

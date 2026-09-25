@@ -42,6 +42,8 @@ const moreKeys = [
   "executionIds",
   "targetExecutionTime",
   "createdAt",
+  "minPriority",
+  "maxPriority",
 ] as const;
 
 const moreCount = computed(() => moreKeys.filter(isSet).length);
@@ -154,6 +156,28 @@ function clear() {
           :model-value="model.createdAt"
           @update:model-value="set('createdAt', $event)"
         />
+      </div>
+      <div v-if="visible('minPriority') || visible('maxPriority')" class="flex flex-col gap-1">
+        <label class="text-sm text-muted-color">Priority</label>
+        <div class="flex items-center gap-2">
+          <InputNumber
+            v-if="visible('minPriority')"
+            :model-value="model.minPriority ?? null"
+            :use-grouping="false"
+            placeholder="Minimum"
+            fluid
+            @update:model-value="set('minPriority', $event ?? undefined)"
+          />
+          <span class="text-muted-color">–</span>
+          <InputNumber
+            v-if="visible('maxPriority')"
+            :model-value="model.maxPriority ?? null"
+            :use-grouping="false"
+            placeholder="Maximum"
+            fluid
+            @update:model-value="set('maxPriority', $event ?? undefined)"
+          />
+        </div>
       </div>
     </div>
   </div>

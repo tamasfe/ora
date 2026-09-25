@@ -221,6 +221,8 @@ function jobLabelLink(label: Label) {
                   />
                   <span v-else>-</span>
                 </dd>
+                <dt class="text-muted-color">Priority</dt>
+                <dd class="tabular-nums">{{ template.priority }}</dd>
                 <dt class="text-muted-color">Timeout</dt>
                 <dd>
                   <template v-if="hasTimeout(template.timeoutPolicy)">

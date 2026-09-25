@@ -125,6 +125,19 @@ export const param = {
     };
   },
 
+  /** An optional integer, `undefined` removes the parameter. */
+  optionalInt: {
+    decode(values, report) {
+      const value = Number(values[0]);
+      if (values[0] === "" || !Number.isInteger(value)) {
+        report(values[0]);
+        return undefined;
+      }
+      return value;
+    },
+    encode: value => (value === undefined ? [] : [String(value)]),
+  } as QueryParam<number | undefined>,
+
   /** One of the given values by name, values without a name are omitted. */
   oneOf<T>(entries: Record<string, T>): QueryParam<T> {
     return {

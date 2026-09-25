@@ -22,6 +22,8 @@ export const jobFilterFields: QueryFields<JobFilters> = {
   executionIds: ["execution", param.stringList],
   targetExecutionTime: ["target", param.timeRange],
   createdAt: ["created", param.timeRange],
+  minPriority: ["min_priority", param.optionalInt],
+  maxPriority: ["max_priority", param.optionalInt],
 };
 
 /** Schedule filters in URLs, e.g. `?label=project=abc&status=active`. */
@@ -38,6 +40,8 @@ export const jobOrders: Record<string, JobOrderBy> = {
   created_asc: JobOrderBy.CREATED_AT_ASC,
   target_desc: JobOrderBy.TARGET_EXECUTION_TIME_DESC,
   target_asc: JobOrderBy.TARGET_EXECUTION_TIME_ASC,
+  priority_desc: JobOrderBy.PRIORITY_DESC,
+  priority_asc: JobOrderBy.PRIORITY_ASC,
 };
 
 export const scheduleOrders: Record<string, ScheduleOrderBy> = {

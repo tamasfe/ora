@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ora/admin/v1/jobs.proto.
  */
 export const file_ora_admin_v1_jobs: GenFile = /*@__PURE__*/
-  fileDesc("ChdvcmEvYWRtaW4vdjEvam9icy5wcm90bxIMb3JhLmFkbWluLnYxIrcBCgNKb2ISCgoCaWQYASABKAkSHQoDam9iGAIgASgLMhAub3JhLmpvYnMudjEuSm9iEhgKC3NjaGVkdWxlX2lkGAMgASgJSACIAQESLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoKZXhlY3V0aW9ucxgFIAMoCzIXLm9yYS5hZG1pbi52MS5FeGVjdXRpb25CDgoMX3NjaGVkdWxlX2lkIvcCCgpKb2JGaWx0ZXJzEg8KB2pvYl9pZHMYASADKAkSFAoMam9iX3R5cGVfaWRzGAIgAygJEhQKDHNjaGVkdWxlX2lkcxgDIAMoCRIUCgxleGVjdXRvcl9pZHMYBCADKAkSFQoNZXhlY3V0aW9uX2lkcxgFIAMoCRI5ChJleGVjdXRpb25fc3RhdHVzZXMYBiADKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEjwKFXRhcmdldF9leGVjdXRpb25fdGltZRgHIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSACIAQESMQoKY3JlYXRlZF9hdBgIIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSAGIAQESKgoGbGFiZWxzGAkgAygLMhoub3JhLmNvbW1vbi52MS5MYWJlbEZpbHRlckIYChZfdGFyZ2V0X2V4ZWN1dGlvbl90aW1lQg0KC19jcmVhdGVkX2F0KsYBCgpKb2JPcmRlckJ5EhwKGEpPQl9PUkRFUl9CWV9VTlNQRUNJRklFRBAAEh8KG0pPQl9PUkRFUl9CWV9DUkVBVEVEX0FUX0FTQxABEiAKHEpPQl9PUkRFUl9CWV9DUkVBVEVEX0FUX0RFU0MQAhIqCiZKT0JfT1JERVJfQllfVEFSR0VUX0VYRUNVVElPTl9USU1FX0FTQxADEisKJ0pPQl9PUkRFUl9CWV9UQVJHRVRfRVhFQ1VUSU9OX1RJTUVfREVTQxAEYgZwcm90bzM", [file_google_protobuf_timestamp, file_ora_admin_v1_executions, file_ora_common_v1_label, file_ora_common_v1_time_range, file_ora_jobs_v1_job]);
+  fileDesc("ChdvcmEvYWRtaW4vdjEvam9icy5wcm90bxIMb3JhLmFkbWluLnYxIrcBCgNKb2ISCgoCaWQYASABKAkSHQoDam9iGAIgASgLMhAub3JhLmpvYnMudjEuSm9iEhgKC3NjaGVkdWxlX2lkGAMgASgJSACIAQESLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoKZXhlY3V0aW9ucxgFIAMoCzIXLm9yYS5hZG1pbi52MS5FeGVjdXRpb25CDgoMX3NjaGVkdWxlX2lkIs8DCgpKb2JGaWx0ZXJzEg8KB2pvYl9pZHMYASADKAkSFAoMam9iX3R5cGVfaWRzGAIgAygJEhQKDHNjaGVkdWxlX2lkcxgDIAMoCRIUCgxleGVjdXRvcl9pZHMYBCADKAkSFQoNZXhlY3V0aW9uX2lkcxgFIAMoCRI5ChJleGVjdXRpb25fc3RhdHVzZXMYBiADKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEjwKFXRhcmdldF9leGVjdXRpb25fdGltZRgHIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSACIAQESMQoKY3JlYXRlZF9hdBgIIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSAGIAQESKgoGbGFiZWxzGAkgAygLMhoub3JhLmNvbW1vbi52MS5MYWJlbEZpbHRlchIZCgxtaW5fcHJpb3JpdHkYCiABKAVIAogBARIZCgxtYXhfcHJpb3JpdHkYCyABKAVIA4gBAUIYChZfdGFyZ2V0X2V4ZWN1dGlvbl90aW1lQg0KC19jcmVhdGVkX2F0Qg8KDV9taW5fcHJpb3JpdHlCDwoNX21heF9wcmlvcml0eSqFAgoKSm9iT3JkZXJCeRIcChhKT0JfT1JERVJfQllfVU5TUEVDSUZJRUQQABIfChtKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9BU0MQARIgChxKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9ERVNDEAISKgomSk9CX09SREVSX0JZX1RBUkdFVF9FWEVDVVRJT05fVElNRV9BU0MQAxIrCidKT0JfT1JERVJfQllfVEFSR0VUX0VYRUNVVElPTl9USU1FX0RFU0MQBBIdChlKT0JfT1JERVJfQllfUFJJT1JJVFlfQVNDEAUSHgoaSk9CX09SREVSX0JZX1BSSU9SSVRZX0RFU0MQBmIGcHJvdG8z", [file_google_protobuf_timestamp, file_ora_admin_v1_executions, file_ora_common_v1_label, file_ora_common_v1_time_range, file_ora_jobs_v1_job]);
 
 /**
  * Details of a job.
@@ -143,6 +143,20 @@ export type JobFilters = Message<"ora.admin.v1.JobFilters"> & {
    * @generated from field: repeated ora.common.v1.LabelFilter labels = 9;
    */
   labels: LabelFilter[];
+
+  /**
+   * Filter by minimum priority (inclusive).
+   *
+   * @generated from field: optional int32 min_priority = 10;
+   */
+  minPriority?: number | undefined;
+
+  /**
+   * Filter by maximum priority (inclusive).
+   *
+   * @generated from field: optional int32 max_priority = 11;
+   */
+  maxPriority?: number | undefined;
 };
 
 /**
@@ -192,6 +206,20 @@ export enum JobOrderBy {
    * @generated from enum value: JOB_ORDER_BY_TARGET_EXECUTION_TIME_DESC = 4;
    */
   TARGET_EXECUTION_TIME_DESC = 4,
+
+  /**
+   * Order by priority ascending.
+   *
+   * @generated from enum value: JOB_ORDER_BY_PRIORITY_ASC = 5;
+   */
+  PRIORITY_ASC = 5,
+
+  /**
+   * Order by priority descending.
+   *
+   * @generated from enum value: JOB_ORDER_BY_PRIORITY_DESC = 6;
+   */
+  PRIORITY_DESC = 6,
 }
 
 /**
