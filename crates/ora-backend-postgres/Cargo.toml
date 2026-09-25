@@ -29,7 +29,7 @@ sea-query-postgres = { version = "0.6.0-rc.3", features = [
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 thiserror = "2.0.17"
-tokio = { version = "1.49.0", features = ["time", "macros"] }
+tokio = { version = "1.49.0", features = ["time", "macros", "sync"] }
 tokio-postgres = { version = "0.7.15", features = ["with-uuid-1"] }
 tracing.workspace = true
 uuid.workspace = true

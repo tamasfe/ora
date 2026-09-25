@@ -1,4 +1,8 @@
-use std::{str::FromStr, time::SystemTime};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    time::SystemTime,
+};
 
 use base64::Engine;
 use ora_backend::{
@@ -32,9 +36,9 @@ pub(crate) async fn cancel_jobs(
             // if they are specified.
             s.retain(|st| matches!(st, ExecutionStatus::Pending | ExecutionStatus::InProgress));
 
+            // Only finished jobs were requested, there is nothing to cancel.
             if s.is_empty() {
-                s.push(ExecutionStatus::Pending);
-                s.push(ExecutionStatus::InProgress);
+                return Ok(Vec::new());
             }
 
             Some(s)
@@ -57,18 +61,28 @@ pub(crate) async fn cancel_jobs(
 
     let stmt = tx.prepare_owned(query).await?;
 
-    let rows = tx.query(&stmt, &values.as_params()).await?;
+    let mut cancelled_jobs = Vec::new();
+    let mut cancelled_job_ids = HashSet::new();
 
-    let mut cancelled_jobs = Vec::with_capacity(rows.len());
+    // The update is repeated once, as a failed execution could be retried
+    // concurrently: if the first update waited for the retry to commit,
+    // it skipped the failed execution, but it could not see the new one.
+    // The second update sees it, while retries that were not in progress
+    // do not create a new execution after their execution was cancelled.
+    for _ in 0..2 {
+        let rows = tx.query(&stmt, &values.as_params()).await?;
 
-    for row in rows {
-        let job_id = JobId(row.try_get(0)?);
-        let last_execution_id = ExecutionId(row.try_get(1)?);
+        for row in rows {
+            let job_id = JobId(row.try_get(0)?);
+            let last_execution_id = ExecutionId(row.try_get(1)?);
 
-        cancelled_jobs.push(CancelledJob {
-            job_id,
-            last_execution_id,
-        });
+            if cancelled_job_ids.insert(job_id) {
+                cancelled_jobs.push(CancelledJob {
+                    job_id,
+                    last_execution_id,
+                });
+            }
+        }
     }
 
     Ok(cancelled_jobs)
@@ -87,6 +101,7 @@ pub(crate) async fn job_details(
         PageToken {
             last_job_id: None,
             last_target_execution_time: None,
+            last_priority: None,
             filters,
             order_by,
         }
@@ -113,6 +128,7 @@ pub(crate) async fn job_details(
             .expr(Expr::col(("ora", "job", "timeout_policy_json")))
             .expr(Expr::col(("ora", "job", "retry_policy_json")))
             .expr(Expr::col(("ora", "job", "schedule_id")))
+            .expr(Expr::col(("ora", "job", "priority")))
             .limit(u64::from(page_size))
             .take();
 
@@ -164,6 +180,42 @@ pub(crate) async fn job_details(
                     ));
                 }
             }
+            JobOrderBy::PriorityAsc => {
+                select.order_by_customs([
+                    ("ora.job.priority", Order::Asc),
+                    ("ora.job.id", Order::Asc),
+                ]);
+
+                if let (Some(last_priority), Some(last_job_id)) =
+                    (page_token.last_priority, page_token.last_job_id)
+                {
+                    select.and_where(Expr::cust_with_values(
+                        "(ora.job.priority, ora.job.id) > ($1::INTEGER, $2::UUID)",
+                        [Value::from(last_priority), last_job_id.0.into()],
+                    ));
+                }
+            }
+            JobOrderBy::PriorityDesc => {
+                select.order_by_customs([
+                    ("ora.job.priority", Order::Desc),
+                    ("ora.job.id", Order::Asc),
+                ]);
+
+                if let (Some(last_priority), Some(last_job_id)) =
+                    (page_token.last_priority, page_token.last_job_id)
+                {
+                    // The priority is descending but ties are ordered by ascending IDs,
+                    // so a row comparison doesn't work here.
+                    select.and_where(Expr::cust_with_values(
+                        r#"
+                            (ora.job.priority < $1::INTEGER
+                                OR (ora.job.priority = $1::INTEGER
+                                    AND ora.job.id > $2::UUID))
+                        "#,
+                        [Value::from(last_priority), last_job_id.0.into()],
+                    ));
+                }
+            }
             JobOrderBy::CreatedAtAsc => {
                 select.order_by_customs([("ora.job.id", Order::Asc)]);
 
@@ -204,6 +256,7 @@ pub(crate) async fn job_details(
                     labels: Vec::new(),
                     timeout_policy: serde_json::from_str(row.try_get::<_, &str>(5)?)?,
                     retry_policy: serde_json::from_str(row.try_get::<_, &str>(6)?)?,
+                    priority: row.try_get(8)?,
                 },
                 schedule_id: row.try_get::<_, Option<Uuid>>(7)?.map(ScheduleId),
                 executions: Vec::new(),
@@ -217,9 +270,13 @@ pub(crate) async fn job_details(
     collect_executions(tx, &mut jobs).await?;
 
     let mut page_token = page_token;
-    let next_page_token = if let Some(last_job) = jobs.last() {
+    // A partial page is the last one.
+    let next_page_token = if let Some(last_job) = jobs.last()
+        && jobs.len() >= page_size as usize
+    {
         page_token.last_job_id = Some(last_job.id);
         page_token.last_target_execution_time = Some(last_job.job.target_execution_time);
+        page_token.last_priority = Some(last_job.job.priority);
         Some(NextPageToken(page_token.to_string()))
     } else {
         None
@@ -249,16 +306,14 @@ async fn collect_labels(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> crat
 
     let rows = tx.query(&stmt, &[&job_ids]).await?;
 
+    let job_indices = job_indices(jobs);
+
     for row in rows {
         let job_id: Uuid = row.try_get(0)?;
         let key: String = row.try_get(1)?;
         let value: String = row.try_get(2)?;
 
-        let job = jobs
-            .iter_mut()
-            .find(|job| job.id.0 == job_id)
-            // This should be impossible.
-            .expect("label returned for unknown job");
+        let job = &mut jobs[job_indices[&job_id]];
 
         job.job.labels.push(Label { key, value });
     }
@@ -296,14 +351,12 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
 
     let rows = tx.query(&stmt, &[&job_ids]).await?;
 
+    let job_indices = job_indices(jobs);
+
     for row in rows {
         let job_id: Uuid = row.try_get(0)?;
 
-        let job = jobs
-            .iter_mut()
-            .find(|job| job.id.0 == job_id)
-            // This should be impossible.
-            .expect("label returned for unknown job");
+        let job = &mut jobs[job_indices[&job_id]];
 
         job.executions.push(ExecutionDetails {
             id: ExecutionId(row.try_get(1)?),
@@ -321,6 +374,15 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
     }
 
     Ok(())
+}
+
+/// Map the job IDs to their positions,
+/// the queries only return rows for the given jobs.
+fn job_indices(jobs: &[JobDetails]) -> HashMap<Uuid, usize> {
+    jobs.iter()
+        .enumerate()
+        .map(|(i, job)| (job.id.0, i))
+        .collect()
 }
 
 pub(crate) async fn job_count(tx: &DbTransaction<'_>, filters: JobFilters) -> crate::Result<i64> {
@@ -393,6 +455,8 @@ fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
         execution_ids,
         execution_statuses,
         schedule_ids,
+        min_priority,
+        max_priority,
     } = filters;
 
     let mut select = SelectStatement::new().from(("ora", "job")).take();
@@ -533,6 +597,14 @@ fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
         ));
     }
 
+    if let Some(min_priority) = min_priority {
+        select.and_where(Expr::col(("ora", "job", "priority")).gte(*min_priority));
+    }
+
+    if let Some(max_priority) = max_priority {
+        select.and_where(Expr::col(("ora", "job", "priority")).lte(*max_priority));
+    }
+
     (select, executions_joined)
 }
 
@@ -600,6 +672,8 @@ fn status_filter(statuses: &[ExecutionStatus]) -> Expr {
 struct PageToken {
     pub(super) last_job_id: Option<JobId>,
     pub(super) last_target_execution_time: Option<SystemTime>,
+    #[serde(default)]
+    pub(super) last_priority: Option<i32>,
     pub(super) filters: JobFilters,
     pub(super) order_by: JobOrderBy,
 }
