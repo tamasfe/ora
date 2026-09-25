@@ -49,6 +49,7 @@ async fn job_execution(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         },
         JobDefinition {
             job_type_id: JobTypeId::new("DoSomething2").unwrap(),
@@ -73,6 +74,7 @@ async fn job_execution(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         },
     ]
     .to_vec();
@@ -113,17 +115,16 @@ async fn job_execution(backend: &impl Backend) {
         );
     }
 
-    let ready_executions = pin!(backend.ready_executions())
+    let ready_executions = pin!(backend.ready_executions(&[]))
         .try_next()
         .await
         .unwrap()
         .unwrap();
     assert_eq!(ready_executions.len(), job_definitions.len());
-    assert!(
-        ready_executions
-            .windows(2)
-            .all(|w| w[0].execution_id <= w[1].execution_id)
-    );
+    assert!(ready_executions.windows(2).all(|w| {
+        w[0].priority > w[1].priority
+            || (w[0].priority == w[1].priority && w[0].execution_id <= w[1].execution_id)
+    }));
 
     backend
         .executions_started(
@@ -139,7 +140,10 @@ async fn job_execution(backend: &impl Backend) {
         .await
         .unwrap();
 
-    let ready_executions_2 = pin!(backend.ready_executions()).try_next().await.unwrap();
+    let ready_executions_2 = pin!(backend.ready_executions(&[]))
+        .try_next()
+        .await
+        .unwrap();
     assert!(ready_executions_2.is_none());
 
     let in_progress_executions = pin!(backend.in_progress_executions())
@@ -183,7 +187,7 @@ async fn job_execution(backend: &impl Backend) {
         .await
         .unwrap();
 
-    let ready_executions = pin!(backend.ready_executions())
+    let ready_executions = pin!(backend.ready_executions(&[]))
         .try_next()
         .await
         .unwrap()
@@ -206,7 +210,10 @@ async fn job_execution(backend: &impl Backend) {
         .unwrap();
     assert!(in_progress_executions.is_none());
 
-    let ready_executions = pin!(backend.ready_executions()).try_next().await.unwrap();
+    let ready_executions = pin!(backend.ready_executions(&[]))
+        .try_next()
+        .await
+        .unwrap();
     assert!(ready_executions.is_none());
 }
 
@@ -224,6 +231,7 @@ async fn job_cancellation(backend: &impl Backend) {
             retries: 0,
             ..Default::default()
         },
+        priority: 0,
     }]
     .to_vec();
     let result = backend
@@ -232,7 +240,7 @@ async fn job_cancellation(backend: &impl Backend) {
         .expect("Failed to add jobs");
     assert_eq!(result.job_ids().len(), job_definitions.len());
 
-    let ready_executions = pin!(backend.ready_executions())
+    let ready_executions = pin!(backend.ready_executions(&[]))
         .try_next()
         .await
         .unwrap()
@@ -243,7 +251,10 @@ async fn job_cancellation(backend: &impl Backend) {
 
     assert_eq!(cancelled_jobs.len(), job_definitions.len());
 
-    let ready_executions = pin!(backend.ready_executions()).try_next().await.unwrap();
+    let ready_executions = pin!(backend.ready_executions(&[]))
+        .try_next()
+        .await
+        .unwrap();
     assert!(ready_executions.is_none());
 
     let jobs = backend
@@ -313,6 +324,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         },
         JobDefinition {
             job_type_id: JobTypeId::new("QueryJob2").unwrap(),
@@ -331,6 +343,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         },
         JobDefinition {
             job_type_id: JobTypeId::new("QueryJob2").unwrap(),
@@ -355,6 +368,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 retries: 1,
                 ..Default::default()
             },
+            priority: 0,
         },
     ]
     .to_vec();
@@ -490,6 +504,7 @@ pub async fn pagination_and_ordering(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         })
         .collect::<Vec<_>>();
     let result = backend
@@ -636,6 +651,7 @@ pub async fn pagination_and_ordering(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         })
         .collect::<Vec<_>>();
     backend
@@ -727,6 +743,7 @@ pub async fn schedules(backend: &impl Backend) {
                 retries: 0,
                 ..Default::default()
             },
+            priority: 0,
         },
         scheduling: SchedulingPolicy::FixedInterval {
             interval: Duration::from_secs(1),
@@ -795,11 +812,12 @@ pub async fn counts(backend: &impl Backend) {
                 retries: 1,
                 ..Default::default()
             },
+            priority: 0,
         }
     }
 
     async fn start(backend: &impl Backend, jobs: &[crate::jobs::JobId]) -> Vec<ExecutionId> {
-        let ready = pin!(backend.ready_executions())
+        let ready = pin!(backend.ready_executions(&[]))
             .try_next()
             .await
             .unwrap()
@@ -1041,6 +1059,675 @@ pub async fn counts(backend: &impl Backend) {
             .unwrap(),
         3
     );
+}
+
+/// Tests for edge cases of executions, cancellations and schedules.
+pub async fn edge_cases(backend: &impl Backend) {
+    use crate::{
+        executors::ExecutorId,
+        schedules::{ScheduleDefinition, ScheduleFilters},
+    };
+
+    fn job(job_type_id: &str) -> JobDefinition {
+        JobDefinition {
+            job_type_id: JobTypeId::new(job_type_id).unwrap(),
+            target_execution_time: SystemTime::now(),
+            input_payload_json: "{}".to_string(),
+            labels: vec![],
+            timeout_policy: TimeoutPolicy {
+                timeout: Duration::ZERO,
+                base_time: crate::jobs::TimeoutBaseTime::TargetExecutionTime,
+            },
+            retry_policy: RetryPolicy {
+                retries: 1,
+                ..Default::default()
+            },
+            priority: 0,
+        }
+    }
+
+    let executor_id = ExecutorId(Uuid::nil());
+    let other_executor_id = ExecutorId(Uuid::from_u128(1));
+
+    // Cancelled executions are not started, and repeated calls
+    // by the same executor return the same executions.
+    {
+        let job_ids = backend
+            .add_jobs(&new_jobs(&[job("EdgeStart"), job("EdgeStart")]), None)
+            .await
+            .unwrap()
+            .job_ids()
+            .to_vec();
+
+        let ready = pin!(backend.ready_executions(&[]))
+            .try_next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(ready.len(), 2);
+
+        let cancelled = backend
+            .cancel_jobs(JobFilters {
+                job_ids: Some(vec![job_ids[0]]),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(cancelled.len(), 1);
+
+        let started = |executor_id| {
+            ready
+                .iter()
+                .map(|execution| StartedExecution {
+                    execution_id: execution.execution_id,
+                    executor_id,
+                    started_at: SystemTime::now(),
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let not_cancelled = ready
+            .iter()
+            .find(|execution| execution.job_id == job_ids[1])
+            .unwrap()
+            .execution_id;
+
+        let started_ids = backend
+            .executions_started(&started(executor_id))
+            .await
+            .unwrap();
+        assert_eq!(started_ids, vec![not_cancelled]);
+
+        let started_ids = backend
+            .executions_started(&started(executor_id))
+            .await
+            .unwrap();
+        assert_eq!(started_ids, vec![not_cancelled]);
+
+        let started_ids = backend
+            .executions_started(&started(other_executor_id))
+            .await
+            .unwrap();
+        assert!(started_ids.is_empty());
+
+        // In-progress executions report the target time of the
+        // job, not the execution, which differs for retries.
+        let retry_execution_time = SystemTime::now() - Duration::from_hours(1);
+
+        backend
+            .executions_retried(&[RetriedExecution {
+                failed_execution: FailedExecution {
+                    execution_id: not_cancelled,
+                    job_id: job_ids[1],
+                    failed_at: SystemTime::now(),
+                    failure_reason: "retry".to_string(),
+                },
+                retry_execution_time,
+            }])
+            .await
+            .unwrap();
+
+        let ready = pin!(backend.ready_executions(&[]))
+            .try_next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].attempt_number, 2);
+
+        backend
+            .executions_started(&[StartedExecution {
+                execution_id: ready[0].execution_id,
+                executor_id,
+                started_at: SystemTime::now(),
+            }])
+            .await
+            .unwrap();
+
+        let in_progress = pin!(backend.in_progress_executions())
+            .try_next()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(in_progress.len(), 1);
+
+        let job_target_execution_time = backend
+            .list_jobs(
+                JobFilters {
+                    job_ids: Some(vec![job_ids[1]]),
+                    ..Default::default()
+                },
+                None,
+                1,
+                None,
+            )
+            .await
+            .unwrap()
+            .0[0]
+            .job
+            .target_execution_time;
+
+        let difference = in_progress[0]
+            .target_execution_time
+            .duration_since(job_target_execution_time)
+            .unwrap_or_else(|e| e.duration());
+        assert!(difference < Duration::from_millis(1));
+
+        backend
+            .executions_succeeded(&[SucceededExecution {
+                execution_id: ready[0].execution_id,
+                succeeded_at: SystemTime::now(),
+                output_json: "{}".to_string(),
+            }])
+            .await
+            .unwrap();
+    }
+
+    // Cancelling finished jobs cancels nothing.
+    {
+        let job_ids = backend
+            .add_jobs(&new_jobs(&[job("EdgeCancel")]), None)
+            .await
+            .unwrap()
+            .job_ids()
+            .to_vec();
+
+        let cancelled = backend
+            .cancel_jobs(JobFilters {
+                execution_statuses: Some(vec![ExecutionStatus::Succeeded]),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert!(cancelled.is_empty());
+
+        let cancelled = backend
+            .cancel_jobs(JobFilters {
+                job_ids: Some(job_ids.clone()),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(cancelled.len(), 1);
+    }
+
+    // Concurrent additions with the same `if_not_exists` filters add jobs once.
+    {
+        let filters = JobFilters {
+            job_type_ids: Some(vec![JobTypeId::new("EdgeUnique").unwrap()]),
+            ..Default::default()
+        };
+        let jobs = new_jobs(&[job("EdgeUnique")]);
+
+        let results = futures::future::join_all(
+            (0..8).map(|_| backend.add_jobs(&jobs, Some(filters.clone()))),
+        )
+        .await;
+
+        let added = results
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|result| !result.added_job_ids().is_empty())
+            .count();
+        assert_eq!(added, 1);
+        assert_eq!(backend.count_jobs(filters).await.unwrap(), 1);
+    }
+
+    // Jobs are not added for stopped schedules.
+    {
+        let schedule_ids = backend
+            .add_schedules(
+                &[ScheduleDefinition {
+                    job_template: job("EdgeScheduled"),
+                    scheduling: SchedulingPolicy::FixedInterval {
+                        interval: Duration::from_mins(1),
+                        immediate: false,
+                        missed: MissedTimePolicy::Skip,
+                    },
+                    labels: vec![],
+                    time_range: TimeRange::default(),
+                }],
+                None,
+            )
+            .await
+            .unwrap()
+            .schedule_ids()
+            .to_vec();
+
+        let schedule_filters = ScheduleFilters {
+            schedule_ids: Some(schedule_ids.clone()),
+            ..Default::default()
+        };
+
+        backend
+            .stop_schedules(schedule_filters.clone())
+            .await
+            .unwrap();
+
+        let schedule_job = |schedule_id| NewJob {
+            job: job("EdgeScheduled"),
+            schedule_id: Some(schedule_id),
+        };
+
+        let added = backend
+            .add_jobs(&[schedule_job(schedule_ids[0])], None)
+            .await
+            .unwrap();
+        assert!(added.job_ids().is_empty());
+
+        // Only one job is added for an active schedule.
+        let schedule_ids = backend
+            .add_schedules(
+                &[ScheduleDefinition {
+                    job_template: job("EdgeScheduled"),
+                    scheduling: SchedulingPolicy::FixedInterval {
+                        interval: Duration::from_mins(1),
+                        immediate: false,
+                        missed: MissedTimePolicy::Skip,
+                    },
+                    labels: vec![],
+                    time_range: TimeRange::default(),
+                }],
+                None,
+            )
+            .await
+            .unwrap()
+            .schedule_ids()
+            .to_vec();
+
+        let added = backend
+            .add_jobs(
+                &[schedule_job(schedule_ids[0]), schedule_job(schedule_ids[0])],
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(added.job_ids().len(), 1);
+
+        let added = backend
+            .add_jobs(&[schedule_job(schedule_ids[0])], None)
+            .await
+            .unwrap();
+        assert!(added.job_ids().is_empty());
+
+        assert_eq!(
+            backend
+                .count_jobs(JobFilters {
+                    job_type_ids: Some(vec![JobTypeId::new("EdgeScheduled").unwrap()]),
+                    ..Default::default()
+                })
+                .await
+                .unwrap(),
+            1
+        );
+    }
+
+    // Failure reasons are arbitrary text, they can contain NUL characters.
+    {
+        let job_id = backend
+            .add_jobs(&new_jobs(&[job("EdgeNul")]), None)
+            .await
+            .unwrap()
+            .job_ids()[0];
+
+        let execution_id = pin!(backend.ready_executions(&[]))
+            .try_next()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_iter()
+            .find(|execution| execution.job_id == job_id)
+            .unwrap()
+            .execution_id;
+
+        backend
+            .executions_started(&[StartedExecution {
+                execution_id,
+                executor_id,
+                started_at: SystemTime::now(),
+            }])
+            .await
+            .unwrap();
+
+        backend
+            .executions_failed(&[FailedExecution {
+                execution_id,
+                job_id,
+                failed_at: SystemTime::now(),
+                failure_reason: "before\0after".to_string(),
+            }])
+            .await
+            .unwrap();
+
+        let job = backend
+            .list_jobs(
+                JobFilters {
+                    job_ids: Some(vec![job_id]),
+                    ..Default::default()
+                },
+                None,
+                1,
+                None,
+            )
+            .await
+            .unwrap()
+            .0
+            .remove(0);
+
+        let execution = job.executions.last().unwrap();
+        assert_eq!(execution.status, ExecutionStatus::Failed);
+
+        let failure_reason = execution.failure_reason.as_deref().unwrap();
+        assert!(failure_reason.starts_with("before"));
+        assert!(failure_reason.ends_with("after"));
+    }
+}
+
+/// Tests for job priorities.
+pub async fn priorities(backend: &impl Backend) {
+    use std::collections::HashMap;
+
+    use crate::{
+        executions::ReadyExecution,
+        executors::ExecutorId,
+        schedules::{ScheduleDefinition, ScheduleFilters},
+    };
+
+    fn job(priority: i32) -> JobDefinition {
+        JobDefinition {
+            job_type_id: JobTypeId::new("Prioritized").unwrap(),
+            target_execution_time: SystemTime::now() - Duration::from_secs(1),
+            input_payload_json: "{}".to_string(),
+            labels: vec![],
+            timeout_policy: TimeoutPolicy {
+                timeout: Duration::ZERO,
+                base_time: crate::jobs::TimeoutBaseTime::StartTime,
+            },
+            retry_policy: RetryPolicy {
+                retries: 1,
+                ..Default::default()
+            },
+            priority,
+        }
+    }
+
+    async fn all_ready_executions(backend: &impl Backend) -> Vec<ReadyExecution> {
+        ignored_ready_executions(backend, &[]).await
+    }
+
+    async fn ignored_ready_executions(
+        backend: &impl Backend,
+        ignore: &[ExecutionId],
+    ) -> Vec<ReadyExecution> {
+        pin!(backend.ready_executions(ignore))
+            .try_collect::<Vec<_>>()
+            .await
+            .unwrap()
+            .concat()
+    }
+
+    /// Ready executions must be ordered by priority descending, then by ID.
+    fn assert_ready_order(ready: &[ReadyExecution]) {
+        assert!(
+            ready.windows(2).all(|w| {
+                w[0].priority > w[1].priority
+                    || (w[0].priority == w[1].priority && w[0].execution_id < w[1].execution_id)
+            }),
+            "ready executions are not ordered by priority and ID"
+        );
+    }
+
+    let executor_id = ExecutorId(Uuid::nil());
+
+    // The extremes must not overflow anywhere.
+    let priorities = [0, 10, -5, 10, i32::MIN, i32::MAX];
+
+    let job_ids = backend
+        .add_jobs(&new_jobs(&priorities.map(job)), None)
+        .await
+        .unwrap()
+        .job_ids()
+        .to_vec();
+
+    let job_priorities = job_ids
+        .iter()
+        .copied()
+        .zip(priorities)
+        .collect::<HashMap<_, _>>();
+
+    let ready = all_ready_executions(backend).await;
+    assert_eq!(ready.len(), priorities.len());
+    assert_ready_order(&ready);
+    assert_eq!(ready[0].priority, i32::MAX);
+    assert_eq!(ready[ready.len() - 1].priority, i32::MIN);
+
+    for execution in &ready {
+        assert_eq!(execution.priority, job_priorities[&execution.job_id]);
+    }
+
+    // Ignored executions are not returned.
+    {
+        let ignored = [ready[0].execution_id, ready[3].execution_id];
+        let not_ignored = ignored_ready_executions(backend, &ignored).await;
+        assert_eq!(not_ignored.len(), ready.len() - ignored.len());
+        assert!(
+            not_ignored
+                .iter()
+                .all(|execution| !ignored.contains(&execution.execution_id))
+        );
+        assert_ready_order(&not_ignored);
+    }
+
+    // Jobs with equal priority are ordered by creation.
+    let tied = ready
+        .iter()
+        .filter(|execution| execution.priority == 10)
+        .map(|execution| execution.job_id)
+        .collect::<Vec<_>>();
+    assert_eq!(tied, vec![job_ids[1], job_ids[3]]);
+
+    // Listing by priority, ties are ordered by ascending IDs.
+    for order_by in [JobOrderBy::PriorityAsc, JobOrderBy::PriorityDesc] {
+        let mut expected = job_ids
+            .iter()
+            .map(|id| (job_priorities[id], id.0))
+            .collect::<Vec<_>>();
+
+        match order_by {
+            JobOrderBy::PriorityDesc => {
+                expected.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            }
+            _ => expected.sort(),
+        }
+
+        let paged = list_all_jobs(backend, order_by.clone(), 2)
+            .await
+            .iter()
+            .map(|job| (job.job.priority, job.id.0))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            paged, expected,
+            "unexpected jobs when paging by {order_by:?}"
+        );
+    }
+
+    // Filtering by priority.
+    for (min_priority, max_priority, expected) in [
+        (Some(0), None, 4),
+        (None, Some(0), 3),
+        (Some(-5), Some(10), 4),
+        (Some(10), Some(10), 2),
+        (Some(11), Some(10), 0),
+        (Some(i32::MIN), Some(i32::MAX), 6),
+    ] {
+        let filters = JobFilters {
+            min_priority,
+            max_priority,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            backend.count_jobs(filters.clone()).await.unwrap(),
+            expected,
+            "unexpected count for priorities {min_priority:?}..={max_priority:?}"
+        );
+
+        let (jobs, _) = backend.list_jobs(filters, None, 100, None).await.unwrap();
+        assert_eq!(jobs.len() as u64, expected);
+        assert!(jobs.iter().all(|job| {
+            min_priority.is_none_or(|min| job.job.priority >= min)
+                && max_priority.is_none_or(|max| job.job.priority <= max)
+        }));
+    }
+
+    // Retried executions keep the priority of the job.
+    {
+        let execution = ready
+            .iter()
+            .find(|execution| execution.job_id == job_ids[2])
+            .unwrap();
+
+        backend
+            .executions_started(&[StartedExecution {
+                execution_id: execution.execution_id,
+                executor_id,
+                started_at: SystemTime::now(),
+            }])
+            .await
+            .unwrap();
+
+        backend
+            .executions_retried(&[RetriedExecution {
+                failed_execution: FailedExecution {
+                    job_id: execution.job_id,
+                    execution_id: execution.execution_id,
+                    failed_at: SystemTime::now(),
+                    failure_reason: "retry".to_string(),
+                },
+                retry_execution_time: SystemTime::now() - Duration::from_secs(1),
+            }])
+            .await
+            .unwrap();
+
+        let ready = all_ready_executions(backend).await;
+        assert_eq!(ready.len(), priorities.len());
+        assert_ready_order(&ready);
+
+        let retried = ready
+            .iter()
+            .find(|e| e.job_id == job_ids[2])
+            .expect("retried execution is not ready");
+        assert_ne!(retried.execution_id, execution.execution_id);
+        assert_eq!(retried.attempt_number, 2);
+        assert_eq!(retried.priority, -5);
+    }
+
+    // Jobs created by schedules get the priority of the template.
+    {
+        let schedule_ids = backend
+            .add_schedules(
+                &[ScheduleDefinition {
+                    job_template: JobDefinition {
+                        job_type_id: JobTypeId::new("PrioritizedScheduled").unwrap(),
+                        ..job(7)
+                    },
+                    scheduling: SchedulingPolicy::FixedInterval {
+                        interval: Duration::from_mins(1),
+                        immediate: true,
+                        missed: MissedTimePolicy::Skip,
+                    },
+                    labels: vec![],
+                    time_range: TimeRange::default(),
+                }],
+                None,
+            )
+            .await
+            .unwrap()
+            .schedule_ids()
+            .to_vec();
+
+        let (schedules, _) = backend
+            .list_schedules(
+                ScheduleFilters {
+                    schedule_ids: Some(schedule_ids.clone()),
+                    ..Default::default()
+                },
+                None,
+                10,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(schedules[0].schedule.job_template.priority, 7);
+
+        let pending_schedule = pin!(backend.pending_schedules())
+            .try_next()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_iter()
+            .find(|schedule| schedule.schedule_id == schedule_ids[0])
+            .unwrap();
+        assert_eq!(pending_schedule.job_template.priority, 7);
+
+        backend
+            .add_jobs(
+                &[NewJob {
+                    job: pending_schedule.job_template,
+                    schedule_id: Some(schedule_ids[0]),
+                }],
+                None,
+            )
+            .await
+            .unwrap();
+
+        let (jobs, _) = backend
+            .list_jobs(
+                JobFilters {
+                    schedule_ids: Some(schedule_ids),
+                    ..Default::default()
+                },
+                None,
+                10,
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].job.priority, 7);
+    }
+
+    // The ordering holds across batches of ready executions.
+    {
+        backend.cancel_jobs(JobFilters::default()).await.unwrap();
+        assert!(all_ready_executions(backend).await.is_empty());
+
+        let definitions = (0..2500).map(|i| job(i % 7 - 3)).collect::<Vec<_>>();
+        backend
+            .add_jobs(&new_jobs(&definitions), None)
+            .await
+            .unwrap();
+
+        let ready = all_ready_executions(backend).await;
+        assert_eq!(ready.len(), definitions.len());
+        assert_ready_order(&ready);
+
+        // Ignored executions are not returned in any of the batches.
+        let ignored = ready
+            .iter()
+            .step_by(3)
+            .map(|execution| execution.execution_id)
+            .collect::<Vec<_>>();
+        let not_ignored = ignored_ready_executions(backend, &ignored).await;
+        assert_eq!(not_ignored.len(), ready.len() - ignored.len());
+        assert!(
+            not_ignored
+                .iter()
+                .all(|execution| !ignored.contains(&execution.execution_id))
+        );
+        assert_ready_order(&not_ignored);
+    }
 }
 
 fn new_jobs(jobs: &[JobDefinition]) -> Vec<NewJob> {
