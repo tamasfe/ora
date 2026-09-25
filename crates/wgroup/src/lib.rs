@@ -268,7 +268,12 @@ impl Future for AllDone {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.inner.guards.lock().unwrap().is_empty() {
+        // The waker is registered while the lock is held, otherwise
+        // the last guard could be dropped between the check and the
+        // registration, and its wakeup would be lost.
+        let guards = self.inner.guards.lock().unwrap();
+
+        if guards.is_empty() {
             Poll::Ready(())
         } else {
             self.inner.waker.register(cx.waker());
@@ -372,6 +377,20 @@ mod tests {
         group.all_done().await;
 
         assert_eq!(done_counter.load(Ordering::Acquire), task_count);
+    }
+
+    #[tokio::test]
+    async fn test_all_done_last_guard_race() {
+        for _ in 0..2_000 {
+            let group = WaitGroup::new();
+            let guard = group.add();
+
+            std::thread::spawn(move || drop(guard));
+
+            tokio::time::timeout(std::time::Duration::from_secs(5), group.all_done())
+                .await
+                .expect("all_done missed the last guard being dropped");
+        }
     }
 
     #[tokio::test]
