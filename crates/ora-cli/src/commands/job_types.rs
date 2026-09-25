@@ -47,8 +47,8 @@ impl Types {
                 job_types.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
 
                 let mut table = Table::new();
-                table.load_preset(presets::NOTHING);
-                table.set_style(comfy_table::TableComponent::HeaderLines, '=');
+                table.load_style(presets::NOTHING);
+                table.style_mut().header_separator.fill = Some('=');
 
                 table.set_header(["Name", "Description"]);
 

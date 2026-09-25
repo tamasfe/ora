@@ -915,7 +915,7 @@ async fn list_jobs(
 
     let mut stream = pin!(client.list_jobs(filters, order.into(), Some(limit)));
     let mut table = Table::new();
-    table.load_preset(presets::UTF8_FULL);
+    table.load_style(presets::UTF8_FULL);
     table.set_header(["Type", "Target", "Status", "Labels", "Retries", "Misc"]);
     while let Some(mut job) = stream.try_next().await? {
         let last_exec = job.executions().await?.pop().unwrap();

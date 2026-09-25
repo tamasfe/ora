@@ -145,7 +145,7 @@ impl ScenarioReport {
 
         if !self.latencies.is_empty() {
             let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED).set_header([
+            table.load_style(UTF8_FULL_CONDENSED).set_header([
                 "metric", "count", "min", "mean", "p50", "p90", "p99", "p99.9", "max", "rate",
             ]);
 
@@ -186,7 +186,7 @@ impl ScenarioReport {
         if !self.metrics.is_empty() {
             let mut table = Table::new();
             table
-                .load_preset(UTF8_FULL_CONDENSED)
+                .load_style(UTF8_FULL_CONDENSED)
                 .set_header(["metric", "value"]);
 
             for m in &self.metrics {

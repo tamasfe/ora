@@ -698,8 +698,8 @@ async fn list_schedules(
 
     let mut stream = pin!(client.list_schedules(filters, order.into(), Some(limit)));
     let mut table = Table::new();
-    table.load_preset(presets::UTF8_FULL);
-    table.set_style(comfy_table::TableComponent::HeaderLines, '=');
+    table.load_style(presets::UTF8_FULL);
+    table.style_mut().header_separator.fill = Some('=');
     table.set_header(["Type", "Status", "Policy", "Labels", "Retries", "Misc"]);
     while let Some(mut schedule) = stream.try_next().await? {
         let raw = schedule.raw().await?;

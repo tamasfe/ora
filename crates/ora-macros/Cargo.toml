@@ -1,6 +1,6 @@
 [package]
 name = "ora-macros"
-version = "0.12.8"
+version = "0.12.9"
 edition = "2021"
 publish.workspace = true
 description.workspace = true
@@ -11,10 +11,10 @@ repository.workspace = true
 proc-macro = true
 
 [dependencies]
-darling = "0.23.0"
+darling = "0.24.1"
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = "2.0"
+syn = "3.0"
 
 [lints]
 workspace = true

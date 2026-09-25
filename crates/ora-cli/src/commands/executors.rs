@@ -25,7 +25,7 @@ impl Executors {
                 });
 
                 let mut table = Table::new();
-                table.load_preset(presets::UTF8_FULL);
+                table.load_style(presets::UTF8_FULL);
 
                 table.set_header(["Name", "Jobs (active/max)", "Last Seen", "ID"]);
 

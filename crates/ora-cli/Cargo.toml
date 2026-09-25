@@ -1,6 +1,6 @@
 [package]
 name = "ora-cli"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2024"
 publish.workspace = true
 description = "Command line interface for the Ora scheduler."
@@ -14,7 +14,7 @@ path = "src/main.rs"
 [dependencies]
 clap = { version = "4.5.56", features = ["derive"] }
 clap_complete = { version = "4.5.65", features = ["unstable-dynamic"] }
-comfy-table = "7.2.2"
+comfy-table = "8.0.1"
 cronexpr = "1.4.0"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
 eyre = "0.6.12"
@@ -22,7 +22,7 @@ flume = "0.12.0"
 futures.workspace = true
 humantime = "2.3.0"
 jiff = "0.2.18"
-jsonschema = "0.41.0"
+jsonschema = "0.58.0"
 ora = { version = "0.13.0", path = "../ora" }
 ratatui = "0.30.0"
 serde_json = { version = "1.0.149", features = ["preserve_order"] }
