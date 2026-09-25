@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ora/executors/v1/executions.proto.
  */
 export const file_ora_executors_v1_executions: GenFile = /*@__PURE__*/
-  fileDesc("CiFvcmEvZXhlY3V0b3JzL3YxL2V4ZWN1dGlvbnMucHJvdG8SEG9yYS5leGVjdXRvcnMudjEiTwoZRXhlY3V0b3JDb25uZWN0aW9uUmVxdWVzdBIyCgdtZXNzYWdlGAEgASgLMiEub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRvck1lc3NhZ2UiTgoaRXhlY3V0b3JDb25uZWN0aW9uUmVzcG9uc2USMAoHbWVzc2FnZRgBIAEoCzIfLm9yYS5leGVjdXRvcnMudjEuU2VydmVyTWVzc2FnZSKoAgoPRXhlY3V0b3JNZXNzYWdlEj4KDGNhcGFiaWxpdGllcxgBIAEoCzImLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDYXBhYmlsaXRpZXNIABI4CgloZWFydGJlYXQYAiABKAsyIy5vcmEuZXhlY3V0b3JzLnYxLkV4ZWN1dG9ySGVhcnRiZWF0SAASQwoTZXhlY3V0aW9uX3N1Y2NlZWRlZBgDIAEoCzIkLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uU3VjY2VlZGVkSAASPQoQZXhlY3V0aW9uX2ZhaWxlZBgEIAEoCzIhLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uRmFpbGVkSABCFwoVZXhlY3V0b3JfbWVzc2FnZV9raW5kIlwKFEV4ZWN1dG9yQ2FwYWJpbGl0aWVzEgwKBG5hbWUYASABKAkSNgoKam9iX3F1ZXVlcxgCIAMoCzIiLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JKb2JRdWV1ZSJdChBFeGVjdXRvckpvYlF1ZXVlEiYKCGpvYl90eXBlGAEgASgLMhQub3JhLmpvYnMudjEuSm9iVHlwZRIhChltYXhfY29uY3VycmVudF9leGVjdXRpb25zGAIgASgEIhMKEUV4ZWN1dG9ySGVhcnRiZWF0InYKEkV4ZWN1dGlvblN1Y2NlZWRlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIbChNvdXRwdXRfcGF5bG9hZF9qc29uGAMgASgJIm4KD0V4ZWN1dGlvbkZhaWxlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIWCg5mYWlsdXJlX3JlYXNvbhgDIAEoCSLkAQoNU2VydmVyTWVzc2FnZRI6Cgpwcm9wZXJ0aWVzGAEgASgLMiQub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRvclByb3BlcnRpZXNIABI7Cg9leGVjdXRpb25fcmVhZHkYAiABKAsyIC5vcmEuZXhlY3V0b3JzLnYxLkV4ZWN1dGlvblJlYWR5SAASQwoTZXhlY3V0aW9uX2NhbmNlbGxlZBgDIAEoCzIkLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uQ2FuY2VsbGVkSABCFQoTc2VydmVyX21lc3NhZ2Vfa2luZCJkChJFeGVjdXRvclByb3BlcnRpZXMSEwoLZXhlY3V0b3JfaWQYASABKAkSOQoWbWF4X2hlYXJ0YmVhdF9pbnRlcnZhbBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiK6AQoORXhlY3V0aW9uUmVhZHkSDgoGam9iX2lkGAEgASgJEhQKDGV4ZWN1dGlvbl9pZBgCIAEoCRITCgtqb2JfdHlwZV9pZBgDIAEoCRIWCg5hdHRlbXB0X251bWJlchgEIAEoBBIaChJpbnB1dF9wYXlsb2FkX2pzb24YBSABKAkSOQoVdGFyZ2V0X2V4ZWN1dGlvbl90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIqChJFeGVjdXRpb25DYW5jZWxsZWQSFAoMZXhlY3V0aW9uX2lkGAEgASgJMocBChBFeGVjdXRpb25TZXJ2aWNlEnMKEkV4ZWN1dG9yQ29ubmVjdGlvbhIrLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDb25uZWN0aW9uUmVxdWVzdBosLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDb25uZWN0aW9uUmVzcG9uc2UoATABYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_ora_jobs_v1_job]);
+  fileDesc("CiFvcmEvZXhlY3V0b3JzL3YxL2V4ZWN1dGlvbnMucHJvdG8SEG9yYS5leGVjdXRvcnMudjEiTwoZRXhlY3V0b3JDb25uZWN0aW9uUmVxdWVzdBIyCgdtZXNzYWdlGAEgASgLMiEub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRvck1lc3NhZ2UiTgoaRXhlY3V0b3JDb25uZWN0aW9uUmVzcG9uc2USMAoHbWVzc2FnZRgBIAEoCzIfLm9yYS5leGVjdXRvcnMudjEuU2VydmVyTWVzc2FnZSKuAwoPRXhlY3V0b3JNZXNzYWdlEj4KDGNhcGFiaWxpdGllcxgBIAEoCzImLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDYXBhYmlsaXRpZXNIABI4CgloZWFydGJlYXQYAiABKAsyIy5vcmEuZXhlY3V0b3JzLnYxLkV4ZWN1dG9ySGVhcnRiZWF0SAASQwoTZXhlY3V0aW9uX3N1Y2NlZWRlZBgDIAEoCzIkLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uU3VjY2VlZGVkSAASPQoQZXhlY3V0aW9uX2ZhaWxlZBgEIAEoCzIhLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uRmFpbGVkSAASQQoSZXhlY3V0aW9uX2FjY2VwdGVkGAUgASgLMiMub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRpb25BY2NlcHRlZEgAEkEKEmV4ZWN1dGlvbl9yZWplY3RlZBgGIAEoCzIjLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uUmVqZWN0ZWRIAEIXChVleGVjdXRvcl9tZXNzYWdlX2tpbmQieQoURXhlY3V0b3JDYXBhYmlsaXRpZXMSDAoEbmFtZRgBIAEoCRI2Cgpqb2JfcXVldWVzGAIgAygLMiIub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRvckpvYlF1ZXVlEhsKE2V4ZWN1dGlvbl9oYW5kc2hha2UYAyABKAgiXQoQRXhlY3V0b3JKb2JRdWV1ZRImCghqb2JfdHlwZRgBIAEoCzIULm9yYS5qb2JzLnYxLkpvYlR5cGUSIQoZbWF4X2NvbmN1cnJlbnRfZXhlY3V0aW9ucxgCIAEoBCITChFFeGVjdXRvckhlYXJ0YmVhdCJYChFFeGVjdXRpb25BY2NlcHRlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJ4ChFFeGVjdXRpb25SZWplY3RlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgZyZWFzb24YAyABKAlIAIgBAUIJCgdfcmVhc29uInYKEkV4ZWN1dGlvblN1Y2NlZWRlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIbChNvdXRwdXRfcGF5bG9hZF9qc29uGAMgASgJIm4KD0V4ZWN1dGlvbkZhaWxlZBIUCgxleGVjdXRpb25faWQYASABKAkSLQoJdGltZXN0YW1wGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIWCg5mYWlsdXJlX3JlYXNvbhgDIAEoCSLkAQoNU2VydmVyTWVzc2FnZRI6Cgpwcm9wZXJ0aWVzGAEgASgLMiQub3JhLmV4ZWN1dG9ycy52MS5FeGVjdXRvclByb3BlcnRpZXNIABI7Cg9leGVjdXRpb25fcmVhZHkYAiABKAsyIC5vcmEuZXhlY3V0b3JzLnYxLkV4ZWN1dGlvblJlYWR5SAASQwoTZXhlY3V0aW9uX2NhbmNlbGxlZBgDIAEoCzIkLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0aW9uQ2FuY2VsbGVkSABCFQoTc2VydmVyX21lc3NhZ2Vfa2luZCJkChJFeGVjdXRvclByb3BlcnRpZXMSEwoLZXhlY3V0b3JfaWQYASABKAkSOQoWbWF4X2hlYXJ0YmVhdF9pbnRlcnZhbBgCIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiK6AQoORXhlY3V0aW9uUmVhZHkSDgoGam9iX2lkGAEgASgJEhQKDGV4ZWN1dGlvbl9pZBgCIAEoCRITCgtqb2JfdHlwZV9pZBgDIAEoCRIWCg5hdHRlbXB0X251bWJlchgEIAEoBBIaChJpbnB1dF9wYXlsb2FkX2pzb24YBSABKAkSOQoVdGFyZ2V0X2V4ZWN1dGlvbl90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIqChJFeGVjdXRpb25DYW5jZWxsZWQSFAoMZXhlY3V0aW9uX2lkGAEgASgJMocBChBFeGVjdXRpb25TZXJ2aWNlEnMKEkV4ZWN1dG9yQ29ubmVjdGlvbhIrLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDb25uZWN0aW9uUmVxdWVzdBosLm9yYS5leGVjdXRvcnMudjEuRXhlY3V0b3JDb25uZWN0aW9uUmVzcG9uc2UoATABYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_timestamp, file_ora_jobs_v1_job]);
 
 /**
  * Request for `ExecutorConnection`.
@@ -106,6 +106,24 @@ export type ExecutorMessage = Message<"ora.executors.v1.ExecutorMessage"> & {
      */
     value: ExecutionFailed;
     case: "executionFailed";
+  } | {
+    /**
+     * The executor accepted an execution offered
+     * by the server via `ExecutionReady`.
+     *
+     * @generated from field: ora.executors.v1.ExecutionAccepted execution_accepted = 5;
+     */
+    value: ExecutionAccepted;
+    case: "executionAccepted";
+  } | {
+    /**
+     * The executor rejected an execution offered
+     * by the server via `ExecutionReady`.
+     *
+     * @generated from field: ora.executors.v1.ExecutionRejected execution_rejected = 6;
+     */
+    value: ExecutionRejected;
+    case: "executionRejected";
   } | { case: undefined; value?: undefined };
 };
 
@@ -136,6 +154,21 @@ export type ExecutorCapabilities = Message<"ora.executors.v1.ExecutorCapabilitie
    * @generated from field: repeated ora.executors.v1.ExecutorJobQueue job_queues = 2;
    */
   jobQueues: ExecutorJobQueue[];
+
+  /**
+   * Whether the executor performs a handshake for every execution
+   * before it is assigned to the executor.
+   *
+   * If set, the executor must respond to every `ExecutionReady`
+   * message with either `ExecutionAccepted` or `ExecutionRejected`,
+   * executions are only assigned to the executor once accepted.
+   *
+   * If not set, executions are assigned to the executor
+   * as soon as they are sent.
+   *
+   * @generated from field: bool execution_handshake = 3;
+   */
+  executionHandshake: boolean;
 };
 
 /**
@@ -189,6 +222,81 @@ export const ExecutorHeartbeatSchema: GenMessage<ExecutorHeartbeat> = /*@__PURE_
   messageDesc(file_ora_executors_v1_executions, 5);
 
 /**
+ * The executor accepted an offered execution.
+ *
+ * The execution is assigned to the executor, and
+ * the executor is expected to run it.
+ *
+ * @generated from message ora.executors.v1.ExecutionAccepted
+ */
+export type ExecutionAccepted = Message<"ora.executors.v1.ExecutionAccepted"> & {
+  /**
+   * The ID of the job execution.
+   *
+   * @generated from field: string execution_id = 1;
+   */
+  executionId: string;
+
+  /**
+   * The time when the job execution was accepted.
+   *
+   * This is informational only, the start time of the execution
+   * is the time when the server sent the execution to the executor.
+   *
+   * @generated from field: google.protobuf.Timestamp timestamp = 2;
+   */
+  timestamp?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message ora.executors.v1.ExecutionAccepted.
+ * Use `create(ExecutionAcceptedSchema)` to create a new message.
+ */
+export const ExecutionAcceptedSchema: GenMessage<ExecutionAccepted> = /*@__PURE__*/
+  messageDesc(file_ora_executors_v1_executions, 6);
+
+/**
+ * The executor rejected an offered execution.
+ *
+ * The execution is not assigned to the executor,
+ * it remains pending and might be offered again
+ * to this or other executors later.
+ *
+ * Rejections do not count as execution attempts.
+ *
+ * @generated from message ora.executors.v1.ExecutionRejected
+ */
+export type ExecutionRejected = Message<"ora.executors.v1.ExecutionRejected"> & {
+  /**
+   * The ID of the job execution.
+   *
+   * @generated from field: string execution_id = 1;
+   */
+  executionId: string;
+
+  /**
+   * The time when the job execution was rejected.
+   *
+   * @generated from field: google.protobuf.Timestamp timestamp = 2;
+   */
+  timestamp?: Timestamp | undefined;
+
+  /**
+   * The reason for the rejection, if any.
+   *
+   * @generated from field: optional string reason = 3;
+   */
+  reason?: string | undefined;
+};
+
+/**
+ * Describes the message ora.executors.v1.ExecutionRejected.
+ * Use `create(ExecutionRejectedSchema)` to create a new message.
+ */
+export const ExecutionRejectedSchema: GenMessage<ExecutionRejected> = /*@__PURE__*/
+  messageDesc(file_ora_executors_v1_executions, 7);
+
+/**
  * A job execution has succeeded.
  *
  * @generated from message ora.executors.v1.ExecutionSucceeded
@@ -221,7 +329,7 @@ export type ExecutionSucceeded = Message<"ora.executors.v1.ExecutionSucceeded"> 
  * Use `create(ExecutionSucceededSchema)` to create a new message.
  */
 export const ExecutionSucceededSchema: GenMessage<ExecutionSucceeded> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 6);
+  messageDesc(file_ora_executors_v1_executions, 8);
 
 /**
  * The job execution has failed.
@@ -256,7 +364,7 @@ export type ExecutionFailed = Message<"ora.executors.v1.ExecutionFailed"> & {
  * Use `create(ExecutionFailedSchema)` to create a new message.
  */
 export const ExecutionFailedSchema: GenMessage<ExecutionFailed> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 7);
+  messageDesc(file_ora_executors_v1_executions, 9);
 
 /**
  * A message sent from the server.
@@ -281,6 +389,9 @@ export type ServerMessage = Message<"ora.executors.v1.ServerMessage"> & {
     /**
      * A job execution is ready to be executed by the executor.
      *
+     * If the executor has `execution_handshake` enabled,
+     * this is an offer that must be accepted or rejected.
+     *
      * @generated from field: ora.executors.v1.ExecutionReady execution_ready = 2;
      */
     value: ExecutionReady;
@@ -288,6 +399,8 @@ export type ServerMessage = Message<"ora.executors.v1.ServerMessage"> & {
   } | {
     /**
      * The job execution was cancelled and should be dropped by the executor.
+     *
+     * This is also sent if an offered execution was withdrawn.
      *
      * @generated from field: ora.executors.v1.ExecutionCancelled execution_cancelled = 3;
      */
@@ -301,7 +414,7 @@ export type ServerMessage = Message<"ora.executors.v1.ServerMessage"> & {
  * Use `create(ServerMessageSchema)` to create a new message.
  */
 export const ServerMessageSchema: GenMessage<ServerMessage> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 8);
+  messageDesc(file_ora_executors_v1_executions, 10);
 
 /**
  * Properties of the executor assigned by the server.
@@ -337,10 +450,15 @@ export type ExecutorProperties = Message<"ora.executors.v1.ExecutorProperties"> 
  * Use `create(ExecutorPropertiesSchema)` to create a new message.
  */
 export const ExecutorPropertiesSchema: GenMessage<ExecutorProperties> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 9);
+  messageDesc(file_ora_executors_v1_executions, 11);
 
 /**
  * A job execution is ready to be executed by the executor.
+ *
+ * If the executor has `execution_handshake` enabled,
+ * the executor must respond with either `ExecutionAccepted`
+ * or `ExecutionRejected` in a timely manner, otherwise
+ * the offer is withdrawn by the server.
  *
  * @generated from message ora.executors.v1.ExecutionReady
  */
@@ -395,7 +513,7 @@ export type ExecutionReady = Message<"ora.executors.v1.ExecutionReady"> & {
  * Use `create(ExecutionReadySchema)` to create a new message.
  */
 export const ExecutionReadySchema: GenMessage<ExecutionReady> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 10);
+  messageDesc(file_ora_executors_v1_executions, 12);
 
 /**
  * The job execution was cancelled and should be dropped by the executor.
@@ -416,7 +534,7 @@ export type ExecutionCancelled = Message<"ora.executors.v1.ExecutionCancelled"> 
  * Use `create(ExecutionCancelledSchema)` to create a new message.
  */
 export const ExecutionCancelledSchema: GenMessage<ExecutionCancelled> = /*@__PURE__*/
-  messageDesc(file_ora_executors_v1_executions, 11);
+  messageDesc(file_ora_executors_v1_executions, 13);
 
 /**
  * Endpoint on the server for executors to connect to.

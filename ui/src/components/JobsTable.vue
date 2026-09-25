@@ -79,6 +79,8 @@ const orderOptions = [
   { label: "Oldest first", value: JobOrderBy.CREATED_AT_ASC },
   { label: "Target time (latest first)", value: JobOrderBy.TARGET_EXECUTION_TIME_DESC },
   { label: "Target time (earliest first)", value: JobOrderBy.TARGET_EXECUTION_TIME_ASC },
+  { label: "Priority (highest first)", value: JobOrderBy.PRIORITY_DESC },
+  { label: "Priority (lowest first)", value: JobOrderBy.PRIORITY_ASC },
 ];
 
 // Parents often pass inline objects, compare by value to avoid needless reloads.
@@ -432,6 +434,13 @@ defineExpose({ reload });
             :live="isJobActive(data)"
             class="text-sm"
           />
+        </template>
+      </Column>
+      <Column v-if="!compact" header="Priority" header-style="width: 6rem">
+        <template #body="{ data }">
+          <span class="tabular-nums" :class="{ 'text-muted-color': !data.job?.priority }">
+            {{ data.job?.priority ?? 0 }}
+          </span>
         </template>
       </Column>
       <Column v-if="!compact" header="Attempts" header-style="width: 6rem">

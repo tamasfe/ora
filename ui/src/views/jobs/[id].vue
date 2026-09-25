@@ -225,6 +225,8 @@ function cancel() {
                   >({{ formatRelative(definition.targetExecutionTime) }})</span
                 >
               </dd>
+              <dt class="text-muted-color">Priority</dt>
+              <dd class="tabular-nums">{{ definition.priority }}</dd>
               <dt class="text-muted-color">Created</dt>
               <dd>
                 {{ formatTimestamp(job.createdAt) }}
@@ -291,7 +293,7 @@ function cancel() {
               </dd>
             </dl>
             <div v-else class="flex flex-col gap-3">
-              <Skeleton v-for="i in 9" :key="i" height="1.25rem" />
+              <Skeleton v-for="i in 10" :key="i" height="1.25rem" />
             </div>
           </template>
         </Card>
