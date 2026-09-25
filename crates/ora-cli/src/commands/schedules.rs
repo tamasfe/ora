@@ -92,6 +92,12 @@ pub(crate) enum Schedules {
         /// a human-readable format, e.g., `30s`, `5m`, `1h`.
         #[arg(long)]
         timeout: Option<String>,
+        /// The priority of the jobs.
+        ///
+        /// When executor capacity is limited,
+        /// jobs with higher priority are executed first.
+        #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
+        priority: i32,
         /// Repeat jobs with a given interval.
         ///
         /// The interval should be a human-readable duration, e.g., `1h`, `30m`.
@@ -389,6 +395,7 @@ impl Schedules {
                 force,
                 retries,
                 timeout,
+                priority,
                 repeat_interval,
                 cron_expression,
                 immediate,
@@ -588,6 +595,7 @@ impl Schedules {
                                     .map(TryInto::try_into)
                                     .transpose()?,
                             }),
+                            priority,
                         }),
                         scheduling: if let Some(interval) = repeat_interval {
                             Some(

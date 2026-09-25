@@ -107,6 +107,12 @@ pub(crate) enum Jobs {
         /// a human-readable format, e.g., `30s`, `5m`, `1h`.
         #[arg(long)]
         timeout: Option<String>,
+        /// The priority of the job.
+        ///
+        /// When executor capacity is limited,
+        /// jobs with higher priority are executed first.
+        #[arg(long, default_value_t = 0, allow_negative_numbers = true)]
+        priority: i32,
         /// Whether to skip any validation when adding the job.
         #[arg(long, short)]
         force: bool,
@@ -215,6 +221,12 @@ pub(crate) struct JobFilterArgs {
     /// If a date is provided, the time is assumed to be 00:00:00 UTC.
     #[arg(long = "created-before")]
     created_before: Option<String>,
+    /// Filter for jobs with at least the given priority.
+    #[arg(long = "min-priority", allow_negative_numbers = true)]
+    min_priority: Option<i32>,
+    /// Filter for jobs with at most the given priority.
+    #[arg(long = "max-priority", allow_negative_numbers = true)]
+    max_priority: Option<i32>,
 }
 
 impl TryFrom<JobFilterArgs> for JobFilters {
@@ -233,6 +245,8 @@ impl TryFrom<JobFilterArgs> for JobFilters {
             target_execution_time_before,
             created_after,
             created_before,
+            min_priority,
+            max_priority,
         } = value;
 
         let target_before = if let Some(ts) = target_execution_time_after {
@@ -363,6 +377,8 @@ impl TryFrom<JobFilterArgs> for JobFilters {
                         .collect::<Result<_, _>>()?,
                 )
             },
+            min_priority,
+            max_priority,
         })
     }
 }
@@ -467,6 +483,10 @@ pub(crate) enum JobOrder {
     TargetAsc,
     /// Order by target execution time descending.
     TargetDesc,
+    /// Order by priority ascending.
+    PriorityAsc,
+    /// Order by priority descending.
+    PriorityDesc,
 }
 
 impl core::fmt::Display for JobOrder {
@@ -476,6 +496,8 @@ impl core::fmt::Display for JobOrder {
             JobOrder::CreatedDesc => "created-desc",
             JobOrder::TargetAsc => "target-asc",
             JobOrder::TargetDesc => "target-desc",
+            JobOrder::PriorityAsc => "priority-asc",
+            JobOrder::PriorityDesc => "priority-desc",
         };
         write!(f, "{s}")
     }
@@ -488,6 +510,8 @@ impl From<JobOrder> for ora::JobOrderBy {
             JobOrder::CreatedDesc => ora::JobOrderBy::CreatedAtDesc,
             JobOrder::TargetAsc => ora::JobOrderBy::TargetExecutionTimeAsc,
             JobOrder::TargetDesc => ora::JobOrderBy::TargetExecutionTimeDesc,
+            JobOrder::PriorityAsc => ora::JobOrderBy::PriorityAsc,
+            JobOrder::PriorityDesc => ora::JobOrderBy::PriorityDesc,
         }
     }
 }
@@ -518,6 +542,7 @@ impl Jobs {
                 force,
                 retries,
                 timeout,
+                priority,
                 wait,
                 retry_backoff,
                 retry_backoff_strategy,
@@ -701,6 +726,7 @@ impl Jobs {
                                 .map(TryInto::try_into)
                                 .transpose()?,
                         }),
+                        priority,
                     }])
                     .await?
                     .pop()
@@ -954,6 +980,9 @@ async fn list_jobs(
         let mut misc = String::new();
         misc.push_str("ID:\n");
         writeln!(&mut misc, " {}", job.id()).unwrap();
+
+        misc.push_str("priority:\n");
+        writeln!(&mut misc, " {}", raw_def.priority).unwrap();
 
         misc.push_str("schedule ID:\n");
         if let Some(schedule_id) = raw.schedule_id {
