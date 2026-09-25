@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{collections::HashMap, str::FromStr};
 
 use base64::Engine;
 use ora_backend::{
@@ -151,7 +151,10 @@ pub(crate) async fn schedule_details(
     collect_labels(tx, &mut schedules).await?;
 
     let mut page_token = page_token;
-    let next_page_token = if let Some(last_schedule) = schedules.last() {
+    // A partial page is the last one.
+    let next_page_token = if let Some(last_schedule) = schedules.last()
+        && schedules.len() >= page_size as usize
+    {
         page_token.last_schedule_id = Some(last_schedule.id);
         Some(NextPageToken(page_token.to_string()))
     } else {
@@ -188,16 +191,19 @@ async fn collect_labels(
 
     let rows = tx.query(&stmt, &[&schedule_ids]).await?;
 
+    // The query only returns labels of the given schedules.
+    let schedule_indices = schedules
+        .iter()
+        .enumerate()
+        .map(|(i, schedule)| (schedule.id.0, i))
+        .collect::<HashMap<_, _>>();
+
     for row in rows {
         let schedule_id: Uuid = row.try_get(0)?;
         let key: String = row.try_get(1)?;
         let value: String = row.try_get(2)?;
 
-        let schedule = schedules
-            .iter_mut()
-            .find(|schedule| schedule.id.0 == schedule_id)
-            // This should be impossible.
-            .expect("label returned for unknown job");
+        let schedule = &mut schedules[schedule_indices[&schedule_id]];
 
         schedule.schedule.labels.push(Label { key, value });
     }

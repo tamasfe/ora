@@ -1,7 +1,11 @@
 //! Postgres backend implementation for Ora.
 #![allow(missing_docs)]
 
-use std::time::{Duration, SystemTime};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    time::{Duration, SystemTime},
+};
 
 use deadpool_postgres::{Pool, PoolError};
 use futures::Stream;
@@ -25,6 +29,7 @@ use ora_backend::{
 
 use refinery::embed_migrations;
 use thiserror::Error;
+use tokio::sync::Notify;
 use uuid::Uuid;
 
 use crate::{
@@ -49,6 +54,9 @@ mod util;
 pub struct PostgresBackend {
     pool: DbPool,
     delete_batch_size: usize,
+    poll_interval: Duration,
+    new_executions: Notify,
+    new_pending_schedules: Notify,
 }
 
 type Result<T> = core::result::Result<T, Error>;
@@ -86,6 +94,9 @@ impl PostgresBackend {
         Ok(Self {
             pool: DbPool(pool),
             delete_batch_size: 40_000,
+            poll_interval: Duration::from_millis(500),
+            new_executions: Notify::new(),
+            new_pending_schedules: Notify::new(),
         })
     }
 
@@ -98,6 +109,24 @@ impl PostgresBackend {
         assert!(batch_size > 0, "batch size must be greater than zero");
         self.delete_batch_size = batch_size;
         self
+    }
+
+    /// Set the poll interval for various waiting operations,
+    /// such as pending executions.
+    pub fn with_poll_interval(mut self, poll_interval: Duration) -> Self {
+        self.poll_interval = poll_interval;
+        self
+    }
+
+    /// Wake up the waiters for ready executions if any of the
+    /// new executions are due before their next poll,
+    /// later executions are picked up by polling.
+    fn notify_new_executions(&self, target_execution_times: impl IntoIterator<Item = SystemTime>) {
+        let next_poll = SystemTime::now() + self.poll_interval;
+
+        if target_execution_times.into_iter().any(|t| t < next_poll) {
+            self.new_executions.notify_waiters();
+        }
     }
 }
 
@@ -222,6 +251,9 @@ impl Backend for PostgresBackend {
         let tx = conn.transaction().await?;
 
         if let Some(filters) = if_not_exists {
+            // Concurrent calls would not see each other's jobs otherwise.
+            lock_if_not_exists(&tx, IF_NOT_EXISTS_JOBS_LOCK).await?;
+
             let existing_job_ids = query::jobs::job_ids(&tx, filters).await?;
 
             if !existing_job_ids.is_empty() {
@@ -230,8 +262,60 @@ impl Backend for PostgresBackend {
             }
         }
 
+        let job_ids = jobs.iter().map(|_| Uuid::now_v7()).collect::<Vec<_>>();
+
+        // Jobs of schedules are only added if the schedule is still active
+        // and has no active job, the schedule might have been stopped
+        // or got a job since it was found to be pending.
+        let claimed_job_ids = {
+            let (col_job_id, col_schedule_id): (Vec<_>, Vec<_>) = jobs
+                .iter()
+                .zip(&job_ids)
+                .filter_map(|(job, id)| Some((*id, job.schedule_id?.0)))
+                .unzip();
+
+            if col_job_id.is_empty() {
+                HashSet::new()
+            } else {
+                let stmt = tx
+                    .prepare(
+                        r#"--sql
+                        UPDATE ora.schedule
+                        SET
+                            active_job_id = t.job_id
+                        FROM UNNEST(
+                            $1::UUID[],
+                            $2::UUID[]
+                        ) AS t(job_id, schedule_id)
+                        WHERE
+                            ora.schedule.id = t.schedule_id
+                            AND ora.schedule.stopped_at IS NULL
+                            AND ora.schedule.active_job_id IS NULL
+                        RETURNING t.job_id
+                        "#,
+                    )
+                    .await?;
+
+                tx.query(&stmt, &[&col_job_id, &col_schedule_id])
+                    .await?
+                    .into_iter()
+                    .map(|row| row.try_get::<_, Uuid>(0))
+                    .collect::<core::result::Result<HashSet<_>, _>>()?
+            }
+        };
+
+        let jobs = jobs
+            .iter()
+            .zip(job_ids)
+            .filter(|(job, id)| job.schedule_id.is_none() || claimed_job_ids.contains(id))
+            .collect::<Vec<_>>();
+
+        if jobs.is_empty() {
+            tx.commit().await?;
+            return Ok(AddedJobs::Added(Vec::new()));
+        }
+
         let mut col_id = Vec::with_capacity(jobs.len());
-        let mut col_schedule_id = Vec::with_capacity(jobs.len());
         let mut new_executions = Vec::with_capacity(jobs.len());
 
         {
@@ -240,18 +324,21 @@ impl Backend for PostgresBackend {
             let mut col_input_payload_json = Vec::with_capacity(jobs.len());
             let mut col_timeout_policy_json = Vec::with_capacity(jobs.len());
             let mut col_retry_policy_json = Vec::with_capacity(jobs.len());
+            let mut col_schedule_id = Vec::with_capacity(jobs.len());
+            let mut col_priority = Vec::with_capacity(jobs.len());
 
-            for job in jobs {
-                col_id.push(Uuid::now_v7());
+            for (job, id) in &jobs {
+                col_id.push(*id);
                 col_job_type_id.push(job.job.job_type_id.as_str());
                 col_target_execution_time.push(job.job.target_execution_time);
                 col_input_payload_json.push(job.job.input_payload_json.as_str());
                 col_timeout_policy_json.push(serde_json::to_string(&job.job.timeout_policy)?);
                 col_retry_policy_json.push(serde_json::to_string(&job.job.retry_policy)?);
                 col_schedule_id.push(job.schedule_id.map(|s| s.0));
+                col_priority.push(job.job.priority);
 
                 new_executions.push(NewExecution {
-                    job_id: JobId(col_id.last().copied().unwrap()),
+                    job_id: JobId(*id),
                     target_execution_time: job.job.target_execution_time,
                 });
             }
@@ -266,7 +353,8 @@ impl Backend for PostgresBackend {
                         input_payload_json,
                         timeout_policy_json,
                         retry_policy_json,
-                        schedule_id
+                        schedule_id,
+                        priority
                     ) SELECT * FROM UNNEST(
                         $1::UUID[],
                         $2::TEXT[],
@@ -274,7 +362,8 @@ impl Backend for PostgresBackend {
                         $4::TEXT[],
                         $5::TEXT[],
                         $6::TEXT[],
-                        $7::UUID[]
+                        $7::UUID[],
+                        $8::INTEGER[]
                     )
                     "#,
                 )
@@ -290,6 +379,7 @@ impl Backend for PostgresBackend {
                     &col_timeout_policy_json,
                     &col_retry_policy_json,
                     &col_schedule_id,
+                    &col_priority,
                 ],
             )
             .await?;
@@ -300,9 +390,9 @@ impl Backend for PostgresBackend {
             let mut col_job_label_key = Vec::with_capacity(jobs.len());
             let mut col_job_label_value = Vec::with_capacity(jobs.len());
 
-            for (i, job) in jobs.iter().enumerate() {
+            for (job, id) in &jobs {
                 for label in &job.job.labels {
-                    col_job_id.push(col_id[i]);
+                    col_job_id.push(*id);
                     col_job_label_key.push(label.key.as_str());
                     col_job_label_value.push(label.value.as_str());
                 }
@@ -331,29 +421,11 @@ impl Backend for PostgresBackend {
             .await?;
         }
 
-        {
-            let stmt = tx
-                .prepare(
-                    r#"--sql
-                    UPDATE ora.schedule
-                    SET
-                        active_job_id = t.job_id
-                    FROM UNNEST(
-                        $1::UUID[],
-                        $2::UUID[]
-                    ) AS t(job_id, schedule_id)
-                    WHERE
-                        ora.schedule.id = t.schedule_id
-                    "#,
-                )
-                .await?;
-
-            tx.execute(&stmt, &[&col_id, &col_schedule_id]).await?;
-        }
-
         add_executions(&tx, &new_executions).await?;
 
         tx.commit().await?;
+
+        self.notify_new_executions(new_executions.iter().map(|e| e.target_execution_time));
 
         Ok(AddedJobs::Added(
             col_id.into_iter().map(Into::into).collect::<Vec<_>>(),
@@ -398,13 +470,17 @@ impl Backend for PostgresBackend {
         let now = std::time::SystemTime::now();
 
         let jobs = cancel_jobs(&tx, filters).await?;
-        mark_jobs_inactive(
+        let schedules_freed = mark_jobs_inactive(
             &tx,
             &jobs.iter().map(|j| (j.job_id, now)).collect::<Vec<_>>(),
             ExecutionStatus::Cancelled,
         )
         .await?;
         tx.commit().await?;
+
+        if schedules_freed {
+            self.new_pending_schedules.notify_waiters();
+        }
 
         Ok(jobs)
     }
@@ -422,6 +498,9 @@ impl Backend for PostgresBackend {
         let tx = conn.transaction().await?;
 
         if let Some(filters) = if_not_exists {
+            // Concurrent calls would not see each other's schedules otherwise.
+            lock_if_not_exists(&tx, IF_NOT_EXISTS_SCHEDULES_LOCK).await?;
+
             let existing_schedule_ids = query::schedules::schedule_ids(&tx, filters).await?;
 
             if !existing_schedule_ids.is_empty() {
@@ -527,6 +606,8 @@ impl Backend for PostgresBackend {
 
         tx.commit().await?;
 
+        self.new_pending_schedules.notify_waiters();
+
         let schedule_ids = col_id.into_iter().map(ScheduleId).collect::<Vec<_>>();
 
         Ok(AddedSchedules::Added(schedule_ids))
@@ -575,15 +656,20 @@ impl Backend for PostgresBackend {
         Ok(schedules)
     }
 
-    fn ready_executions(&self) -> impl Stream<Item = Result<Vec<ReadyExecution>>> + Send {
+    fn ready_executions(
+        &self,
+        ignore: &[ExecutionId],
+    ) -> impl Stream<Item = Result<Vec<ReadyExecution>>> + Send {
+        let ignored_executions = ignore.iter().map(|id| id.0).collect::<Vec<_>>();
+
         async_stream::try_stream!({
-            let mut last_execution_id: Option<ExecutionId> = None;
+            let mut last_execution: Option<(i32, ExecutionId)> = None;
 
             loop {
                 let mut conn = self.pool.get().await?;
                 let tx = conn.read_only_transaction().await?;
 
-                let rows = if let Some(last_execution_id) = last_execution_id {
+                let rows = if let Some((last_priority, last_execution_id)) = last_execution {
                     let stmt = tx
                         .prepare(
                             r#"--sql
@@ -594,7 +680,8 @@ impl Backend for PostgresBackend {
                                 ora.job.input_payload_json,
                                 (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
                                 ora.job.retry_policy_json,
-                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
+                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION,
+                                ora.execution.priority
                             FROM
                                 ora.execution
                             JOIN ora.job ON
@@ -602,15 +689,24 @@ impl Backend for PostgresBackend {
                             WHERE
                                 status = 0
                                 AND ora.execution.target_execution_time <= NOW()
-                                AND ora.execution.id > $1::UUID
+                                AND ora.execution.id <> ALL($1::UUID[])
+                                -- The priority is negated so that the ordering matches
+                                -- the index, it is cast to avoid overflows.
+                                AND (-ora.execution.priority::BIGINT, ora.execution.id)
+                                    > (-$2::INTEGER::BIGINT, $3::UUID)
                             ORDER BY
+                                -ora.execution.priority::BIGINT ASC,
                                 ora.execution.id ASC
                             LIMIT 1000
                             "#,
                         )
                         .await?;
 
-                    tx.query(&stmt, &[&last_execution_id.0]).await?
+                    tx.query(
+                        &stmt,
+                        &[&ignored_executions, &last_priority, &last_execution_id.0],
+                    )
+                    .await?
                 } else {
                     let stmt = tx
                         .prepare(
@@ -622,7 +718,8 @@ impl Backend for PostgresBackend {
                                 ora.job.input_payload_json,
                                 (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
                                 ora.job.retry_policy_json,
-                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
+                                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION,
+                                ora.execution.priority
                             FROM
                                 ora.execution
                             JOIN ora.job ON
@@ -630,17 +727,23 @@ impl Backend for PostgresBackend {
                             WHERE
                                 status = 0
                                 AND ora.execution.target_execution_time <= NOW()
+                                AND ora.execution.id <> ALL($1::UUID[])
                             ORDER BY
+                                -ora.execution.priority::BIGINT ASC,
                                 ora.execution.id ASC
                             LIMIT 1000
                             "#,
                         )
                         .await?;
 
-                    tx.query(&stmt, &[]).await?
+                    tx.query(&stmt, &[&ignored_executions]).await?
                 };
 
                 tx.commit().await?;
+
+                // The connection must not be held while the consumer
+                // processes the batch, it might need connections as well.
+                drop(conn);
 
                 if rows.is_empty() {
                     break;
@@ -657,10 +760,13 @@ impl Backend for PostgresBackend {
                         attempt_number: row.try_get::<_, i64>(4)? as u64,
                         retry_policy: serde_json::from_str(&row.try_get::<_, String>(5)?)?,
                         target_execution_time: systemtime_from_ts(row.try_get::<_, f64>(6)?),
+                        priority: row.try_get(7)?,
                     });
                 }
 
-                last_execution_id = ready_executions.last().map(|e| e.execution_id);
+                last_execution = ready_executions
+                    .last()
+                    .map(|e| (e.priority, e.execution_id));
 
                 yield ready_executions;
             }
@@ -671,16 +777,22 @@ impl Backend for PostgresBackend {
         let ignored_executions = ignore.iter().map(|id| id.0).collect::<Vec<_>>();
 
         loop {
+            // Created before the query so that executions
+            // added after the query still wake us up.
+            let new_executions = self.new_executions.notified();
+
             let mut conn = self.pool.get().await?;
 
-            let next_timestamp = {
+            let seconds_until_next = {
                 let tx = conn.read_only_transaction().await?;
 
+                // The remaining time is determined by the database clock,
+                // it decides which executions are ready.
                 let stmt = tx
                     .prepare(
                         r#"--sql
                         SELECT
-                            EXTRACT(EPOCH FROM target_execution_time)::DOUBLE PRECISION
+                            EXTRACT(EPOCH FROM (target_execution_time - NOW()))::DOUBLE PRECISION
                         FROM
                             ora.execution
                         WHERE
@@ -698,30 +810,31 @@ impl Backend for PostgresBackend {
                 tx.commit().await?;
 
                 match row {
-                    Some(row) => row.try_get::<_, Option<f64>>(0)?.map(systemtime_from_ts),
+                    Some(row) => row.try_get::<_, Option<f64>>(0)?,
                     None => None,
                 }
             };
 
             drop(conn);
 
-            if let Some(next_timestamp) = next_timestamp {
-                let now = std::time::SystemTime::now();
+            // Never wait longer than the poll interval,
+            // `notify_new_executions` relies on it.
+            let mut delay = self.poll_interval;
 
-                if next_timestamp <= now {
+            if let Some(seconds_until_next) = seconds_until_next {
+                if seconds_until_next <= 0.0 {
                     break;
                 }
 
-                tokio::time::sleep(
-                    next_timestamp
-                        .duration_since(now)
-                        .unwrap_or_else(|_| Duration::from_secs(0)),
-                )
-                .await;
-                break;
+                if let Ok(until_next) = Duration::try_from_secs_f64(seconds_until_next) {
+                    delay = delay.min(until_next);
+                }
             }
 
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::select! {
+                () = new_executions => break,
+                () = tokio::time::sleep(delay) => {}
+            }
         }
 
         Ok(())
@@ -796,6 +909,10 @@ impl Backend for PostgresBackend {
 
                 tx.commit().await?;
 
+                // The connection must not be held while the consumer
+                // processes the batch, it might need connections as well.
+                drop(conn);
+
                 if rows.is_empty() {
                     break;
                 }
@@ -822,9 +939,12 @@ impl Backend for PostgresBackend {
         })
     }
 
-    async fn executions_started(&self, executions: &[StartedExecution]) -> Result<()> {
+    async fn executions_started(
+        &self,
+        executions: &[StartedExecution],
+    ) -> Result<Vec<ExecutionId>> {
         if executions.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let mut conn = self.pool.get().await?;
@@ -845,7 +965,15 @@ impl Backend for PostgresBackend {
                 ) AS t(execution_id, executor_id, started_at)
                 WHERE
                     execution_id = id
-                    AND ora.execution.started_at IS NULL
+                    AND (
+                        ora.execution.status = 0
+                        -- Repeated calls (e.g. retries) return the same executions.
+                        OR (
+                            ora.execution.status = 1
+                            AND ora.execution.executor_id = t.executor_id
+                        )
+                    )
+                RETURNING id
                 "#,
             )
             .await?;
@@ -860,15 +988,18 @@ impl Backend for PostgresBackend {
             col_started_at.push(systemtime_to_ts(execution.started_at));
         }
 
-        tx.execute(
-            &stmt,
-            &[&col_execution_id, &col_executor_id, &col_started_at],
-        )
-        .await?;
+        let rows = tx
+            .query(
+                &stmt,
+                &[&col_execution_id, &col_executor_id, &col_started_at],
+            )
+            .await?;
 
         tx.commit().await?;
 
-        Ok(())
+        rows.into_iter()
+            .map(|row| Ok(ExecutionId(row.try_get(0)?)))
+            .collect()
     }
 
     async fn executions_succeeded(&self, executions: &[SucceededExecution]) -> Result<()> {
@@ -925,9 +1056,13 @@ impl Backend for PostgresBackend {
             ));
         }
 
-        mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Succeeded).await?;
+        let schedules_freed = mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Succeeded).await?;
 
         tx.commit().await?;
+
+        if schedules_freed {
+            self.new_pending_schedules.notify_waiters();
+        }
 
         Ok(())
     }
@@ -942,9 +1077,13 @@ impl Backend for PostgresBackend {
 
         let jobs = executions_failed(&tx, executions).await?;
 
-        mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Failed).await?;
+        let schedules_freed = mark_jobs_inactive(&tx, &jobs, ExecutionStatus::Failed).await?;
 
         tx.commit().await?;
+
+        if schedules_freed {
+            self.new_pending_schedules.notify_waiters();
+        }
 
         Ok(())
     }
@@ -985,6 +1124,8 @@ impl Backend for PostgresBackend {
         }
 
         tx.commit().await?;
+
+        self.notify_new_executions(new_executions.iter().map(|e| e.target_execution_time));
 
         Ok(())
     }
@@ -1066,6 +1207,10 @@ impl Backend for PostgresBackend {
                 };
 
                 tx.commit().await?;
+
+                // The connection must not be held while the consumer
+                // processes the batch, it might need connections as well.
+                drop(conn);
 
                 if rows.is_empty() {
                     break;
@@ -1161,36 +1306,36 @@ impl Backend for PostgresBackend {
                 deleted_rows += deleted;
             }
 
-            {
-                let tx = conn.transaction().await?;
-
-                let stmt = tx
-                    .prepare(
-                        r#"--sql
-                        DELETE FROM ora.job_type
-                        WHERE
-                            NOT EXISTS (
-                                SELECT FROM ora.job
-                                WHERE
-                                    ora.job.job_type_id = ora.job_type.id
-                            )
-                            AND NOT EXISTS (
-                                SELECT FROM ora.schedule
-                                WHERE
-                                    ora.schedule.job_template_job_type_id = ora.job_type.id                                
-                            )
-                        "#,
-                    )
-                    .await?;
-
-                tx.execute(&stmt, &[]).await?;
-
-                tx.commit().await?;
-            }
-
             if deleted_rows == 0 {
                 break;
             }
+        }
+
+        {
+            let tx = conn.transaction().await?;
+
+            let stmt = tx
+                .prepare(
+                    r#"--sql
+                    DELETE FROM ora.job_type
+                    WHERE
+                        NOT EXISTS (
+                            SELECT FROM ora.job
+                            WHERE
+                                ora.job.job_type_id = ora.job_type.id
+                        )
+                        AND NOT EXISTS (
+                            SELECT FROM ora.schedule
+                            WHERE
+                                ora.schedule.job_template_job_type_id = ora.job_type.id                                
+                        )
+                    "#,
+                )
+                .await?;
+
+            tx.execute(&stmt, &[]).await?;
+
+            tx.commit().await?;
         }
 
         Ok(())
@@ -1198,6 +1343,10 @@ impl Backend for PostgresBackend {
 
     async fn wait_for_pending_schedules(&self) -> crate::Result<()> {
         loop {
+            // Created before the query so that schedules
+            // becoming pending after the query still wake us up.
+            let new_pending_schedules = self.new_pending_schedules.notified();
+
             let mut conn = self.pool.get().await?;
 
             let has_pending = {
@@ -1228,7 +1377,10 @@ impl Backend for PostgresBackend {
                 break;
             }
 
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::select! {
+                () = new_pending_schedules => break,
+                () = tokio::time::sleep(self.poll_interval) => {}
+            }
         }
 
         Ok(())
@@ -1260,19 +1412,25 @@ async fn executions_failed(
         .await?;
 
     let mut col_execution_id = Vec::with_capacity(executions.len());
-    let mut col_succeeded_at = Vec::with_capacity(executions.len());
+    let mut col_failed_at = Vec::with_capacity(executions.len());
     let mut col_failure_reason = Vec::with_capacity(executions.len());
 
     for execution in executions {
         col_execution_id.push(execution.execution_id.0);
-        col_succeeded_at.push(systemtime_to_ts(execution.failed_at));
-        col_failure_reason.push(execution.failure_reason.as_str());
+        col_failed_at.push(systemtime_to_ts(execution.failed_at));
+        // Text can not contain NUL characters in Postgres,
+        // failure reasons are arbitrary and must not fail the update.
+        col_failure_reason.push(if execution.failure_reason.contains('\0') {
+            Cow::Owned(execution.failure_reason.replace('\0', "\u{FFFD}"))
+        } else {
+            Cow::Borrowed(execution.failure_reason.as_str())
+        });
     }
 
     let rows = tx
         .query(
             &stmt,
-            &[&col_execution_id, &col_succeeded_at, &col_failure_reason],
+            &[&col_execution_id, &col_failed_at, &col_failure_reason],
         )
         .await?;
 
@@ -1286,6 +1444,28 @@ async fn executions_failed(
     }
 
     Ok(jobs)
+}
+
+/// Advisory lock key serializing `add_jobs` calls with `if_not_exists`.
+const IF_NOT_EXISTS_JOBS_LOCK: i64 = 0x6f72_615f_6a6f_6273; // "ora_jobs"
+/// Advisory lock key serializing `add_schedules` calls with `if_not_exists`.
+const IF_NOT_EXISTS_SCHEDULES_LOCK: i64 = 0x6f72_615f_7363_6864; // "ora_schd"
+
+/// Take a transaction-level advisory lock, so that
+/// existence checks and inserts are not interleaved
+/// with concurrent transactions doing the same.
+async fn lock_if_not_exists(tx: &DbTransaction<'_>, key: i64) -> Result<()> {
+    let stmt = tx
+        .prepare(
+            r#"--sql
+            SELECT pg_advisory_xact_lock($1::BIGINT)
+            "#,
+        )
+        .await?;
+
+    tx.execute(&stmt, &[&key]).await?;
+
+    Ok(())
 }
 
 struct NewExecution {
@@ -1318,16 +1498,21 @@ async fn add_executions(tx: &DbTransaction<'_>, executions: &[NewExecution]) -> 
             INSERT INTO ora.execution (
                 id,
                 job_id,
-                target_execution_time
-            ) SELECT 
-                execution_id,
-                job_id,
-                to_timestamp(target_execution_time)
-             FROM UNNEST(
+                target_execution_time,
+                priority
+            ) SELECT
+                t.execution_id,
+                t.job_id,
+                to_timestamp(t.target_execution_time),
+                ora.job.priority
+            FROM UNNEST(
                 $1::UUID[],
                 $2::UUID[],
                 $3::DOUBLE PRECISION[]
             ) as t(execution_id, job_id, target_execution_time)
+            -- The priority is copied from the job so that
+            -- ready executions can be ordered efficiently.
+            JOIN ora.job ON ora.job.id = t.job_id
             "#,
         )
         .await?;
@@ -1342,13 +1527,15 @@ async fn add_executions(tx: &DbTransaction<'_>, executions: &[NewExecution]) -> 
 }
 
 /// Marks the jobs as finished with the given status.
+///
+/// Returns whether any schedules were left without an active job.
 async fn mark_jobs_inactive(
     tx: &DbTransaction<'_>,
     jobs: &[(JobId, SystemTime)],
     status: ExecutionStatus,
-) -> Result<()> {
+) -> Result<bool> {
     if jobs.is_empty() {
-        return Ok(());
+        return Ok(false);
     }
 
     let mut col_job_id = Vec::with_capacity(jobs.len());
@@ -1389,7 +1576,7 @@ async fn mark_jobs_inactive(
         .await?;
     }
 
-    {
+    let rows_affected = {
         let stmt = tx
             .prepare(
                 r#"--sql
@@ -1401,8 +1588,8 @@ async fn mark_jobs_inactive(
             )
             .await?;
 
-        tx.execute(&stmt, &[&col_job_id]).await?;
-    }
+        tx.execute(&stmt, &[&col_job_id]).await?
+    };
 
-    Ok(())
+    Ok(rows_affected > 0)
 }
