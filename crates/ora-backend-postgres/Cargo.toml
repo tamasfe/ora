@@ -1,6 +1,6 @@
 [package]
 name = "ora-backend-postgres"
-version = "0.12.11"
+version = "0.13.0"
 edition = "2024"
 publish.workspace = true
 description.workspace = true
@@ -15,7 +15,7 @@ async-stream = "0.3.6"
 base64 = "0.23.0"
 deadpool-postgres = "0.14.1"
 futures.workspace = true
-ora-backend = { version = "0.12.10", path = "../ora-backend" }
+ora-backend = { version = "0.13.0", path = "../ora-backend" }
 refinery = { version = "0.9.2", features = ["tokio-postgres-rustls"] }
 sea-query = { version = "1.0.0-rc.29", default-features = false, features = [
     "backend-postgres",
@@ -35,7 +35,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-ora-backend = { version = "0.12.8", path = "../ora-backend", features = ["test"] }
+ora-backend = { version = "0.13.0", path = "../ora-backend", features = ["test"] }
 
 [lints]
 workspace = true
