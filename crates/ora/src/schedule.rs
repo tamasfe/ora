@@ -79,6 +79,14 @@ impl<J> ScheduleDefinition<J> {
         self.job_template = self.job_template.with_retries(retries);
         self
     }
+
+    /// Set the priority of the jobs created by this schedule.
+    ///
+    /// See [`JobDefinition::with_priority`] for details.
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.job_template = self.job_template.with_priority(priority);
+        self
+    }
 }
 
 /// The scheduling policy of a schedule.

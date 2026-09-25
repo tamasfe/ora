@@ -1,6 +1,10 @@
 //! Ora executor implementation.
 
-use std::{pin::Pin, sync::Arc, time::SystemTime};
+use std::{
+    pin::Pin,
+    sync::{Arc, atomic::AtomicU64},
+    time::SystemTime,
+};
 
 use eyre::Context;
 use schemars::Schema;
@@ -26,6 +30,70 @@ pub type HandlerError = eyre::Report;
 /// The result type for executor handlers.
 pub type HandlerResult<T> = Result<T, HandlerError>;
 
+/// A guard that decides whether an execution
+/// offered by the server is accepted by the executor.
+///
+/// Rejected executions are not assigned to the executor,
+/// they remain pending and are offered again later
+/// to this or other executors. Rejections do not count
+/// as execution attempts.
+pub type ExecutionGuard =
+    Arc<dyn Fn(ExecutionContext) -> Pin<Box<dyn Future<Output = Admission> + Send>> + Send + Sync>;
+
+/// Create an [`ExecutionGuard`] from an async function.
+fn execution_guard<F, Fut>(guard: F) -> ExecutionGuard
+where
+    F: Fn(ExecutionContext) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Admission> + Send + 'static,
+{
+    Arc::new(move |ctx| Box::pin(guard(ctx)))
+}
+
+/// The decision of an [`ExecutionGuard`] whether an offered execution is accepted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub enum Admission {
+    /// The execution is accepted, it is assigned
+    /// to the executor and will be executed.
+    Accept,
+    /// The execution is rejected, it is not assigned
+    /// to the executor and remains pending.
+    Reject {
+        /// The reason for the rejection, if any.
+        reason: Option<String>,
+    },
+}
+
+impl Admission {
+    /// Reject the execution without a reason.
+    pub fn reject() -> Self {
+        Self::Reject { reason: None }
+    }
+
+    /// Reject the execution with the given reason.
+    pub fn reject_with(reason: impl Into<String>) -> Self {
+        Self::Reject {
+            reason: Some(reason.into()),
+        }
+    }
+
+    /// Accept the execution if the condition holds,
+    /// otherwise reject it without a reason.
+    pub fn accept_if(condition: bool) -> Self {
+        if condition {
+            Self::Accept
+        } else {
+            Self::reject()
+        }
+    }
+
+    /// Whether the execution is accepted.
+    #[must_use]
+    pub fn is_accept(&self) -> bool {
+        matches!(self, Self::Accept)
+    }
+}
+
 /// Executor options.
 pub struct ExecutorOptions {
     /// The name of the executor.
@@ -50,6 +118,7 @@ pub struct Executor<C> {
     options: ExecutorOptions,
     client: ExecutionServiceClient<C>,
     on_execution_failed: Option<ExecutionFailedCb>,
+    execution_guard: Option<ExecutionGuard>,
     queues: Vec<ExecutorJobQueue>,
 }
 
@@ -65,6 +134,7 @@ impl<C> Executor<C> {
             options,
             client,
             on_execution_failed: None,
+            execution_guard: None,
             queues: Vec::new(),
         }
     }
@@ -88,6 +158,28 @@ impl<C> Executor<C> {
     /// Set the name of the executor.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.options.name = name.into();
+        self
+    }
+
+    /// Set a guard that decides whether an execution
+    /// offered to the executor is accepted, regardless of the job type.
+    ///
+    /// The execution is accepted only if both this guard
+    /// and the guard of the handler (if any) accept it,
+    /// otherwise the execution is rejected and it is not assigned
+    /// to this executor.
+    ///
+    /// This can be used to reject executions while the executor
+    /// is not ready or unhealthy (e.g. a required service is unavailable).
+    ///
+    /// Only one guard can be set,
+    /// subsequent calls will overwrite any previous ones.
+    pub fn with_execution_guard<F, Fut>(mut self, guard: F) -> Self
+    where
+        F: Fn(ExecutionContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Admission> + Send + 'static,
+    {
+        self.execution_guard = Some(execution_guard(guard));
         self
     }
 
@@ -147,6 +239,8 @@ impl<C> Executor<C> {
 
         self.queues.push(ExecutorJobQueue {
             max_concurrent_jobs: options.max_concurrent,
+            active_jobs: AtomicU64::new(0),
+            execution_guard: options.execution_guard,
             job_type_id,
             input_schema,
             output_schema,
@@ -227,14 +321,50 @@ pub struct HandlerOptions {
     /// The maximum number of concurrent executions for this handler.
     /// Cannot be lower than 1 (default).
     ///
+    /// Executions offered beyond this limit are rejected.
+    ///
     /// Note that setting this value too high
     /// may lead to resource exhaustion.
     pub max_concurrent: u64,
+    /// A guard for executions of this handler,
+    /// see [`HandlerOptions::with_execution_guard`].
+    pub execution_guard: Option<ExecutionGuard>,
+}
+
+impl HandlerOptions {
+    /// Set the maximum number of concurrent executions for this handler.
+    #[must_use]
+    pub fn with_max_concurrent(mut self, max_concurrent: u64) -> Self {
+        self.max_concurrent = max_concurrent;
+        self
+    }
+
+    /// Set a guard that decides whether an execution
+    /// of this handler offered to the executor is accepted.
+    ///
+    /// If the guard rejects the execution,
+    /// it is not assigned to this executor.
+    ///
+    /// Any guard of the executor
+    /// (see [`Executor::with_execution_guard`]) is run before this one,
+    /// this guard is not run if that one rejected the execution.
+    #[must_use]
+    pub fn with_execution_guard<F, Fut>(mut self, guard: F) -> Self
+    where
+        F: Fn(ExecutionContext) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Admission> + Send + 'static,
+    {
+        self.execution_guard = Some(execution_guard(guard));
+        self
+    }
 }
 
 impl Default for HandlerOptions {
     fn default() -> Self {
-        Self { max_concurrent: 1 }
+        Self {
+            max_concurrent: 1,
+            execution_guard: None,
+        }
     }
 }
 
@@ -244,6 +374,14 @@ type ExecutionFailedCb = Arc<dyn Fn(ExecutionContext, &str) + Send + Sync>;
 struct ExecutorJobQueue {
     /// The maximum number of concurrent jobs.
     max_concurrent_jobs: u64,
+    /// The number of accepted jobs that are running
+    /// (or are being checked by execution guards).
+    ///
+    /// This is shared between connections, so that
+    /// jobs still running from earlier connections are counted.
+    active_jobs: AtomicU64,
+    /// The execution guard of the handler.
+    execution_guard: Option<ExecutionGuard>,
     /// The job type ID handled by this queue.
     job_type_id: JobTypeId,
     /// Input schema of the job type.

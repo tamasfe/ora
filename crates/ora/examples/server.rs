@@ -1,15 +1,20 @@
 //! A simple executable that starts the ora server with several executors and example job types.
 
+use axum::serve::ListenerExt;
 use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime, tokio_postgres::NoTls};
 use http::Method;
 use ora::{
     JobType,
-    executor::{Executor, HandlerOptions},
+    executor::{Admission, Executor, HandlerOptions},
     server::ServerHandleExt,
 };
 use ora_backend_postgres::PostgresBackend;
 use ora_server::{
-    ServerBuilder, ServerOptions, proto::admin::v1::admin_service_server::AdminServiceServer,
+    ServerBuilder, ServerOptions,
+    proto::{
+        admin::v1::admin_service_server::AdminServiceServer,
+        executors::v1::execution_service_server::ExecutionServiceServer,
+    },
 };
 use ora_ui::UiOptions;
 use schemars::JsonSchema;
@@ -58,13 +63,28 @@ struct RunUntil {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Registry::default()
         .with(tracing_subscriber::fmt::layer())
-        .with(tracing_subscriber::filter::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::filter::EnvFilter::builder()
+                .with_default_directive(Level::INFO.into())
+                .from_env_lossy(),
+        )
         .init();
 
     let server = ServerBuilder::new(create_backend().await, ServerOptions::default()).spawn();
 
     let _executor = Executor::new(server.execution_client())
         .with_name("in_process")
+        // Executions are rejected while the executor is paused,
+        // they remain pending and are executed once it is resumed.
+        //
+        // Pause the executor with `touch ora-executor-paused`.
+        .with_execution_guard(async |_ctx| {
+            if std::fs::exists("ora-executor-paused").unwrap_or_default() {
+                Admission::reject_with("executor is paused")
+            } else {
+                Admission::Accept
+            }
+        })
         .handler(async |_ctx, job: CountChars| Ok(job.value.chars().count().try_into().unwrap()))
         .handler(async |_ctx, job: RunUntil| {
             let now = std::time::SystemTime::now()
@@ -86,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 eyre::bail!("job is supposed to fail")
             },
-            HandlerOptions { max_concurrent: 10 },
+            HandlerOptions::default().with_max_concurrent(10),
         )
         .handler(async |ctx, job: SucceedAfter| {
             let attempt = ctx.attempt_number();
@@ -101,8 +121,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|_| "0.0.0.0:50051".into())
         .parse()?;
     let admin_service = AdminServiceServer::new(server.grpc());
+    let execution_service = ExecutionServiceServer::new(server.grpc());
 
     let app = tonic::service::Routes::new(admin_service)
+        .add_service(execution_service)
         .into_axum_router()
         .layer(GrpcWebLayer::new())
         .layer(
@@ -132,7 +154,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
 
     tracing::info!(%addr, "serving the API and the web UI at /ui");
-    axum::serve(tokio::net::TcpListener::bind(addr).await?, app).await?;
+    axum::serve(
+        tokio::net::TcpListener::bind(addr).await?.tap_io(|s| {
+            // useful for benchmarks or low-latency requirements
+            let _ = s.set_nodelay(true);
+        }),
+        app,
+    )
+    .await?;
 
     Ok(())
 }

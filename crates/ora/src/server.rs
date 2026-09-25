@@ -87,6 +87,7 @@ where
 
         let admin = self.grpc();
         let wg = self.add_wg_internal();
+        let executors_disconnected = self.executors_disconnected_internal();
 
         tokio::spawn(async move {
             let srv = tonic::transport::Server::builder()
@@ -95,10 +96,15 @@ where
                 )
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)));
 
-            let waiting = wg.waiting();
+            // Executors are given a grace period to finish
+            // their executions and report the results on shutdown.
+            let waiting = async {
+                wg.waiting().await;
+                executors_disconnected.await;
+            };
 
             tokio::select! {
-                _ = waiting => {}
+                () = waiting => {}
                 serve_result = srv => {
                     if let Err(error) = serve_result {
                         tracing::error!(?error, "error during admin service serve");

@@ -50,6 +50,13 @@ pub struct JobDefinition<J> {
     pub timeout_policy: TimeoutPolicy,
     /// The retry policy of the job.
     pub retry_policy: RetryPolicy,
+    /// The priority of the job.
+    ///
+    /// When executor capacity is limited, ready executions
+    /// of jobs with higher priority are scheduled first.
+    ///
+    /// The default priority is 0.
+    pub priority: i32,
 }
 
 impl<J> JobDefinition<J> {
@@ -61,6 +68,7 @@ impl<J> JobDefinition<J> {
             labels: BTreeMap::new(),
             timeout_policy: TimeoutPolicy::default(),
             retry_policy: RetryPolicy::default(),
+            priority: 0,
         }
     }
 
@@ -103,6 +111,18 @@ impl<J> JobDefinition<J> {
     ///
     pub fn with_retry_max_backoff(mut self, max_backoff_duration: Duration) -> Self {
         self.retry_policy.max_backoff_duration = Some(max_backoff_duration);
+        self
+    }
+
+    /// Set the priority of the job.
+    ///
+    /// When executor capacity is limited, ready executions
+    /// of jobs with higher priority are scheduled first.
+    /// Jobs with equal priority are scheduled in the order they were created.
+    ///
+    /// The default priority is 0, negative values are allowed.
+    pub fn with_priority(mut self, priority: i32) -> Self {
+        self.priority = priority;
         self
     }
 }

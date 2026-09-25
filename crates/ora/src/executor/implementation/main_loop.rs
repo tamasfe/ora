@@ -68,6 +68,7 @@ where
                     queues.clone(),
                     self.options.cancellation_grace_period,
                     self.on_execution_failed.clone(),
+                    self.execution_guard.clone(),
                     running_executions_group.add(),
                 ));
 
