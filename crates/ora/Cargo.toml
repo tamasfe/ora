@@ -69,6 +69,7 @@ axum = { version = "0.8.8", default-features = false, features = ["tokio", "http
 deadpool-postgres = "0.14.1"
 http = "1.4.0"
 ora-backend-postgres = { path = "../ora-backend-postgres" }
+ora-backend = { path = "../ora-backend" }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "net"] }
 tonic-web = "0.14.5"
 tower-http = { version = "0.7.1", features = ["cors", "trace"] }

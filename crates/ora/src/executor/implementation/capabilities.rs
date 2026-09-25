@@ -33,6 +33,7 @@ pub(super) async fn send_capabilities(
                     })
                 })
                 .collect::<crate::Result<Vec<_>>>()?,
+            execution_handshake: true,
         }))
         .await;
 

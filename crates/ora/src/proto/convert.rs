@@ -55,6 +55,8 @@ impl From<JobFilters> for proto::admin::v1::JobFilters {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            min_priority: value.min_priority,
+            max_priority: value.max_priority,
         }
     }
 }
@@ -263,7 +265,11 @@ impl From<SchedulingPolicy> for proto::schedules::v1::SchedulingPolicy {
             } => Self {
                 policy: Some(proto::schedules::v1::scheduling_policy::Policy::Interval(
                     proto::schedules::v1::SchedulingPolicyInterval {
-                        interval: Some(interval.try_into().unwrap()),
+                        // Intervals that are not representable are rejected by the server.
+                        interval: Some(interval.try_into().unwrap_or(prost_types::Duration {
+                            seconds: i64::MAX,
+                            nanos: 999_999_999,
+                        })),
                         immediate,
                         missed_time_policy: proto::schedules::v1::MissedTimePolicy::from(missed)
                             as i32,
@@ -374,6 +380,7 @@ where
                     .collect(),
                 timeout_policy: Some(schedule.job_template.timeout_policy.into()),
                 retry_policy: Some(schedule.job_template.retry_policy.into()),
+                priority: schedule.job_template.priority,
             }),
             labels: schedule
                 .labels
@@ -403,6 +410,7 @@ where
                 .collect(),
             timeout_policy: Some(job.timeout_policy.into()),
             retry_policy: Some(job.retry_policy.into()),
+            priority: job.priority,
         })
     }
 }

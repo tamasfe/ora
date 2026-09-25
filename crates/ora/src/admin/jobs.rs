@@ -247,6 +247,8 @@ impl AdminClient {
                     }
                     JobOrderBy::CreatedAtAsc => proto::admin::v1::JobOrderBy::CreatedAtAsc as i32,
                     JobOrderBy::CreatedAtDesc => proto::admin::v1::JobOrderBy::CreatedAtDesc as i32,
+                    JobOrderBy::PriorityAsc => proto::admin::v1::JobOrderBy::PriorityAsc as i32,
+                    JobOrderBy::PriorityDesc => proto::admin::v1::JobOrderBy::PriorityDesc as i32,
                 },
                 pagination: Some(PaginationOptions {
                     page_size,
@@ -400,6 +402,10 @@ pub struct JobFilters {
     pub labels: Option<Vec<LabelFilter>>,
     /// Filter by schedule IDs.
     pub schedule_ids: Option<Vec<ScheduleId>>,
+    /// Filter by minimum priority (inclusive).
+    pub min_priority: Option<i32>,
+    /// Filter by maximum priority (inclusive).
+    pub max_priority: Option<i32>,
 }
 
 impl JobFilters {
@@ -465,6 +471,10 @@ pub enum JobOrderBy {
     CreatedAtAsc,
     /// Order by creation time descending.
     CreatedAtDesc,
+    /// Order by priority ascending.
+    PriorityAsc,
+    /// Order by priority descending.
+    PriorityDesc,
 }
 
 /// A job in the ora scheduler.
@@ -820,6 +830,7 @@ where
                 .collect(),
             timeout_policy: job.timeout_policy.unwrap_or_default().into(),
             retry_policy: job.retry_policy.unwrap_or_default().into(),
+            priority: job.priority,
         })
     }
 
