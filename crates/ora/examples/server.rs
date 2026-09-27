@@ -1,10 +1,16 @@
 //! A simple executable that starts the ora server with several executors and example job types.
+//!
+//! Configuration via environment variables:
+//!
+//! - `ORA_ADDR`: the address to serve the API and the web UI on, `0.0.0.0:50051` by default.
+//! - `ORA_DATABASE_URL`: the Postgres database to use,
+//!   `postgresql://postgres:postgres@localhost:5432/postgres` by default.
 
 use axum::serve::ListenerExt;
 use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime, tokio_postgres::NoTls};
 use http::Method;
 use ora::{
-    JobType,
+    JobType, JobTypeId,
     executor::{Admission, Executor, HandlerOptions},
     server::ServerHandleExt,
 };
@@ -42,7 +48,7 @@ struct SucceedAfter {
     succeed_on_attempt: u64,
 }
 
-/// Always fail.
+/// Always fail, after running for 5 seconds.
 #[derive(Debug, JobType, Serialize, Deserialize, JsonSchema)]
 #[ora(namespace = "")]
 struct AlwaysFail {}
@@ -168,7 +174,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn create_backend() -> PostgresBackend {
     let mut cfg = Config::new();
-    cfg.url = Some("postgresql://postgres:postgres@localhost:5432/postgres".to_string());
+    cfg.url =
+        Some(std::env::var("ORA_DATABASE_URL").unwrap_or_else(|_| {
+            "postgresql://postgres:postgres@localhost:5432/postgres".to_string()
+        }));
     cfg.manager = Some(ManagerConfig {
         recycling_method: RecyclingMethod::Fast,
     });

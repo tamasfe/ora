@@ -25,6 +25,13 @@ const cronExamples = [
         <div class="flex flex-col gap-1">
           <label class="font-medium">Schedule labels</label>
           <LabelsInput v-model="draft.labels" />
+          <label class="mt-1 flex items-center gap-2">
+            <Checkbox v-model="draft.inheritLabels" binary />
+            <span>Jobs inherit schedule labels</span>
+          </label>
+          <small class="text-muted-color">
+            Labels set in the job template take precedence over schedule labels.
+          </small>
         </div>
 
         <SelectButton

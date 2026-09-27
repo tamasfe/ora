@@ -85,3 +85,12 @@ export function withLabelFilter(filters: LabelFilter[], filter: LabelFilter): La
 
   return filters.map((f, i) => (i === index ? filter : f));
 }
+
+/**
+ * Adds the parent's labels to the child's, keeping the child's labels for existing keys
+ * (the same way the server inherits schedule labels for jobs).
+ */
+export function inheritLabels(parent: LabelRow[], child: LabelRow[]): LabelRow[] {
+  const keys = new Set(child.map(label => label.key));
+  return [...child, ...parent.filter(label => !keys.has(label.key))];
+}

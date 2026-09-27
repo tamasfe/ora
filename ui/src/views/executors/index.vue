@@ -3,7 +3,7 @@ import { computed, ref } from "vue";
 import { useExecutors } from "../../util/data";
 import { executorLoad } from "../../util/executor";
 import { formatClock, formatCount, formatRelative, formatTimestamp } from "../../util/format";
-import { pageSizeOptions } from "../../util/pagination";
+import { pageSizeOptions, tableScrollHeight } from "../../util/pagination";
 import { usePolling } from "../../util/polling";
 import { param, useRouteQuery } from "../../util/query";
 import { useRefreshInterval, useSearchQuery } from "../../util/route";
@@ -46,6 +46,8 @@ const expandedRows = ref<Record<string, boolean>>({});
         paginator
         v-model:rows="rows"
         :rows-per-page-options="pageSizeOptions"
+        scrollable
+        :scroll-height="tableScrollHeight"
       >
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-2">

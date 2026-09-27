@@ -155,6 +155,13 @@ export function prettyJson(json?: string): string {
 }
 
 /**
+ * Cuts text longer than `max` characters, ending it with an ellipsis.
+ */
+export function truncateText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+/**
  * Shortens an ID for display.
  *
  * IDs are UUIDv7s where the leading characters are a timestamp

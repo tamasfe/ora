@@ -14,7 +14,7 @@ import { useOraAdminClient } from "../grpc";
 import { useLoader } from "../util";
 import { formatClock, formatCount, formatRelative, formatTimestamp } from "../util/format";
 import { withLabelFilter } from "../util/labels";
-import { pageSizeOptions, useTokenPagination } from "../util/pagination";
+import { pageSizeOptions, tableScrollHeight, useTokenPagination } from "../util/pagination";
 import { usePolling } from "../util/polling";
 import { param, useRouteQuery, useRouteQueryFields } from "../util/query";
 import {
@@ -255,6 +255,7 @@ defineExpose({ reload });
       :row-class="rowClass"
       :table-style="{ tableLayout: 'fixed', minWidth: compact ? '34rem' : '64rem' }"
       scrollable
+      :scroll-height="tableScrollHeight"
       @page="pagination.onPage"
     >
       <template v-if="!compact" #header>

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { BackoffStrategy } from "../api/ora/jobs/v1/job_pb";
 import { useExecutors, useJobTypes } from "../util/data";
-import { prettyJson } from "../util/format";
+import { prettyJson, truncateText } from "../util/format";
 import {
   backoffStrategyOptions,
   payloadTemplate,
@@ -24,6 +24,18 @@ const { byJobType, loaded: executorsLoaded } = useExecutors();
 const jobType = computed(() => byId.value.get(draft.value.jobTypeId));
 const inputSchema = computed(() => parseSchema(jobType.value?.inputSchemaJson));
 const validation = computed(() => validateJson(draft.value.payload, inputSchema.value));
+/** Virtual scrolling needs options of the same height, it is only used for long lists. */
+const virtualScroll = computed(() => jobTypes.value.length > 50);
+
+/**
+ * The fixed option height (5.75rem) with its padding, the virtual scroller sizes options to this.
+ * It does not account for gaps between options, so they are removed.
+ */
+const optionItemSize = 108;
+
+/** Descriptions in the options are cut short, the selected job type's is shown in full. */
+const maxOptionDescription = 160;
+
 const hasExecutor = computed(() => (byJobType.value.get(draft.value.jobTypeId)?.length ?? 0) > 0);
 
 // Replace the payload with the schema template when the job type changes,
@@ -77,20 +89,31 @@ const targetTimeOptions = [
         placeholder="Select a job type"
         filter
         :loading="!loaded"
-        :virtual-scroller-options="jobTypes.length > 50 ? { itemSize: 56 } : undefined"
+        :virtual-scroller-options="virtualScroll ? { itemSize: optionItemSize } : undefined"
+        :pt="{ list: { class: { 'gap-0!': virtualScroll } } }"
+        overlay-class="max-w-[min(48rem,calc(100vw-2rem))]"
         fluid
       >
         <template #option="{ option }">
-          <!-- Fixed height, as virtual scrolling needs items of the same size. -->
-          <div class="flex h-10 min-w-0 flex-col justify-center">
-            <span class="truncate font-mono">{{ option.id }}</span>
-            <span v-if="option.description" class="truncate text-sm text-muted-color">
-              {{ option.description }}
+          <!-- Up to two lines each for the ID and the description, options do not wrap by default. -->
+          <div
+            class="flex min-w-0 flex-col justify-center gap-0.5 whitespace-normal"
+            :class="{ 'h-[5.75rem]': virtualScroll }"
+          >
+            <BreakableText :text="option.id" class="line-clamp-2 font-mono" />
+            <span v-if="option.description" class="line-clamp-2 text-sm text-muted-color">
+              {{ truncateText(option.description, maxOptionDescription) }}
             </span>
           </div>
         </template>
       </Select>
-      <small v-if="jobType?.description" class="text-muted-color">{{ jobType.description }}</small>
+      <small
+        v-if="jobType?.description"
+        :title="jobType.description"
+        class="line-clamp-3 text-muted-color"
+      >
+        {{ jobType.description }}
+      </small>
       <Message
         v-if="draft.jobTypeId && executorsLoaded && !hasExecutor"
         severity="warn"

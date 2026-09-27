@@ -5,7 +5,7 @@ import { ScheduleStatus } from "../../api/ora/admin/v1/schedules_pb";
 import { useCountsInterval, useJobTypeCounts } from "../../util/counts";
 import { useExecutors, useJobTypes } from "../../util/data";
 import { formatClock, formatCompactCount, formatCount, shortId } from "../../util/format";
-import { pageSizeOptions } from "../../util/pagination";
+import { pageSizeOptions, tableScrollHeight } from "../../util/pagination";
 import { usePolling } from "../../util/polling";
 import { param, useRouteQuery } from "../../util/query";
 import { jobsLink, schedulesLink, useRefreshInterval, useSearchQuery } from "../../util/route";
@@ -73,6 +73,8 @@ function activeSchedules(jobTypeId: string) {
         v-model:rows="rows"
         v-model:first="first"
         :rows-per-page-options="pageSizeOptions"
+        scrollable
+        :scroll-height="tableScrollHeight"
       >
         <template #header>
           <div class="flex flex-wrap items-center justify-between gap-2">
@@ -125,20 +127,28 @@ function activeSchedules(jobTypeId: string) {
           </div>
         </template>
 
-        <Column header="ID">
+        <Column header="Job type">
           <template #body="{ data }">
-            <RouterLink
-              :to="`/job-types/${data.id}`"
-              class="font-mono text-primary hover:underline"
-            >
-              {{ data.id }}
-            </RouterLink>
+            <div class="flex min-w-48 max-w-md flex-col gap-0.5">
+              <RouterLink
+                :to="`/job-types/${data.id}`"
+                class="font-mono text-primary hover:underline"
+              >
+                <BreakableText :text="data.id" />
+              </RouterLink>
+              <span
+                v-if="data.description"
+                :title="data.description"
+                class="line-clamp-2 text-sm text-muted-color"
+              >
+                {{ data.description }}
+              </span>
+            </div>
           </template>
         </Column>
-        <Column header="Description" field="description" />
         <Column header="Executors">
           <template #body="{ data }">
-            <div class="flex flex-wrap items-center gap-1">
+            <div class="flex min-w-48 max-w-72 flex-col items-start gap-1">
               <RouterLink
                 v-for="executor in (executors.byJobType.value.get(data.id) ?? []).slice(
                   0,
@@ -146,12 +156,11 @@ function activeSchedules(jobTypeId: string) {
                 )"
                 :key="executor.id"
                 :to="`/executors/${executor.id}`"
+                class="max-w-full"
               >
-                <Tag
-                  :value="executor.name ?? shortId(executor.id)"
-                  severity="secondary"
-                  class="font-normal!"
-                />
+                <Tag severity="secondary" class="max-w-full font-normal!">
+                  <BreakableText :text="executor.name ?? shortId(executor.id)" separators="./-" />
+                </Tag>
               </RouterLink>
               <RouterLink
                 v-if="(executors.byJobType.value.get(data.id)?.length ?? 0) > maxExecutors"

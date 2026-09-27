@@ -4,6 +4,13 @@ import { formatCount } from "./format";
 
 export const pageSizeOptions = [10, 20, 50, 100];
 
+/**
+ * The maximum height of long tables, they scroll with a sticky header above this.
+ *
+ * Once the table is scrolled to the top of the viewport, the paginator below it still fits.
+ */
+export const tableScrollHeight = "max(20rem, calc(100dvh - 8rem))";
+
 interface PageState {
   /** The query (filters, ordering, page size) the pages belong to. */
   key: string;

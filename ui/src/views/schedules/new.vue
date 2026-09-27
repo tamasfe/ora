@@ -76,7 +76,6 @@ const problems = computed(() =>
 );
 const valid = computed(() => problems.value.every(p => p.length === 0));
 
-const inheritLabels = ref(true);
 const useIfNotExists = ref(false);
 const ifNotExists = ref(create(ScheduleFiltersSchema));
 
@@ -114,7 +113,8 @@ function buildRequest() {
   return create(AddSchedulesRequestSchema, {
     schedules: drafts.value.map(scheduleDraftToSchedule),
     ifNotExists: useIfNotExists.value ? ifNotExists.value : undefined,
-    inheritLabels: inheritLabels.value,
+    // Each draft adds the inherited labels to its job template, see `scheduleDraftToSchedule`.
+    inheritLabels: false,
   });
 }
 
@@ -240,11 +240,6 @@ async function submit() {
           <template #title>Submit</template>
           <template #content>
             <div class="flex flex-col gap-3">
-              <label class="flex items-center gap-2">
-                <ToggleSwitch v-model="inheritLabels" />
-                <span>Jobs inherit schedule labels</span>
-              </label>
-
               <Message v-if="valid" severity="success" size="small" variant="simple">
                 {{ drafts.length }} schedule(s) ready to be added.
               </Message>

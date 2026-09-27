@@ -14,7 +14,7 @@ import {
   newJobDraft,
   type JobDraft,
 } from "./job";
-import { labelsToRows, rowsToLabels, type LabelRow } from "./labels";
+import { inheritLabels, labelsToRows, rowsToLabels, type LabelRow } from "./labels";
 
 /**
  * An editable schedule definition.
@@ -27,6 +27,8 @@ export interface ScheduleDraft {
   missedTimePolicy: MissedTimePolicy;
   timeRange?: TimeRange;
   labels: LabelRow[];
+  /** Whether jobs created by the schedule get the schedule's labels. */
+  inheritLabels: boolean;
   job: JobDraft;
 }
 
@@ -38,6 +40,7 @@ export function newScheduleDraft(jobTypeId = ""): ScheduleDraft {
     immediate: false,
     missedTimePolicy: MissedTimePolicy.UNSPECIFIED,
     labels: [],
+    inheritLabels: true,
     job: newJobDraft(jobTypeId),
   };
 }
@@ -71,10 +74,17 @@ export function scheduleDraftFromSchedule(schedule: Schedule): ScheduleDraft {
   return draft;
 }
 
+/**
+ * Converts a draft to a schedule, with the schedule's labels already added
+ * to the job template if they are inherited.
+ */
 export function scheduleDraftToSchedule(
   draft: ScheduleDraft,
 ): MessageInitShape<typeof ScheduleSchema> {
   const common = { immediate: draft.immediate, missedTimePolicy: draft.missedTimePolicy };
+  const jobLabels = draft.inheritLabels
+    ? inheritLabels(draft.labels, draft.job.labels)
+    : draft.job.labels;
 
   return {
     scheduling: {
@@ -83,7 +93,7 @@ export function scheduleDraftToSchedule(
           ? { case: "interval", value: { interval: draft.interval, ...common } }
           : { case: "cron", value: { cronExpression: draft.cronExpression.trim(), ...common } },
     },
-    jobTemplate: jobDraftToJob({ ...draft.job, targetTimeMode: "now" }),
+    jobTemplate: jobDraftToJob({ ...draft.job, labels: jobLabels, targetTimeMode: "now" }),
     labels: rowsToLabels(draft.labels),
     timeRange: draft.timeRange,
   };

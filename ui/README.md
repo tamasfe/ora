@@ -9,6 +9,14 @@
 
 The development server talks to the API configured in `.env.development` (`VITE_ORA_API_URL`).
 
+The example server is configured with environment variables:
+
+- `ORA_ADDR`: the address to listen on, `0.0.0.0:50051` by default
+  (set `VITE_ORA_API_URL` to match when changing it).
+- `ORA_DATABASE_URL`: the Postgres database, `postgresql://postgres:postgres@localhost:5432/postgres` by default.
+
+It also registers job types and executors with long names, to see how the UI handles them.
+
 ## Proto Code Generation
 
 Run `buf generate ../proto` from this directory.
