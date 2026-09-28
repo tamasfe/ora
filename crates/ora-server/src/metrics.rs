@@ -23,6 +23,7 @@ pub(crate) const EXECUTIONS_FAILED_TOTAL: &str = "ora_executions_failed_total";
 pub(crate) const EXECUTIONS_RETRIED_TOTAL: &str = "ora_executions_retried_total";
 pub(crate) const EXECUTION_START_DELAY_SECONDS: &str = "ora_execution_start_delay_seconds";
 pub(crate) const EXECUTION_DURATION_SECONDS: &str = "ora_execution_duration_seconds";
+pub(crate) const EXECUTIONS_UNASSIGNED: &str = "ora_executions_unassigned";
 pub(crate) const EXECUTIONS_ACTIVE: &str = "ora_executions_active";
 pub(crate) const EXECUTOR_CAPACITY: &str = "ora_executor_capacity";
 pub(crate) const EXECUTORS_CONNECTED: &str = "ora_executors_connected";
@@ -135,6 +136,11 @@ pub(crate) fn describe() {
             EXECUTION_DURATION_SECONDS,
             Unit::Seconds,
             "The duration of finished executions, by job type and outcome (succeeded or failed)."
+        );
+        describe_gauge!(
+            EXECUTIONS_UNASSIGNED,
+            Unit::Count,
+            "The count of ready executions that are not yet assigned to any executor, by job type."
         );
         describe_gauge!(
             EXECUTIONS_ACTIVE,
@@ -310,15 +316,17 @@ pub(crate) async fn executor_pool_metrics_loop(executor_pool: ExecutorPool, wg: 
     }
 }
 
-/// Periodically count unfinished jobs in the backend.
+/// Periodically count unfinished jobs and unassigned executions in the backend.
 #[tracing::instrument(skip_all)]
 pub(crate) async fn job_counts_metrics_loop(
     backend: Arc<impl Backend>,
+    executor_pool: ExecutorPool,
     interval: Duration,
     wg: WaitGuard,
 ) {
     let mut pending = JobTypeGauges::new(JOBS).with_label("status", "pending");
     let mut in_progress = JobTypeGauges::new(JOBS).with_label("status", "in_progress");
+    let mut unassigned = JobTypeGauges::new(EXECUTIONS_UNASSIGNED);
 
     loop {
         match count_unfinished_jobs(&*backend).await {
@@ -329,6 +337,16 @@ pub(crate) async fn job_counts_metrics_loop(
             Err(error) => {
                 backend_error("count_jobs");
                 tracing::error!(%error, "failed to count jobs for metrics");
+            }
+        }
+
+        match backend.count_ready_executions().await {
+            Ok(ready_counts) => {
+                unassigned.set(unassigned_counts(ready_counts, &executor_pool));
+            }
+            Err(error) => {
+                backend_error("count_ready_executions");
+                tracing::error!(%error, "failed to count ready executions for metrics");
             }
         }
 
@@ -343,6 +361,25 @@ pub(crate) async fn job_counts_metrics_loop(
 }
 
 type JobCounts = HashMap<JobTypeId, f64>;
+
+/// Ready executions in the backend minus the ones
+/// already offered to (or accepted by) executors,
+/// as those are still pending in the backend.
+fn unassigned_counts(
+    ready_counts: Vec<(JobTypeId, u64)>,
+    executor_pool: &ExecutorPool,
+) -> JobCounts {
+    let in_flight = executor_pool.stats().in_flight_executions;
+
+    ready_counts
+        .into_iter()
+        .map(|(job_type_id, count)| {
+            #[allow(clippy::cast_precision_loss)]
+            let count = count as f64 - in_flight.get(&job_type_id).copied().unwrap_or_default();
+            (job_type_id, count.max(0.0))
+        })
+        .collect()
+}
 
 async fn count_unfinished_jobs<B: Backend>(
     backend: &B,

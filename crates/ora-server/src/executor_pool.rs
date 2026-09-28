@@ -460,16 +460,35 @@ impl ExecutorPool {
     /// Return a snapshot of executor and execution counts.
     pub(crate) fn stats(&self) -> ExecutorPoolStats {
         let executors = self.executors.lock().unwrap();
+        let accepted_executions = self.accepted_executions.lock().unwrap();
 
         let mut stats = ExecutorPoolStats {
             executor_count: executors.len(),
             active_executions: HashMap::new(),
+            in_flight_executions: HashMap::new(),
             capacity: HashMap::new(),
         };
 
         for queue in executors.iter().flat_map(|e| &e.job_queues) {
+            // Same as `in_flight_execution_ids`: still pending in the backend.
+            let in_flight_count = queue
+                .executions
+                .iter()
+                .filter(|execution| {
+                    !execution.is_accepted()
+                        || matches!(
+                            accepted_executions.executions.get(&execution.execution_id),
+                            Some(None)
+                        )
+                })
+                .count();
+
             #[allow(clippy::cast_precision_loss)]
             {
+                *stats
+                    .in_flight_executions
+                    .entry(queue.job_type.id.clone())
+                    .or_default() += in_flight_count as f64;
                 *stats
                     .active_executions
                     .entry(queue.job_type.id.clone())
@@ -584,6 +603,9 @@ pub(crate) struct ExecutorPoolStats {
     pub(crate) executor_count: usize,
     /// The count of assigned executions by job type.
     pub(crate) active_executions: HashMap<JobTypeId, f64>,
+    /// The count of executions offered to executors (or accepted)
+    /// that are not yet started in the backend, by job type.
+    pub(crate) in_flight_executions: HashMap<JobTypeId, f64>,
     /// The maximum concurrent executions by job type.
     pub(crate) capacity: HashMap<JobTypeId, f64>,
 }

@@ -30,7 +30,7 @@ pub struct ServerOptions {
     /// Defaults to 15 seconds.
     pub shutdown_grace_period: Duration,
     /// How often unfinished jobs are counted in the backend
-    /// for the `ora_jobs` metric.
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics.
     ///
     /// A zero duration disables counting.
     ///
@@ -81,7 +81,8 @@ impl<B> ServerBuilder<B> {
     }
 
     /// Set how often unfinished jobs are counted in the backend
-    /// for the `ora_jobs` metric, a zero duration disables counting.
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics,
+    /// a zero duration disables counting.
     ///
     /// Defaults to 15 seconds.
     pub fn job_count_metrics_interval(mut self, duration: Duration) -> Self {
