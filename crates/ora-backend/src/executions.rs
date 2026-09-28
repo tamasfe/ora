@@ -148,6 +148,8 @@ pub struct InProgressExecution {
     pub execution_id: ExecutionId,
     /// The job ID.
     pub job_id: JobId,
+    /// The job type ID.
+    pub job_type_id: JobTypeId,
     /// The executor ID handling the execution.
     pub executor_id: ExecutorId,
     /// The target execution time of the job.

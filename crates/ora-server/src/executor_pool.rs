@@ -9,7 +9,7 @@ use futures::{Stream, StreamExt};
 use ora_backend::{
     executions::{ExecutionId, ReadyExecution, StartedExecution},
     executors::ExecutorId,
-    jobs::{CancelledJob, JobId, JobType, RetryPolicy},
+    jobs::{CancelledJob, JobId, JobType, JobTypeId, RetryPolicy},
 };
 use rand::seq::SliceRandom;
 use tokio::{
@@ -22,6 +22,7 @@ use uuid::Uuid;
 use wgroup::{WaitGroupHandle, WaitGuard};
 
 use crate::{
+    metrics,
     proto::{
         admin,
         executors::v1::{
@@ -56,20 +57,14 @@ pub(crate) enum ExecutorEvent {
         job_types: Vec<JobType>,
     },
     ExecutionSucceeded {
-        job_id: JobId,
-        execution_id: ExecutionId,
+        execution: ExecutorExecution,
         timestamp: SystemTime,
         output_payload_json: String,
-        retry_policy: RetryPolicy,
-        attempt_number: u64,
     },
     ExecutionFailed {
-        job_id: JobId,
-        execution_id: ExecutionId,
+        execution: ExecutorExecution,
         timestamp: SystemTime,
         failure_reason: String,
-        retry_policy: RetryPolicy,
-        attempt_number: u64,
     },
     ExecutorDisconnected {
         executor: Executor,
@@ -325,12 +320,20 @@ impl ExecutorPool {
                 queue.add_execution(ExecutorExecution {
                     job_id: execution.job_id,
                     execution_id: execution.execution_id,
+                    job_type_id: execution.job_type_id.clone(),
                     retry_policy: execution.retry_policy.clone(),
                     attempt_number: execution.attempt_number,
                     state,
+                    started_at: SystemTime::now(),
                 });
 
                 offered.offered_count += 1;
+
+                metrics::execution_started(
+                    &execution.job_type_id,
+                    execution.target_execution_time,
+                    SystemTime::now(),
+                );
 
                 continue 'executions_loop;
             }
@@ -454,6 +457,31 @@ impl ExecutorPool {
             .collect()
     }
 
+    /// Return a snapshot of executor and execution counts.
+    pub(crate) fn stats(&self) -> ExecutorPoolStats {
+        let executors = self.executors.lock().unwrap();
+
+        let mut stats = ExecutorPoolStats {
+            executor_count: executors.len(),
+            active_executions: HashMap::new(),
+            capacity: HashMap::new(),
+        };
+
+        for queue in executors.iter().flat_map(|e| &e.job_queues) {
+            #[allow(clippy::cast_precision_loss)]
+            {
+                *stats
+                    .active_executions
+                    .entry(queue.job_type.id.clone())
+                    .or_default() += queue.executions.len() as f64;
+                *stats.capacity.entry(queue.job_type.id.clone()).or_default() +=
+                    queue.max_executions as f64;
+            }
+        }
+
+        stats
+    }
+
     /// Determine whether an executor with the given ID exists in the pool.
     #[must_use]
     pub(crate) fn executor_exists(&self, executor_id: &ExecutorId) -> bool {
@@ -548,6 +576,16 @@ impl ExecutorPool {
             self.executor_available.notify_waiters();
         }
     }
+}
+
+/// A snapshot of the executor pool state.
+pub(crate) struct ExecutorPoolStats {
+    /// The count of connected executors.
+    pub(crate) executor_count: usize,
+    /// The count of assigned executions by job type.
+    pub(crate) active_executions: HashMap<JobTypeId, f64>,
+    /// The maximum concurrent executions by job type.
+    pub(crate) capacity: HashMap<JobTypeId, f64>,
 }
 
 /// An executor in the executor pool.
@@ -710,9 +748,11 @@ impl ExecutorJobQueue {
 pub(crate) struct ExecutorExecution {
     pub(crate) job_id: JobId,
     pub(crate) execution_id: ExecutionId,
+    pub(crate) job_type_id: JobTypeId,
     pub(crate) retry_policy: RetryPolicy,
     pub(crate) attempt_number: u64,
     state: ExecutionState,
+    pub(crate) started_at: SystemTime,
 }
 
 impl ExecutorExecution {
@@ -1112,12 +1152,9 @@ async fn executor_loop(
 
                 if events
                     .send(ExecutorEvent::ExecutionSucceeded {
-                        job_id: execution.job_id,
-                        execution_id,
+                        execution,
                         timestamp,
                         output_payload_json: execution_succeeded.output_payload_json,
-                        retry_policy: execution.retry_policy,
-                        attempt_number: execution.attempt_number,
                     })
                     .is_err()
                 {
@@ -1165,12 +1202,9 @@ async fn executor_loop(
 
                 if events
                     .send(ExecutorEvent::ExecutionFailed {
-                        job_id: execution.job_id,
-                        execution_id,
+                        execution,
                         timestamp,
                         failure_reason: execution_failed.failure_reason,
-                        retry_policy: execution.retry_policy,
-                        attempt_number: execution.attempt_number,
                     })
                     .is_err()
                 {

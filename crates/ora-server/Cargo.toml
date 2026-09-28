@@ -28,6 +28,7 @@ async-stream = "0.3.6"
 jiff = "0.2.18"
 cronexpr = "1.4.0"
 either = "1.15.0"
+metrics = "0.24.6"
 
 [lints]
 workspace = true

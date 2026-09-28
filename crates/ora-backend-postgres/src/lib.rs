@@ -862,7 +862,8 @@ impl Backend for PostgresBackend {
                                 EXTRACT(EPOCH FROM ora.execution.started_at)::DOUBLE PRECISION,
                                 ora.job.timeout_policy_json,
                                 ora.job.retry_policy_json,
-                                (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id)
+                                (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
+                                ora.job.job_type_id
                             FROM
                                 ora.execution
                             JOIN ora.job ON
@@ -890,7 +891,8 @@ impl Backend for PostgresBackend {
                                 EXTRACT(EPOCH FROM ora.execution.started_at)::DOUBLE PRECISION,
                                 ora.job.timeout_policy_json,
                                 ora.job.retry_policy_json,
-                                (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id)
+                                (SELECT COUNT(*) FROM ora.execution ex WHERE ex.job_id = ora.job.id),
+                                ora.job.job_type_id
                             FROM
                                 ora.execution
                             JOIN ora.job ON
@@ -929,6 +931,7 @@ impl Backend for PostgresBackend {
                         timeout_policy: serde_json::from_str(&row.try_get::<_, String>(5)?)?,
                         retry_policy: serde_json::from_str(&row.try_get::<_, String>(6)?)?,
                         attempt_number: row.try_get::<_, i64>(7)? as u64,
+                        job_type_id: JobTypeId::new_unchecked(row.try_get::<_, String>(8)?),
                     });
                 }
 
