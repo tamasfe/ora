@@ -87,6 +87,7 @@ where
     if !options.job_count_metrics_interval.is_zero() {
         spawn(job_counts_metrics_loop(
             backend.clone(),
+            executor_pool.clone(),
             options.job_count_metrics_interval,
             handle.add_with("job_count_metrics"),
         ));

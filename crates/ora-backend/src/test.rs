@@ -126,6 +126,16 @@ async fn job_execution(backend: &impl Backend) {
             || (w[0].priority == w[1].priority && w[0].execution_id <= w[1].execution_id)
     }));
 
+    let mut ready_counts = backend.count_ready_executions().await.unwrap();
+    ready_counts.sort();
+    assert_eq!(
+        ready_counts,
+        [
+            (JobTypeId::new("DoSomething").unwrap(), 1),
+            (JobTypeId::new("DoSomething2").unwrap(), 1),
+        ]
+    );
+
     backend
         .executions_started(
             &ready_executions
@@ -145,6 +155,14 @@ async fn job_execution(backend: &impl Backend) {
         .await
         .unwrap();
     assert!(ready_executions_2.is_none());
+    assert!(
+        backend
+            .count_ready_executions()
+            .await
+            .unwrap()
+            .iter()
+            .all(|(_, count)| *count == 0)
+    );
 
     let in_progress_executions = pin!(backend.in_progress_executions())
         .try_next()

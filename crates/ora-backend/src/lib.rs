@@ -10,7 +10,9 @@ use crate::{
         ExecutionId, FailedExecution, InProgressExecution, ReadyExecution, RetriedExecution,
         StartedExecution, SucceededExecution,
     },
-    jobs::{AddedJobs, CancelledJob, JobDetails, JobFilters, JobOrderBy, JobType, NewJob},
+    jobs::{
+        AddedJobs, CancelledJob, JobDetails, JobFilters, JobOrderBy, JobType, JobTypeId, NewJob,
+    },
     schedules::{
         AddedSchedules, PendingSchedule, ScheduleDefinition, ScheduleDetails, ScheduleFilters,
         ScheduleOrderBy, StoppedSchedule,
@@ -128,6 +130,17 @@ pub trait Backend: Send + Sync + 'static {
         &self,
         ignore: &[ExecutionId],
     ) -> impl Stream<Item = Result<Vec<ReadyExecution>, Self::Error>> + Send;
+
+    /// Count the ready executions grouped by job type.
+    ///
+    /// Ready executions are the same as the ones returned by
+    /// [`Backend::ready_executions`]: pending executions
+    /// whose target execution time has passed.
+    ///
+    /// Job types without ready executions may be omitted.
+    fn count_ready_executions(
+        &self,
+    ) -> impl Future<Output = Result<Vec<(JobTypeId, u64)>, Self::Error>> + Send;
 
     /// Wait for executions to be ready.
     ///
