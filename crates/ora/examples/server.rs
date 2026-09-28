@@ -9,6 +9,7 @@
 use axum::serve::ListenerExt;
 use deadpool_postgres::{Config, ManagerConfig, RecyclingMethod, Runtime, tokio_postgres::NoTls};
 use http::Method;
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder};
 use ora::{
     JobType, JobTypeId,
     executor::{Admission, Executor, HandlerOptions},
@@ -76,6 +77,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    let metrics = PrometheusBuilder::new()
+        .set_buckets_for_metric(
+            Matcher::Suffix("_seconds".into()),
+            &[
+                0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, 30.0, 60.0, 300.0, 900.0, 3600.0,
+            ],
+        )?
+        .install_recorder()?;
+
     let server = ServerBuilder::new(create_backend().await, ServerOptions::default()).spawn();
 
     let _executor = Executor::new(server.execution_client())
@@ -141,6 +151,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .level(Level::INFO)
                         .latency_unit(LatencyUnit::Micros),
                 ),
+        )
+        .route(
+            "/metrics",
+            axum::routing::get(move || std::future::ready(metrics.render())),
         )
         .route(
             "/",
