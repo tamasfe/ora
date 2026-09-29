@@ -57,6 +57,11 @@ pub(super) enum AppEvent {
     ExecutorsUpdated(Vec<ExecutorInfo>),
     /// The jobs of one executor, carrying the executor ID they belong to.
     ExecutorJobsUpdated(String, Vec<Job>),
+    /// How many jobs have each status, in the order of
+    /// [`JOB_COUNT_STATUSES`](super::data::JOB_COUNT_STATUSES).
+    ///
+    /// Carries the token of the request it answers.
+    JobCountsUpdated(u64, [u64; 5]),
     /// A background request failed, the message is shown in the
     /// footer. Carries the request's token, where it has one.
     Failed(Request, String, Option<u64>),
@@ -78,6 +83,7 @@ pub(super) enum Request {
     Schedules,
     Executors,
     ExecutorJobs,
+    JobCounts,
     /// A cancel or stop request, which has no table of its own.
     Action,
 }

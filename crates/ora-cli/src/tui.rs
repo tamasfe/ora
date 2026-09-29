@@ -20,6 +20,10 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 /// How often data is refreshed in the background.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
+/// How often the job counts are refreshed in the background, which
+/// can take a while on a large table.
+const COUNT_INTERVAL: Duration = Duration::from_secs(30);
+
 mod data;
 mod events;
 mod ui;
@@ -267,9 +271,12 @@ pub(crate) struct Pending {
     schedules: Counter,
     executors: Counter,
     executor_jobs: Counter,
+    job_counts: Counter,
 }
 
 impl Pending {
+    /// The requests the loading indicator waits for. The job counts
+    /// show their own wait, they are never what the rows wait for.
     fn counters(&self) -> [&Counter; 5] {
         [
             &self.job_types,
@@ -304,6 +311,7 @@ impl Pending {
             Request::Schedules => &mut self.schedules,
             Request::Executors => &mut self.executors,
             Request::ExecutorJobs => &mut self.executor_jobs,
+            Request::JobCounts => &mut self.job_counts,
             Request::Action => return,
         };
 
@@ -341,6 +349,11 @@ pub struct App {
     schedule_status: ScheduleStatus,
     /// The schedule the jobs tab is narrowed to, if any.
     pub(crate) job_schedule: Option<ora::schedule::ScheduleId>,
+    /// How many of the jobs tab's jobs have each status, whatever
+    /// status it is filtered by.
+    pub(crate) job_counts: Option<[u64; 5]>,
+    /// When the job counts were last asked for.
+    counted_at: Option<Instant>,
 }
 
 impl App {
@@ -369,6 +382,8 @@ impl App {
             job_status: JobStatus::default(),
             schedule_status: ScheduleStatus::default(),
             job_schedule: None,
+            job_counts: None,
+            counted_at: None,
         }
     }
 
@@ -423,7 +438,7 @@ impl App {
         // nothing while there is nothing pending to show one for.
         if let AppEvent::Tick = event {
             self.spinner = self.spinner.wrapping_add(1);
-            return Ok(self.pending.waited().is_some());
+            return Ok(self.pending.waited().is_some() || !self.pending.job_counts.idle());
         }
 
         match event {
@@ -540,6 +555,13 @@ impl App {
                     self.refresh_detail();
                 }
             }
+            AppEvent::JobCountsUpdated(token, counts) => {
+                if self.pending.job_counts.accepts(token) {
+                    self.pending.job_counts.finish();
+                    self.job_counts = Some(counts);
+                    self.answered();
+                }
+            }
             AppEvent::Created => {
                 self.form = None;
                 self.reload();
@@ -558,6 +580,7 @@ impl App {
                 let accepted = match (request, token) {
                     (Request::Jobs, Some(token)) => self.pending.jobs.accepts(token),
                     (Request::Schedules, Some(token)) => self.pending.schedules.accepts(token),
+                    (Request::JobCounts, Some(token)) => self.pending.job_counts.accepts(token),
                     _ => true,
                 };
 
@@ -843,6 +866,12 @@ impl App {
                         None,
                     )));
                 }
+
+                if force {
+                    self.counted_at = None;
+                }
+
+                self.fetch_job_counts();
             }
             (Tab::Schedules, Some(_)) => {
                 if force
@@ -887,6 +916,29 @@ impl App {
         }
     }
 
+    /// Count the jobs tab's jobs by status, unless counted recently.
+    fn fetch_job_counts(&mut self) {
+        let due = self
+            .counted_at
+            .is_none_or(|at| at.elapsed() >= COUNT_INTERVAL);
+
+        if !due || !self.pending.job_counts.idle() || self.job_type_list.state.selected().is_none()
+        {
+            return;
+        }
+
+        let token = self.pending.job_counts.next_token();
+        self.counted_at = Some(Instant::now());
+        self.pending.job_counts.start(spawn(data::count_jobs(
+            token,
+            self.selected_job_type(),
+            self.client.clone(),
+            self.events.sender(),
+            self.label_filter(Tab::Jobs).to_string(),
+            self.job_schedule,
+        )));
+    }
+
     /// Drop the rows of the active tab and fetch again.
     ///
     /// Used whenever its filters change, so that rows matching the
@@ -913,6 +965,9 @@ impl App {
     fn invalidate(&mut self) {
         self.pending.jobs.cancel();
         self.pending.schedules.cancel();
+        self.pending.job_counts.cancel();
+        self.job_counts = None;
+        self.counted_at = None;
         self.status.error = None;
     }
 

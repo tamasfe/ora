@@ -90,6 +90,44 @@ pub(super) async fn update_jobs(
     let _ = events.send_async(event).await;
 }
 
+/// The statuses the jobs are counted by, in the order they are shown.
+pub(super) const JOB_COUNT_STATUSES: [ExecutionStatus; 5] = [
+    ExecutionStatus::Pending,
+    ExecutionStatus::InProgress,
+    ExecutionStatus::Succeeded,
+    ExecutionStatus::Failed,
+    ExecutionStatus::Cancelled,
+];
+
+/// Count the jobs matching the jobs tab's filters by status.
+pub(super) async fn count_jobs(
+    token: u64,
+    job_type: Option<JobTypeId>,
+    admin: AdminClient,
+    events: Sender<AppEvent>,
+    label_filter: String,
+    schedule: Option<ScheduleId>,
+) {
+    let counts = JOB_COUNT_STATUSES.map(|status| {
+        admin.count_jobs(JobFilters {
+            job_type_ids: job_type.clone().map(|job_type| vec![job_type]),
+            schedule_ids: schedule.map(|schedule| vec![schedule]),
+            labels: parse_label_filter(&label_filter),
+            execution_statuses: Some(vec![status]),
+            ..Default::default()
+        })
+    });
+
+    let event = match request("job counts", futures::future::try_join_all(counts)).await {
+        Ok(counts) => {
+            AppEvent::JobCountsUpdated(token, counts.try_into().expect("one count per status"))
+        }
+        Err(error) => AppEvent::Failed(Request::JobCounts, error, Some(token)),
+    };
+
+    let _ = events.send_async(event).await;
+}
+
 pub(super) async fn update_schedules(
     token: u64,
     job_type: Option<JobTypeId>,
