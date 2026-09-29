@@ -49,6 +49,10 @@ impl Widget for &mut App {
         self.schedule_table.loading = self.pending.for_tab(Tab::Schedules);
         self.executor_table.loading = self.pending.for_tab(Tab::Executors);
 
+        let all_types = self.job_type_list.all_selected();
+        self.job_table.all_types = all_types;
+        self.schedule_table.all_types = all_types;
+
         match self.tab {
             Tab::Jobs => {
                 let [left, right] = job_type_layout(self.job_type_list.max_width()).areas(content);

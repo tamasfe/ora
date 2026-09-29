@@ -399,6 +399,8 @@ impl App {
         });
 
         self.job_type_list.focused = true;
+        // All job types are listed without waiting for the list of them.
+        self.job_type_list.state.select(Some(0));
         self.fetch(true);
         self.running = true;
         terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
@@ -448,7 +450,9 @@ impl App {
                         .iter()
                         .position(|job_type| job_type.id == selected);
 
-                    self.job_type_list.state.select(moved);
+                    self.job_type_list
+                        .state
+                        .select(moved.map(|index| index + 1));
                 }
 
                 let prev_selection = self.job_type_list.state.selected();
@@ -818,8 +822,10 @@ impl App {
             )));
         }
 
-        match (self.tab, self.selected_job_type()) {
-            (Tab::Jobs, Some(job_type_id)) => {
+        let job_type_id = self.selected_job_type();
+
+        match (self.tab, self.job_type_list.state.selected()) {
+            (Tab::Jobs, Some(_)) => {
                 // Refreshing on the timer would drop every page loaded
                 // past the first, so once one is loaded the table is
                 // only refreshed when asked for.
@@ -838,7 +844,7 @@ impl App {
                     )));
                 }
             }
-            (Tab::Schedules, Some(job_type_id)) => {
+            (Tab::Schedules, Some(_)) => {
                 if force
                     || (self.pending.schedules.idle() && self.schedule_table.pages <= AUTO_PAGES)
                 {
@@ -940,12 +946,7 @@ impl App {
 
     /// The job type used to filter the jobs and schedules tabs.
     fn selected_job_type(&self) -> Option<ora::JobTypeId> {
-        self.job_type_list.state.selected().and_then(|index| {
-            self.job_type_list
-                .job_types
-                .get(index)
-                .map(|jt| jt.id.clone())
-        })
+        self.job_type_list.selected().map(|jt| jt.id.clone())
     }
 
     /// Move the selection in whichever list has focus.
@@ -957,6 +958,12 @@ impl App {
                 self.job_type_list.state.select_next();
             } else {
                 self.job_type_list.state.select_previous();
+            }
+
+            // Past the last job type would be taken for the entry for all of them.
+            let last = self.job_type_list.job_types.len();
+            if self.job_type_list.state.selected() > Some(last) {
+                self.job_type_list.state.select(Some(last));
             }
 
             self.job_type_selected(previous, self.job_type_list.state.selected());
@@ -1221,9 +1228,11 @@ impl App {
             return;
         }
 
-        let Some(job_type_id) = self.selected_job_type() else {
+        if self.job_type_list.state.selected().is_none() {
             return;
-        };
+        }
+
+        let job_type_id = self.selected_job_type();
 
         let token = self.pending.jobs.next_token();
         self.pending.jobs.start(spawn(data::update_jobs(
@@ -1245,9 +1254,11 @@ impl App {
             return;
         }
 
-        let Some(job_type_id) = self.selected_job_type() else {
+        if self.job_type_list.state.selected().is_none() {
             return;
-        };
+        }
+
+        let job_type_id = self.selected_job_type();
 
         let token = self.pending.schedules.next_token();
         self.pending.schedules.start(spawn(data::update_schedules(
@@ -1288,8 +1299,7 @@ impl App {
             return None;
         }
 
-        let index = self.job_type_list.state.selected()?;
-        let job_type = self.job_type_list.job_types.get(index)?;
+        let job_type = self.job_type_list.selected()?;
 
         let kind = if self.tab == Tab::Jobs {
             ui::FormKind::Job

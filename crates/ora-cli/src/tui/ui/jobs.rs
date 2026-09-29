@@ -27,6 +27,8 @@ const PAYLOAD_SCROLL_STEP: u16 = 3;
 pub(crate) struct JobTable {
     pub(crate) focused: bool,
     pub(crate) loading: bool,
+    /// Whether the rows are of every job type, so each has to say which.
+    pub(crate) all_types: bool,
     pub(crate) state: TableState,
     pub(crate) jobs: Vec<Job>,
     /// The token for the page after the rows held here, when the
@@ -134,12 +136,12 @@ impl Widget for &mut JobTable {
             self.payload_job_id = selected.map(|job| job.id.clone());
         }
 
-        JobDetails(selected, self.payload_scroll).render(right, buf);
+        JobDetails(selected, self.payload_scroll, self.all_types).render(right, buf);
     }
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct JobDetails<'a>(Option<&'a Job>, u16);
+pub(crate) struct JobDetails<'a>(Option<&'a Job>, u16, bool);
 
 impl Widget for JobDetails<'_> {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
@@ -163,10 +165,13 @@ impl Widget for JobDetails<'_> {
             return;
         };
 
-        let mut meta = vec![
-            field("ID", job.id.clone()),
-            field("Created", format_time_with_age(job.created_at)),
-        ];
+        let mut meta = vec![field("ID", job.id.clone())];
+
+        if self.2 {
+            meta.push(field("Type", def.job_type_id.clone()));
+        }
+
+        meta.push(field("Created", format_time_with_age(job.created_at)));
 
         meta.push(
             match job

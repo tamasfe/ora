@@ -1,5 +1,6 @@
 use ora::admin::job_types::JobTypeInfo;
 use ratatui::{
+    layout::{Constraint, Layout},
     style::{
         Modifier, Style,
         palette::tailwind::{self, SLATE},
@@ -15,6 +16,9 @@ use crate::tui::ui::empty_message;
 /// Keeps the column wide enough for the placeholder message while the
 /// job types are still loading or failed to load.
 const MIN_WIDTH: u16 = 16;
+
+/// The first entry, which lists the jobs and schedules of every job type.
+const ALL: &str = "(all)";
 
 #[derive(Debug, Default)]
 pub(crate) struct JobTypeList {
@@ -32,6 +36,16 @@ impl JobTypeList {
             .max()
             .unwrap_or(0)
             .clamp(MIN_WIDTH, 50)
+    }
+
+    /// The highlighted job type, `None` on the entry for all of them.
+    pub(crate) fn selected(&self) -> Option<&JobTypeInfo> {
+        self.job_types.get(self.state.selected()?.checked_sub(1)?)
+    }
+
+    /// Whether the entry for all job types is highlighted.
+    pub(crate) fn all_selected(&self) -> bool {
+        self.state.selected() == Some(0)
     }
 }
 
@@ -55,10 +69,12 @@ impl Widget for &mut JobTypeList {
 
         let inner = block.inner(area);
 
-        let items = self
-            .job_types
-            .iter()
-            .map(|job_type| ListItem::new(job_type.id.as_str()))
+        let items = std::iter::once(ListItem::new(ALL))
+            .chain(
+                self.job_types
+                    .iter()
+                    .map(|job_type| ListItem::new(job_type.id.as_str())),
+            )
             .collect::<Vec<_>>();
 
         let list = List::new(items)
@@ -70,7 +86,9 @@ impl Widget for &mut JobTypeList {
         StatefulWidget::render(list, area, buf, &mut self.state);
 
         if self.job_types.is_empty() {
-            empty_message(self.loading, "No job types.", inner, buf);
+            let [_, below_all] =
+                Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+            empty_message(self.loading, "No job types.", below_all, buf);
         }
     }
 }

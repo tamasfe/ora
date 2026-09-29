@@ -53,7 +53,7 @@ pub(super) async fn update_job_types(admin: AdminClient, events: Sender<AppEvent
 
 pub(super) async fn update_jobs(
     token: u64,
-    job_type: JobTypeId,
+    job_type: Option<JobTypeId>,
     order: ora::JobOrderBy,
     statuses: Option<Vec<ExecutionStatus>>,
     admin: AdminClient,
@@ -63,7 +63,7 @@ pub(super) async fn update_jobs(
     page_token: Option<String>,
 ) {
     let filters = JobFilters {
-        job_type_ids: Some(vec![job_type]),
+        job_type_ids: job_type.map(|job_type| vec![job_type]),
         schedule_ids: schedule.map(|schedule| vec![schedule]),
         labels: parse_label_filter(&label_filter),
         execution_statuses: statuses,
@@ -92,7 +92,7 @@ pub(super) async fn update_jobs(
 
 pub(super) async fn update_schedules(
     token: u64,
-    job_type: JobTypeId,
+    job_type: Option<JobTypeId>,
     order: ScheduleOrderBy,
     statuses: Option<Vec<ScheduleStatus>>,
     admin: AdminClient,
@@ -101,7 +101,7 @@ pub(super) async fn update_schedules(
     page_token: Option<String>,
 ) {
     let filters = ScheduleFilters {
-        job_type_ids: Some(vec![job_type]),
+        job_type_ids: job_type.map(|job_type| vec![job_type]),
         labels: parse_label_filter(&label_filter),
         statuses,
         ..Default::default()
