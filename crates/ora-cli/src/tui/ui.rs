@@ -486,9 +486,12 @@ pub(super) fn execution_status_label(status: ExecutionStatus) -> &'static str {
 pub(super) fn execution_status_style(status: ExecutionStatus) -> Style {
     match status {
         ExecutionStatus::Succeeded => Style::new().fg(tailwind::GREEN.c400),
-        ExecutionStatus::Failed | ExecutionStatus::Cancelled => Style::new().fg(tailwind::RED.c400),
+        ExecutionStatus::Failed => Style::new().fg(tailwind::RED.c400),
         ExecutionStatus::InProgress => Style::new().fg(tailwind::YELLOW.c400),
-        _ => Style::new().fg(tailwind::GRAY.c400),
+        ExecutionStatus::Unspecified | ExecutionStatus::Pending => {
+            Style::new().fg(tailwind::SKY.c400)
+        }
+        ExecutionStatus::Cancelled => Style::new().fg(tailwind::GRAY.c400),
     }
 }
 
