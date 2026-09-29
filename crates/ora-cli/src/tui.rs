@@ -1462,16 +1462,43 @@ fn policies(
             .map_err(|error| format!("invalid retries: {error}"))?
     };
 
+    let base_time = match form.option("timeout_base").as_str() {
+        "target" => ora::proto::jobs::v1::TimeoutBaseTime::TargetExecutionTime,
+        _ => ora::proto::jobs::v1::TimeoutBaseTime::StartTime,
+    };
+
+    let backoff_strategy = match form.option("backoff_strategy").as_str() {
+        "exponential" => ora::proto::jobs::v1::BackoffStrategy::Exponential,
+        _ => ora::proto::jobs::v1::BackoffStrategy::Fixed,
+    };
+
     Ok((
         ora::proto::jobs::v1::TimeoutPolicy {
             timeout: timeout.and_then(|d| d.try_into().ok()),
-            base_time: ora::proto::jobs::v1::TimeoutBaseTime::StartTime as _,
+            base_time: base_time as _,
         },
         ora::proto::jobs::v1::RetryPolicy {
             retries,
-            ..Default::default()
+            backoff_duration: duration_option(form, "backoff", "retry backoff")?
+                .and_then(|d| d.try_into().ok()),
+            max_backoff_duration: duration_option(form, "max_backoff", "max backoff")?
+                .and_then(|d| d.try_into().ok()),
+            backoff_strategy: backoff_strategy as _,
         },
     ))
+}
+
+/// An option field parsed as a duration, `None` when it is empty.
+fn duration_option(form: &ui::Form, key: &str, name: &str) -> Result<Option<Duration>, String> {
+    let text = form.option(key);
+
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+
+    humantime::parse_duration(text.trim())
+        .map(Some)
+        .map_err(|error| format!("invalid {name}: {error}"))
 }
 
 /// The priority option every job and schedule shares.
@@ -1502,8 +1529,34 @@ fn fill_policies(
         form.set_option("timeout", humantime::format_duration(timeout).to_string());
     }
 
+    if timeout.is_some_and(|policy| {
+        policy.base_time() == ora::proto::jobs::v1::TimeoutBaseTime::TargetExecutionTime
+    }) {
+        form.set_option_choice("timeout_base", "target");
+    }
+
     if let Some(retries) = retry.map(|policy| policy.retries).filter(|r| *r > 0) {
         form.set_option("retries", retries.to_string());
+    }
+
+    let Some(retry) = retry else {
+        return;
+    };
+
+    for (key, duration) in [
+        ("backoff", retry.backoff_duration),
+        ("max_backoff", retry.max_backoff_duration),
+    ] {
+        if let Some(duration) = duration
+            .and_then(|duration| std::time::Duration::try_from(duration).ok())
+            .filter(|duration| !duration.is_zero())
+        {
+            form.set_option(key, humantime::format_duration(duration).to_string());
+        }
+    }
+
+    if retry.backoff_strategy() == ora::proto::jobs::v1::BackoffStrategy::Exponential {
+        form.set_option_choice("backoff_strategy", "exponential");
     }
 }
 
@@ -1548,6 +1601,28 @@ fn fill_from_schedule(form: &mut ui::Form, schedule: &ora::proto::schedules::v1:
         }
         None => {}
     }
+
+    let missed = match schedule.scheduling.as_ref().and_then(|s| s.policy.as_ref()) {
+        Some(Policy::Cron(cron)) => cron.missed_time_policy(),
+        Some(Policy::Interval(interval)) => interval.missed_time_policy(),
+        None => ora::proto::schedules::v1::MissedTimePolicy::Unspecified,
+    };
+
+    if missed == ora::proto::schedules::v1::MissedTimePolicy::Create {
+        form.set_option_choice("missed", "create");
+    }
+
+    // A past start would have the copy create the jobs of every time it missed since.
+    if let Some(range) = schedule.time_range.as_ref() {
+        for (key, time) in [("start", range.start), ("end", range.end)] {
+            if let Some(time) = time
+                .and_then(ui::timestamp_of)
+                .filter(|time| *time > jiff::Timestamp::now())
+            {
+                form.set_option(key, time.to_string());
+            }
+        }
+    }
 }
 
 fn label_rows(labels: &[ora::proto::common::v1::Label]) -> Vec<(String, String)> {
@@ -1584,13 +1659,18 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
     let interval = form.option("interval");
     let immediate = form.option_bool("immediate");
 
+    let missed_time_policy = match form.option("missed").as_str() {
+        "create" => ora::proto::schedules::v1::MissedTimePolicy::Create,
+        _ => ora::proto::schedules::v1::MissedTimePolicy::Skip,
+    };
+
     let policy = if !cron.trim().is_empty() {
         ui::parse_cron(&cron).map_err(|error| format!("invalid cron: {error}"))?;
 
         Policy::Cron(SchedulingPolicyCron {
             cron_expression: cron.trim().to_string(),
             immediate,
-            ..Default::default()
+            missed_time_policy: missed_time_policy as _,
         })
     } else if !interval.trim().is_empty() {
         let interval = humantime::parse_duration(interval.trim())
@@ -1599,7 +1679,7 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
         Policy::Interval(SchedulingPolicyInterval {
             interval: interval.try_into().ok(),
             immediate,
-            ..Default::default()
+            missed_time_policy: missed_time_policy as _,
         })
     } else {
         return Err("a cron expression or an interval is required".to_string());
@@ -1621,6 +1701,13 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
             priority: priority(form)?,
         }),
         labels: parse_labels(&form.pairs_option("labels")),
-        time_range: None,
+        time_range: Some(ora::proto::common::v1::TimeRange {
+            start: form
+                .time_option("start")?
+                .map(|time| std::time::SystemTime::from(time).into()),
+            end: form
+                .time_option("end")?
+                .map(|time| std::time::SystemTime::from(time).into()),
+        }),
     })
 }
