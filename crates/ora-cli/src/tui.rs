@@ -339,6 +339,8 @@ pub struct App {
     label_filters: [String; 3],
     job_status: JobStatus,
     schedule_status: ScheduleStatus,
+    /// The schedule the jobs tab is narrowed to, if any.
+    pub(crate) job_schedule: Option<ora::schedule::ScheduleId>,
 }
 
 impl App {
@@ -366,6 +368,7 @@ impl App {
             label_filters: Default::default(),
             job_status: JobStatus::default(),
             schedule_status: ScheduleStatus::default(),
+            job_schedule: None,
         }
     }
 
@@ -592,6 +595,7 @@ impl App {
             // form, so it has to be matched before it.
             (KeyModifiers::NONE, key, KeyEventKind::Press) if self.confirm.is_some() => match key {
                 KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.run_confirmed_action(),
+                KeyCode::Char('k' | 'K') => self.stop_schedule_keeping_jobs(),
                 KeyCode::Char('n' | 'N') | KeyCode::Esc => self.confirm = None,
                 _ => {}
             },
@@ -719,6 +723,9 @@ impl App {
 
                 self.reload();
             }
+            (KeyModifiers::NONE, KeyCode::Char('j' | 'J'), KeyEventKind::Press) => {
+                self.toggle_schedule_jobs();
+            }
             (KeyModifiers::NONE, KeyCode::Char('l' | 'L'), KeyEventKind::Press) => {
                 self.labels_focused = true;
             }
@@ -826,6 +833,7 @@ impl App {
                         self.client.clone(),
                         self.events.sender(),
                         self.label_filter(Tab::Jobs).to_string(),
+                        self.job_schedule,
                         None,
                     )));
                 }
@@ -1050,6 +1058,7 @@ impl App {
 
         self.job_table.state.select(None);
         self.schedule_table.state.select(None);
+        self.job_schedule = None;
         self.reload_job_type();
     }
 
@@ -1170,6 +1179,42 @@ impl App {
                 .is_some_and(|schedule| schedule.status() != ProtoScheduleStatus::Stopped)
     }
 
+    /// Whether the highlighted schedule's jobs can be shown.
+    pub(crate) fn can_show_schedule_jobs(&self) -> bool {
+        self.tab == Tab::Schedules
+            && self.table_focused()
+            && self.schedule_table.selected().is_some()
+    }
+
+    /// Show the jobs of the highlighted schedule, or on the jobs tab
+    /// go back to the jobs of every schedule.
+    fn toggle_schedule_jobs(&mut self) {
+        if self.tab == Tab::Jobs && self.job_schedule.is_some() {
+            self.job_schedule = None;
+            self.reload();
+            return;
+        }
+
+        if !self.can_show_schedule_jobs() {
+            return;
+        }
+
+        let Some(schedule_id) = self
+            .schedule_table
+            .selected()
+            .and_then(|schedule| schedule.id.parse().ok())
+        else {
+            return;
+        };
+
+        self.job_schedule = Some(ora::schedule::ScheduleId(schedule_id));
+        self.tab = Tab::Jobs;
+        self.close_detail();
+        self.job_table.state.select(None);
+        self.reload();
+        self.focus_table(true);
+    }
+
     /// Fetch the page after the rows already in the jobs table.
     fn load_more_jobs(&mut self) {
         if self.job_table.next_page.is_none() || !self.pending.jobs.idle() {
@@ -1189,6 +1234,7 @@ impl App {
             self.client.clone(),
             self.events.sender(),
             self.label_filter(Tab::Jobs).to_string(),
+            self.job_schedule,
             self.job_table.next_page.clone(),
         )));
     }
@@ -1358,9 +1404,29 @@ impl App {
         };
 
         self.confirm = Some(Confirm {
-            prompt: format!("Stop schedule {} and cancel its jobs?", schedule.id),
+            prompt: format!("Stop schedule {}?", schedule.id),
             action: ConfirmAction::StopSchedule(schedule.id.clone()),
         });
+    }
+
+    /// Stop the schedule being confirmed, leaving its active jobs to run.
+    fn stop_schedule_keeping_jobs(&mut self) {
+        let Some(Confirm {
+            action: ConfirmAction::StopSchedule(schedule_id),
+            ..
+        }) = self
+            .confirm
+            .take_if(|confirm| matches!(confirm.action, ConfirmAction::StopSchedule(_)))
+        else {
+            return;
+        };
+
+        spawn(data::stop_schedule(
+            schedule_id,
+            false,
+            self.client.clone(),
+            self.events.sender(),
+        ));
     }
 
     fn run_confirmed_action(&mut self) {

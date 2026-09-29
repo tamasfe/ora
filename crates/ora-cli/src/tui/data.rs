@@ -59,10 +59,12 @@ pub(super) async fn update_jobs(
     admin: AdminClient,
     events: Sender<AppEvent>,
     label_filter: String,
+    schedule: Option<ScheduleId>,
     page_token: Option<String>,
 ) {
     let filters = JobFilters {
         job_type_ids: Some(vec![job_type]),
+        schedule_ids: schedule.map(|schedule| vec![schedule]),
         labels: parse_label_filter(&label_filter),
         execution_statuses: statuses,
         ..Default::default()
