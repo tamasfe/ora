@@ -18,7 +18,7 @@ use ratatui::{
 
 use crate::tui::ui::{
     compact_duration, empty_message, execution_status_label, execution_status_style, field,
-    format_time, format_time_with_age, pretty_json, timestamp_of,
+    format_time, format_time_with_age, loading_line, pretty_json, timestamp_of,
 };
 
 /// How many lines the input/output payloads scroll per key press.
@@ -27,7 +27,8 @@ const PAYLOAD_SCROLL_STEP: u16 = 3;
 #[derive(Debug, Default)]
 pub(crate) struct JobTable {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
     /// Whether the rows are of every job type, so each has to say which.
     pub(crate) all_types: bool,
     /// Whether no connected executor serves the job type of the rows.
@@ -42,6 +43,13 @@ pub(crate) struct JobTable {
     /// The pages of the fetch in progress. The rows on screen are
     /// replaced from here once enough of them have arrived.
     pub(crate) incoming: Vec<Job>,
+    /// Whether the request in flight adds to the rows on screen,
+    /// rather than replacing them.
+    pub(crate) extending: bool,
+    /// The page token and page count of the rows on screen, which a
+    /// refresh in flight has replaced with its own.
+    pub(crate) shown_next_page: Option<String>,
+    pub(crate) shown_pages: usize,
     /// How far the input/output payloads are scrolled, and the job
     /// they belong to, so selecting a different one resets it.
     payload_scroll: u16,
@@ -90,6 +98,11 @@ impl Widget for &mut JobTable {
 
         let block_inner = block.inner(left);
 
+        let loading_row = self
+            .loading
+            .as_deref()
+            .filter(|_| self.extending && !self.jobs.is_empty());
+
         let rows = self
             .jobs
             .iter()
@@ -126,6 +139,7 @@ impl Widget for &mut JobTable {
                     Cell::new(job.id.clone()),
                 ])
             })
+            .chain(loading_row.map(|timer| Row::new([Cell::new(loading_line("Loading…", timer))])))
             .collect::<Vec<_>>();
 
         let table = Table::new(
@@ -145,12 +159,25 @@ impl Widget for &mut JobTable {
         .highlight_symbol("> ")
         .highlight_spacing(HighlightSpacing::Always);
 
+        // The table scrolls only as far as the selected row, which on the
+        // last job leaves the loading row after it off screen.
+        if loading_row.is_some() && self.state.selected() == Some(self.jobs.len() - 1) {
+            let visible = usize::from(block_inner.height.saturating_sub(1));
+            let offset = (self.jobs.len() + 1).saturating_sub(visible);
+            *self.state.offset_mut() = self.state.offset().max(offset);
+        }
+
         StatefulWidget::render(table, left, buf, &mut self.state);
 
         if self.jobs.is_empty() {
             let [_, body] =
                 Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block_inner);
-            empty_message(self.loading, "No jobs match the current filter.", body, buf);
+            empty_message(
+                self.loading.as_deref(),
+                "No jobs match the current filter.",
+                body,
+                buf,
+            );
         }
 
         let selected = self.state.selected().and_then(|i| self.jobs.get(i));

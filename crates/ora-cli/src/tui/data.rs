@@ -1,4 +1,4 @@
-use std::{future::Future, time::Duration};
+use std::future::Future;
 
 use flume::Sender;
 use futures::TryStreamExt;
@@ -20,26 +20,13 @@ const PAGE_SIZE: u32 = 25;
 /// How many of an executor's jobs are shown in its detail view.
 const EXECUTOR_JOB_LIMIT: u32 = 25;
 
-/// How long to wait for the server before giving up.
-///
-/// Without this a hung connection, such as a stale port forward,
-/// leaves the view loading forever with nothing to explain it.
-const REQUEST_TIMEOUT: Duration = Duration::from_mins(1);
-
-/// Await a request, turning both failures and timeouts into a message
-/// that can be shown in the footer.
+/// Await a request, turning a failure into a message for the footer.
+/// It has no timeout, how long it has been waiting is shown instead.
 async fn request<F, T>(what: &str, future: F) -> Result<T, String>
 where
     F: Future<Output = ora::Result<T>>,
 {
-    match tokio::time::timeout(REQUEST_TIMEOUT, future).await {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(error)) => Err(format!("{what}: {error}")),
-        Err(_) => Err(format!(
-            "{what}: no response after {}s",
-            REQUEST_TIMEOUT.as_secs()
-        )),
-    }
+    future.await.map_err(|error| format!("{what}: {error}"))
 }
 
 pub(super) async fn update_job_types(admin: AdminClient, events: Sender<AppEvent>) {

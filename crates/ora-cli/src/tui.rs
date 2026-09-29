@@ -275,33 +275,20 @@ pub(crate) struct Pending {
 }
 
 impl Pending {
-    /// The requests the loading indicator waits for. The job counts
-    /// show their own wait, they are never what the rows wait for.
-    fn counters(&self) -> [&Counter; 5] {
+    fn counters(&self) -> [&Counter; 6] {
         [
             &self.job_types,
             &self.jobs,
             &self.schedules,
             &self.executors,
             &self.executor_jobs,
+            &self.job_counts,
         ]
     }
 
-    /// How long the longest outstanding request has been waiting.
-    pub(crate) fn waited(&self) -> Option<Duration> {
-        self.counters()
-            .into_iter()
-            .filter_map(Counter::waited)
-            .max()
-    }
-
-    /// Whether the table backing the given tab is waiting for data.
-    pub(crate) fn for_tab(&self, tab: Tab) -> bool {
-        match tab {
-            Tab::Jobs => !self.jobs.idle(),
-            Tab::Schedules => !self.schedules.idle(),
-            Tab::Executors => !self.executors.idle(),
-        }
+    /// Whether any request is waiting for its answer.
+    fn busy(&self) -> bool {
+        self.counters().into_iter().any(|counter| !counter.idle())
     }
 
     fn finish(&mut self, request: Request) {
@@ -339,7 +326,6 @@ pub struct App {
     form: Option<ui::Form>,
     status: Status,
     pending: Pending,
-    spinner: usize,
     job_order: JobOrderBy,
     schedule_order: ScheduleOrderBy,
     labels_focused: bool,
@@ -373,7 +359,6 @@ impl App {
             form: None,
             status: Status::default(),
             pending: Pending::default(),
-            spinner: 0,
             events: Events::default(),
             job_order: JobOrderBy::CreatedAtDesc,
             schedule_order: ScheduleOrderBy::CreatedAtDesc,
@@ -434,11 +419,15 @@ impl App {
             return Ok(false);
         };
 
-        // Only the spinner animates on its own; a tick redraws
+        // Only the timers change on their own; a tick redraws
         // nothing while there is nothing pending to show one for.
         if let AppEvent::Tick = event {
-            self.spinner = self.spinner.wrapping_add(1);
-            return Ok(self.pending.waited().is_some() || !self.pending.job_counts.idle());
+            // Its lines are built once, the wait they show with them.
+            if self.tab == Tab::Executors && !self.pending.executor_jobs.idle() {
+                self.refresh_detail();
+            }
+
+            return Ok(self.pending.busy());
         }
 
         match event {
@@ -493,13 +482,18 @@ impl App {
 
                     // A refresh starts over at the first page, so
                     // showing each as it lands blinks the later
-                    // ones out. Wait, unless the table is empty
-                    // and there is nothing to lose by not waiting.
+                    // ones out. Wait, unless no more rows are on
+                    // screen than arrived, so nothing is lost.
                     let more =
                         self.job_table.pages < AUTO_PAGES && self.job_table.next_page.is_some();
 
-                    if !more || self.job_table.jobs.is_empty() {
+                    if !more || self.job_table.jobs.len() <= self.job_table.incoming.len() {
                         self.job_table.jobs.clone_from(&self.job_table.incoming);
+                        self.job_table.extending = true;
+                        self.job_table
+                            .shown_next_page
+                            .clone_from(&self.job_table.next_page);
+                        self.job_table.shown_pages = self.job_table.pages;
                     }
 
                     self.data_updated();
@@ -873,6 +867,7 @@ impl App {
                 // past the first, so once one is loaded the table is
                 // only refreshed when asked for.
                 if force || (self.pending.jobs.idle() && self.job_table.pages <= AUTO_PAGES) {
+                    self.job_table.extending = false;
                     let token = self.pending.jobs.next_token();
                     self.pending.jobs.start(spawn(data::update_jobs(
                         token,
@@ -991,6 +986,8 @@ impl App {
                 self.job_table.incoming.clear();
                 self.job_table.next_page = None;
                 self.job_table.pages = 0;
+                self.job_table.shown_next_page = None;
+                self.job_table.shown_pages = 0;
             }
             Tab::Schedules => {
                 self.schedule_table.schedules.clear();
@@ -1045,6 +1042,13 @@ impl App {
             state.select_next();
         } else {
             state.select_previous();
+        }
+
+        // The table clamps it only once drawn, and a row can follow the last one.
+        if let Some(row) = state.selected()
+            && row >= len
+        {
+            state.select(len.checked_sub(1));
         }
 
         let row = state.selected();
@@ -1159,7 +1163,7 @@ impl App {
             Tab::Executors => self
                 .executor_table
                 .selected()
-                .map(|executor| ui::Detail::from_executor(executor, &[], true)),
+                .map(|executor| ui::Detail::from_executor(executor, &[], None)),
         };
 
         let opened = detail.is_some();
@@ -1170,6 +1174,7 @@ impl App {
         if opened && self.tab == Tab::Executors {
             self.executor_jobs.clear();
             self.fetch_executor_jobs();
+            self.refresh_detail();
         }
     }
 
@@ -1209,7 +1214,7 @@ impl App {
                     ui::Detail::from_executor(
                         executor,
                         &self.executor_jobs,
-                        !self.pending.executor_jobs.idle(),
+                        ui::timer(&self.pending.executor_jobs).as_deref(),
                     )
                 }),
         };
@@ -1292,6 +1297,18 @@ impl App {
 
     /// Fetch the page after the rows already in the jobs table.
     fn load_more_jobs(&mut self) {
+        // Scrolling past the rows on screen matters more than a refresh,
+        // which would only replace them, so it goes on from those rows.
+        if !self.pending.jobs.idle() && !self.job_table.extending {
+            self.pending.jobs.cancel();
+            self.job_table.incoming.clone_from(&self.job_table.jobs);
+            self.job_table
+                .next_page
+                .clone_from(&self.job_table.shown_next_page);
+            self.job_table.pages = self.job_table.shown_pages;
+            self.job_table.extending = true;
+        }
+
         if self.job_table.next_page.is_none() || !self.pending.jobs.idle() {
             return;
         }

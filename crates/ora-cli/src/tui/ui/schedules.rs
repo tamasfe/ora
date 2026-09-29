@@ -23,7 +23,8 @@ const POLICY_WIDTH: std::ops::RangeInclusive<usize> = 16..=60;
 #[derive(Debug, Default)]
 pub(crate) struct ScheduleTable {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
     /// Whether the rows are of every job type, so each has to say which.
     pub(crate) all_types: bool,
     pub(crate) state: TableState,
@@ -165,7 +166,12 @@ impl Widget for &mut ScheduleTable {
         if self.schedules.is_empty() {
             let [_, body] =
                 Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
-            empty_message(self.loading, "No schedules for this job type.", body, buf);
+            empty_message(
+                self.loading.as_deref(),
+                "No schedules for this job type.",
+                body,
+                buf,
+            );
         }
     }
 }

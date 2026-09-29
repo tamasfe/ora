@@ -28,7 +28,8 @@ const UNSERVED_STYLE: Style = Style::new().fg(tailwind::ORANGE.c400);
 #[derive(Debug, Default)]
 pub(crate) struct JobTypeList {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
     pub(crate) state: ListState,
     pub(crate) job_types: Vec<JobTypeInfo>,
     /// The job types a connected executor serves,
@@ -114,7 +115,7 @@ impl Widget for &mut JobTypeList {
         if self.job_types.is_empty() {
             let [_, below_all] =
                 Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
-            empty_message(self.loading, "No job types.", below_all, buf);
+            empty_message(self.loading.as_deref(), "No job types.", below_all, buf);
         }
     }
 }

@@ -20,7 +20,8 @@ const STALE_AFTER_SECS: u64 = 60;
 #[derive(Debug, Default)]
 pub(crate) struct ExecutorTable {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
     pub(crate) state: TableState,
     pub(crate) executors: Vec<ExecutorInfo>,
 }
@@ -103,7 +104,12 @@ impl Widget for &mut ExecutorTable {
         if self.executors.is_empty() {
             let [_, body] =
                 Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
-            empty_message(self.loading, "No executors connected.", body, buf);
+            empty_message(
+                self.loading.as_deref(),
+                "No executors connected.",
+                body,
+                buf,
+            );
         }
     }
 }
