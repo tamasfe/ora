@@ -24,6 +24,8 @@ const POLICY_WIDTH: std::ops::RangeInclusive<usize> = 16..=60;
 pub(crate) struct ScheduleTable {
     pub(crate) focused: bool,
     pub(crate) loading: bool,
+    /// Whether the rows are of every job type, so each has to say which.
+    pub(crate) all_types: bool,
     pub(crate) state: TableState,
     pub(crate) schedules: Vec<Schedule>,
     /// The token for the page after the rows held here, when the
@@ -100,7 +102,7 @@ impl Widget for &mut ScheduleTable {
 
                 let height = u16::try_from(lines.len()).unwrap_or(1);
 
-                Row::new([
+                let mut cells = vec![
                     Cell::new(match status {
                         ScheduleStatus::Stopped => "stopped",
                         _ => "active",
@@ -109,33 +111,54 @@ impl Widget for &mut ScheduleTable {
                         ScheduleStatus::Stopped => Style::new().fg(tailwind::GRAY.c400),
                         _ => Style::new().fg(tailwind::GREEN.c400),
                     }),
+                ];
+
+                if self.all_types {
+                    cells.push(Cell::new(job_type_of(schedule).to_string()));
+                }
+
+                cells.extend([
                     Cell::new(Text::from(lines)),
                     Cell::new(format_age(schedule.created_at))
                         .style(Style::new().fg(tailwind::GRAY.c400)),
                     Cell::new(schedule.id.clone()),
-                ])
-                .height(height)
+                ]);
+
+                Row::new(cells).height(height)
             })
             .collect::<Vec<_>>();
 
-        let table = Table::new(
-            rows,
-            [
-                Constraint::Length(8),
-                Constraint::Max(u16::try_from(policy_width).unwrap_or(u16::MAX)),
-                Constraint::Length(9),
-                // A UUID and a column of its own to keep it off the
-                // border, which the row highlight reaches.
-                Constraint::Length(37),
-            ],
-        )
-        .header(
-            Row::new(["Status", "Policy", "Created", "ID"])
-                .style(Style::new().bold().fg(tailwind::GRAY.c400)),
-        )
-        .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
-        .highlight_symbol("> ")
-        .highlight_spacing(HighlightSpacing::Always);
+        let mut widths = vec![
+            Constraint::Length(8),
+            Constraint::Max(u16::try_from(policy_width).unwrap_or(u16::MAX)),
+            Constraint::Length(9),
+            // A UUID and a column of its own to keep it off the
+            // border, which the row highlight reaches.
+            Constraint::Length(37),
+        ];
+        let mut header = vec!["Status", "Policy", "Created", "ID"];
+
+        if self.all_types {
+            let type_width = self
+                .schedules
+                .iter()
+                .map(|schedule| job_type_of(schedule).chars().count())
+                .max()
+                .unwrap_or(0)
+                .max("Type".len());
+
+            widths.insert(
+                1,
+                Constraint::Length(u16::try_from(type_width).unwrap_or(u16::MAX)),
+            );
+            header.insert(1, "Type");
+        }
+
+        let table = Table::new(rows, widths)
+            .header(Row::new(header).style(Style::new().bold().fg(tailwind::GRAY.c400)))
+            .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ")
+            .highlight_spacing(HighlightSpacing::Always);
 
         StatefulWidget::render(table, inner, buf, &mut self.state);
 
@@ -145,6 +168,15 @@ impl Widget for &mut ScheduleTable {
             empty_message(self.loading, "No schedules for this job type.", body, buf);
         }
     }
+}
+
+/// The job type of the jobs a schedule creates.
+fn job_type_of(schedule: &Schedule) -> &str {
+    schedule
+        .schedule
+        .as_ref()
+        .and_then(|def| def.job_template.as_ref())
+        .map_or("", |template| template.job_type_id.as_str())
 }
 
 /// A short description of when a schedule creates jobs.
