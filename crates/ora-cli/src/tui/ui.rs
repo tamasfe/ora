@@ -23,7 +23,7 @@ use ratatui::{
 pub(crate) use schedules::ScheduleTable;
 use serde_json::Value;
 
-use crate::tui::{App, Confirm, Tab};
+use crate::tui::{App, Confirm, ConfirmAction, Tab};
 
 const TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
@@ -160,6 +160,10 @@ fn action_spans(app: &App) -> Vec<Span<'static>> {
             if app.can_stop_schedule() {
                 action("stop (s)");
             }
+
+            if app.can_show_schedule_jobs() {
+                action("jobs (j)");
+            }
         }
         Tab::Executors => {}
     }
@@ -257,6 +261,14 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
         spans.push(Span::from(" (l)").style(dim));
     }
 
+    if app.tab == Tab::Jobs
+        && let Some(schedule) = app.job_schedule
+    {
+        spans.push(Span::from(SEPARATOR).style(dim));
+        spans.push(Span::from(format!("schedule {}", schedule.0)).style(Style::new().bold()));
+        spans.push(Span::from(" (j)").style(dim));
+    }
+
     spans
 }
 
@@ -310,10 +322,17 @@ fn render_confirm(confirm: &Confirm, area: Rect, buf: &mut ratatui::prelude::Buf
 
     Clear.render(area, buf);
 
+    let answers = match confirm.action {
+        ConfirmAction::StopSchedule(_) => {
+            "(y) stop and cancel its jobs   (k) stop, keep its jobs   (n) back"
+        }
+        _ => "(y) confirm   (n) cancel",
+    };
+
     Paragraph::new(vec![
         Line::from(confirm.prompt.clone()),
         Line::default(),
-        Line::from("(y) confirm   (n) cancel").style(Style::new().fg(tailwind::GRAY.c500)),
+        Line::from(answers).style(Style::new().fg(tailwind::GRAY.c500)),
     ])
     .wrap(Wrap { trim: true })
     .block(
