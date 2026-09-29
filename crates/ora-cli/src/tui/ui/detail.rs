@@ -16,7 +16,7 @@ use ratatui::{
 
 use crate::tui::ui::{
     execution_status_label, execution_status_style, field, format_duration, format_time,
-    format_time_with_age, pretty_json, schedules::policy_summary, timestamp_of,
+    format_time_with_age, loading_line, pretty_json, schedules::policy_summary, timestamp_of,
 };
 
 /// A scrollable, paged read-only view of a single job or schedule.
@@ -98,7 +98,11 @@ impl Detail {
         }
     }
 
-    pub(crate) fn from_executor(executor: &ExecutorInfo, jobs: &[Job], loading: bool) -> Self {
+    pub(crate) fn from_executor(
+        executor: &ExecutorInfo,
+        jobs: &[Job],
+        loading: Option<&str>,
+    ) -> Self {
         let pages = vec![
             Page {
                 name: "Overview",
@@ -491,12 +495,13 @@ fn start_delay(executor_id: &str, job: &Job) -> Option<String> {
 /// The name of the first column, which is also its narrowest width.
 const JOB_TYPE: &str = "Job type";
 
-fn executor_jobs(executor_id: &str, jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
+fn executor_jobs(executor_id: &str, jobs: &[Job], loading: Option<&str>) -> Vec<Line<'static>> {
     if jobs.is_empty() {
         // Fetched only once the view is opened, so empty means nothing yet.
-        let message = if loading { "Loading…" } else { "(no jobs)" };
-
-        return vec![Line::from(message).style(Style::new().fg(tailwind::GRAY.c500))];
+        return vec![match loading {
+            Some(timer) => loading_line("Loading…", timer),
+            None => Line::from("(no jobs)").style(Style::new().fg(tailwind::GRAY.c500)),
+        }];
     }
 
     let width = jobs

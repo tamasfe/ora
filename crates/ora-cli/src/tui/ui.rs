@@ -23,11 +23,9 @@ use ratatui::{
 pub(crate) use schedules::ScheduleTable;
 use serde_json::Value;
 
-use crate::tui::{App, Confirm, ConfirmAction, Tab};
+use crate::tui::{App, Confirm, ConfirmAction, Counter, Tab};
 
 const TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
-
-const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 impl Widget for &mut App {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
@@ -44,10 +42,10 @@ impl Widget for &mut App {
 
         render_tabs(self, tabs, buf);
 
-        self.job_type_list.loading = !self.pending.job_types.idle();
-        self.job_table.loading = self.pending.for_tab(Tab::Jobs);
-        self.schedule_table.loading = self.pending.for_tab(Tab::Schedules);
-        self.executor_table.loading = self.pending.for_tab(Tab::Executors);
+        self.job_type_list.loading = timer(&self.pending.job_types);
+        self.job_table.loading = timer(&self.pending.jobs);
+        self.schedule_table.loading = timer(&self.pending.schedules);
+        self.executor_table.loading = timer(&self.pending.executors);
 
         let all_types = self.job_type_list.all_selected();
         self.job_table.all_types = all_types;
@@ -99,10 +97,10 @@ fn render_job_counts(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) 
     let dim = Style::new().fg(tailwind::GRAY.c500);
 
     let Some(counts) = app.job_counts else {
-        if let Some(waited) = app.pending.job_counts.waited() {
-            Line::from(format!(" counting… {}s", waited.as_secs()))
-                .style(dim)
-                .render(area, buf);
+        if let Some(timer) = timer(&app.pending.job_counts) {
+            let mut line = loading_line("Counting…", &timer);
+            line.spans.insert(0, Span::from(" "));
+            line.render(area, buf);
         }
 
         return;
@@ -325,17 +323,6 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
 fn status_line(app: &App, max_error: usize) -> Line<'static> {
     let mut spans = Vec::new();
 
-    if let Some(waited) = app.pending.waited() {
-        spans.push(
-            Span::from(format!(
-                "{} {}s ",
-                SPINNER[app.spinner % SPINNER.len()],
-                waited.as_secs()
-            ))
-            .style(Style::new().fg(tailwind::BLUE.c400)),
-        );
-    }
-
     if let Some(error) = app.status.error.as_ref() {
         spans.push(
             Span::from(truncate(error, max_error)).style(Style::new().fg(tailwind::RED.c400)),
@@ -513,17 +500,35 @@ pub(super) fn field(name: &str, value: impl Into<String>) -> Line<'static> {
     ])
 }
 
+/// How long a request has been waiting for its answer, e.g. `3s`, empty
+/// for the first second, `None` while it is not waiting.
+pub(crate) fn timer(counter: &Counter) -> Option<String> {
+    counter.waited().map(|waited| match waited.as_secs() {
+        0 => String::new(),
+        secs => format!("{secs}s"),
+    })
+}
+
+/// What is being waited for, followed by the timer of its request.
+pub(super) fn loading_line(text: &str, timer: &str) -> Line<'static> {
+    Line::from(format!("{text} {timer}").trim_end().to_string())
+        .style(Style::new().fg(tailwind::GRAY.c500))
+}
+
 /// Explain why a table has no rows, so that a pending request
 /// is never mistaken for a result set that came back empty.
 pub(super) fn empty_message(
-    loading: bool,
+    loading: Option<&str>,
     empty: &str,
     area: Rect,
     buf: &mut ratatui::prelude::Buffer,
 ) {
-    let text = if loading { "Loading…" } else { empty };
+    let line = match loading {
+        Some(timer) => loading_line("Loading…", timer),
+        None => Line::from(empty.to_string()),
+    };
 
-    Paragraph::new(Line::from(text.to_string()))
+    Paragraph::new(line)
         .style(Style::new().fg(tailwind::GRAY.c500))
         .block(Block::new().padding(ratatui::widgets::Padding::left(2)))
         .render(area, buf);
