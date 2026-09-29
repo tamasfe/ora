@@ -543,8 +543,20 @@ impl App {
             }
             AppEvent::ExecutorsUpdated(executors) => {
                 self.pending.finish(Request::Executors);
+                self.job_type_list.served = Some(
+                    executors
+                        .iter()
+                        .flat_map(|executor| &executor.queues)
+                        .map(|queue| queue.job_type_id.clone())
+                        .collect(),
+                );
                 self.executor_table.executors = executors;
-                self.data_updated();
+
+                if self.tab == Tab::Executors {
+                    self.data_updated();
+                } else {
+                    self.answered();
+                }
                 self.refresh_detail();
             }
             AppEvent::ExecutorJobsUpdated(executor_id, jobs) => {
@@ -845,6 +857,14 @@ impl App {
             )));
         }
 
+        // The job type list warns of the job types no executor serves.
+        if force || self.pending.executors.idle() {
+            self.pending.executors.start(spawn(data::update_executors(
+                self.client.clone(),
+                self.events.sender(),
+            )));
+        }
+
         let job_type_id = self.selected_job_type();
 
         match (self.tab, self.job_type_list.state.selected()) {
@@ -891,13 +911,6 @@ impl App {
                 }
             }
             (Tab::Executors, _) => {
-                if force || self.pending.executors.idle() {
-                    self.pending.executors.start(spawn(data::update_executors(
-                        self.client.clone(),
-                        self.events.sender(),
-                    )));
-                }
-
                 if self.detail().is_some() && (force || self.pending.executor_jobs.idle()) {
                     self.fetch_executor_jobs();
                 }

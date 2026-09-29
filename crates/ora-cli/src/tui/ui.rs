@@ -51,6 +51,10 @@ impl Widget for &mut App {
 
         let all_types = self.job_type_list.all_selected();
         self.job_table.all_types = all_types;
+        self.job_table.unserved = self
+            .job_type_list
+            .selected()
+            .is_some_and(|job_type| self.job_type_list.unserved(&job_type.id));
         self.schedule_table.all_types = all_types;
 
         match self.tab {
