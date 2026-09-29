@@ -56,7 +56,10 @@ impl Widget for &mut App {
         match self.tab {
             Tab::Jobs => {
                 let [left, right] = job_type_layout(self.job_type_list.max_width()).areas(content);
+                let [counts, right] =
+                    Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(right);
                 self.job_type_list.render(left, buf);
+                render_job_counts(self, counts, buf);
                 self.job_table.render(right, buf);
             }
             Tab::Schedules => {
@@ -85,6 +88,45 @@ impl Widget for &mut App {
             render_confirm(confirm, content, buf);
         }
     }
+}
+
+/// How many jobs have each status, above the jobs table.
+fn render_job_counts(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) {
+    let dim = Style::new().fg(tailwind::GRAY.c500);
+
+    let Some(counts) = app.job_counts else {
+        if let Some(waited) = app.pending.job_counts.waited() {
+            Line::from(format!(" counting… {}s", waited.as_secs()))
+                .style(dim)
+                .render(area, buf);
+        }
+
+        return;
+    };
+
+    let mut spans = vec![Span::from(" ")];
+
+    for (status, count) in [
+        ExecutionStatus::Pending,
+        ExecutionStatus::InProgress,
+        ExecutionStatus::Succeeded,
+        ExecutionStatus::Failed,
+        ExecutionStatus::Cancelled,
+    ]
+    .into_iter()
+    .zip(counts)
+    {
+        if spans.len() > 1 {
+            spans.push(Span::from(SEPARATOR).style(dim));
+        }
+
+        spans.push(
+            Span::from(format!("{} {count}", execution_status_label(status)))
+                .style(execution_status_style(status)),
+        );
+    }
+
+    Line::from(spans).render(area, buf);
 }
 
 fn job_type_layout(max_width: u16) -> Layout {
