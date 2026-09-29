@@ -64,7 +64,7 @@ impl Widget for &mut JobTable {
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Length(44), Constraint::Fill(1)]);
+        let layout = Layout::horizontal([Constraint::Length(53), Constraint::Fill(1)]);
         let [left, right] = layout.areas(area);
 
         let block = Block::new()
@@ -107,26 +107,40 @@ impl Widget for &mut JobTable {
                             .style(execution_status_style(status)),
                         None => Cell::new(""),
                     },
+                    Cell::new(
+                        job.job
+                            .as_ref()
+                            .map(|def| def.priority.to_string())
+                            .unwrap_or_default(),
+                    ),
                     Cell::new(job.id.clone()),
                 ])
             })
             .collect::<Vec<_>>();
 
-        let table = Table::new(rows, [Constraint::Length(26), Constraint::Length(12)])
-            .block(block)
-            .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
-            .highlight_symbol("> ")
-            .highlight_spacing(HighlightSpacing::Always);
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(26),
+                Constraint::Length(12),
+                Constraint::Length(8),
+            ],
+        )
+        .header(
+            Row::new(["Target", "Status", "Priority"])
+                .style(Style::new().bold().fg(tailwind::GRAY.c400)),
+        )
+        .block(block)
+        .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ")
+        .highlight_spacing(HighlightSpacing::Always);
 
         StatefulWidget::render(table, left, buf, &mut self.state);
 
         if self.jobs.is_empty() {
-            empty_message(
-                self.loading,
-                "No jobs match the current filter.",
-                block_inner,
-                buf,
-            );
+            let [_, body] =
+                Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block_inner);
+            empty_message(self.loading, "No jobs match the current filter.", body, buf);
         }
 
         let selected = self.state.selected().and_then(|i| self.jobs.get(i));
