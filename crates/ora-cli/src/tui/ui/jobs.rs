@@ -9,6 +9,7 @@ use ratatui::{
         palette::tailwind::{self, SLATE},
     },
     symbols,
+    text::{Line, Span},
     widgets::{
         Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, StatefulWidget, Table,
         TableState, Widget, Wrap,
@@ -29,6 +30,8 @@ pub(crate) struct JobTable {
     pub(crate) loading: bool,
     /// Whether the rows are of every job type, so each has to say which.
     pub(crate) all_types: bool,
+    /// Whether no connected executor serves the job type of the rows.
+    pub(crate) unserved: bool,
     pub(crate) state: TableState,
     pub(crate) jobs: Vec<Job>,
     /// The token for the page after the rows held here, when the
@@ -68,7 +71,14 @@ impl Widget for &mut JobTable {
         let [left, right] = layout.areas(area);
 
         let block = Block::new()
-            .title(" Jobs ")
+            .title(if self.unserved {
+                Line::from(vec![
+                    Span::from(" Jobs "),
+                    Span::from("· no executor ").style(Style::new().fg(tailwind::ORANGE.c400)),
+                ])
+            } else {
+                Line::from(" Jobs ")
+            })
             .title_style(Style::new().bold())
             .borders(Borders::all())
             .border_set(symbols::border::PLAIN)

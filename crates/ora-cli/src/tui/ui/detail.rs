@@ -1,4 +1,4 @@
-use jiff::Timestamp;
+use jiff::{SignedDuration, Timestamp};
 use ora::{
     admin::executors::ExecutorInfo,
     proto::{
@@ -106,7 +106,7 @@ impl Detail {
             },
             Page {
                 name: "Recent jobs",
-                lines: executor_jobs(jobs, loading),
+                lines: executor_jobs(&executor.id.to_string(), jobs, loading),
             },
         ];
 
@@ -470,10 +470,28 @@ fn executor_overview(executor: &ExecutorInfo) -> Vec<Line<'static>> {
     lines
 }
 
+/// How long after its target time the job's latest run on the
+/// executor started.
+fn start_delay(executor_id: &str, job: &Job) -> Option<String> {
+    let execution = job
+        .executions
+        .iter()
+        .rev()
+        .find(|execution| execution.executor_id.as_deref() == Some(executor_id))?;
+
+    let started = timestamp_of(execution.started_at?)?;
+    let target = timestamp_of(execution.target_execution_time?)?;
+
+    Some(format!(
+        "{:#}",
+        SignedDuration::from_secs(started.duration_since(target).as_secs())
+    ))
+}
+
 /// The name of the first column, which is also its narrowest width.
 const JOB_TYPE: &str = "Job type";
 
-fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
+fn executor_jobs(executor_id: &str, jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
     if jobs.is_empty() {
         // Fetched only once the view is opened, so empty means nothing yet.
         let message = if loading { "Loading…" } else { "(no jobs)" };
@@ -490,8 +508,8 @@ fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
         .unwrap_or(0);
 
     let header = Line::from(format!(
-        "{JOB_TYPE:<width$} {:<12}{:<30}ID",
-        "Status", "Created"
+        "{JOB_TYPE:<width$} {:<12}{:<12}{:<30}ID",
+        "Status", "Delay", "Created"
     ))
     .style(Style::new().bold().fg(tailwind::GRAY.c400));
 
@@ -513,6 +531,11 @@ fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
                 ),
                 None => spans.push(Span::from(format!("{:<12}", ""))),
             }
+
+            spans.push(Span::from(format!(
+                "{:<12}",
+                start_delay(executor_id, job).unwrap_or_default()
+            )));
 
             // Padded so the IDs line up to be copied out.
             spans.push(Span::from(format!(
