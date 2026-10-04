@@ -21,13 +21,6 @@ jobs:
       with:
         version: 10
 
-    - name: Pnpm Install
-      run: pnpm install
-
-    - uses: actions/setup-node@v7
-      with:
-        cache: "pnpm"
-
     - name: UI Build
       run: cargo xtask ui build
 
