@@ -17,8 +17,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: UI Build
+      run: cargo xtask ui build
+
     - name: Build
-      run: cargo build --verbose
+      run: cargo build
 
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test
