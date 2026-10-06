@@ -42,9 +42,13 @@ impl Widget for &mut App {
 
         render_tabs(self, tabs, buf);
 
+        // A settling selection is a wait like any other, only its
+        // request has not been sent yet, so it shows a bare timer.
+        let settling = self.settles_at.is_some().then(String::new);
+
         self.job_type_list.loading = timer(&self.pending.job_types);
-        self.job_table.loading = timer(&self.pending.jobs);
-        self.schedule_table.loading = timer(&self.pending.schedules);
+        self.job_table.loading = timer(&self.pending.jobs).or_else(|| settling.clone());
+        self.schedule_table.loading = timer(&self.pending.schedules).or_else(|| settling.clone());
         self.executor_table.loading = timer(&self.pending.executors);
 
         let all_types = self.job_type_list.all_selected();
@@ -97,7 +101,9 @@ fn render_job_counts(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) 
     let dim = Style::new().fg(tailwind::GRAY.c500);
 
     let Some(counts) = app.job_counts else {
-        if let Some(timer) = timer(&app.pending.job_counts) {
+        let settling = app.settles_at.is_some().then(String::new);
+
+        if let Some(timer) = timer(&app.pending.job_counts).or(settling) {
             let mut line = loading_line("Counting…", &timer);
             line.spans.insert(0, Span::from(" "));
             line.render(area, buf);
