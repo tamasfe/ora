@@ -190,6 +190,13 @@ const PAGE_AHEAD: usize = 5;
 /// on its own, which would drop them.
 const AUTO_PAGES: usize = 2;
 
+/// The filter being typed into in the footer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Editing {
+    Labels,
+    Schedule,
+}
+
 /// An action that is only carried out
 /// once the user confirms it.
 #[derive(Debug)]
@@ -338,13 +345,15 @@ pub struct App {
     pending: Pending,
     job_order: JobOrderBy,
     schedule_order: ScheduleOrderBy,
-    labels_focused: bool,
+    pub(crate) editing: Option<Editing>,
     /// The label filter of each tab, which they do not share.
     label_filters: [String; 3],
     job_status: JobStatus,
     schedule_status: ScheduleStatus,
     /// The schedule the jobs tab is narrowed to, if any.
     pub(crate) job_schedule: Option<ora::schedule::ScheduleId>,
+    /// The schedule ID as it is typed, applied to `job_schedule` on enter.
+    pub(crate) schedule_input: String,
     /// How many of the jobs tab's jobs have each status, whatever
     /// status it is filtered by.
     pub(crate) job_counts: Option<[u64; 5]>,
@@ -375,11 +384,12 @@ impl App {
             events: Events::default(),
             job_order: JobOrderBy::CreatedAtDesc,
             schedule_order: ScheduleOrderBy::CreatedAtDesc,
-            labels_focused: false,
+            editing: None,
             label_filters: Default::default(),
             job_status: JobStatus::default(),
             schedule_status: ScheduleStatus::default(),
             job_schedule: None,
+            schedule_input: String::new(),
             job_counts: None,
             counted_at: None,
             settles_at: None,
@@ -636,8 +646,8 @@ impl App {
         for c in text.chars().filter(|c| !c.is_control()) {
             if let Some(form) = self.form.as_mut() {
                 form.push_char(c);
-            } else if self.labels_focused {
-                self.label_filter_mut().push(c);
+            } else if let Some(editing) = self.editing {
+                self.filter_input_mut(editing).push(c);
             } else {
                 return;
             }
@@ -696,11 +706,11 @@ impl App {
                     _ => form.pop_word(),
                 }
             }
-            (KeyModifiers::NONE, KeyCode::Tab, KeyEventKind::Press) if !self.labels_focused => {
+            (KeyModifiers::NONE, KeyCode::Tab, KeyEventKind::Press) if self.editing.is_none() => {
                 self.switch_tab(true);
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::BackTab, KeyEventKind::Press)
-                if !self.labels_focused =>
+                if self.editing.is_none() =>
             {
                 self.switch_tab(false);
             }
@@ -733,24 +743,32 @@ impl App {
             {
                 self.job_table.scroll_payload_down();
             }
-            (KeyModifiers::NONE, key, KeyEventKind::Press) if self.labels_focused => match key {
-                KeyCode::Esc => {
-                    self.labels_focused = false;
-                    self.label_filter_mut().clear();
-                    self.reload();
+            (KeyModifiers::NONE, key, KeyEventKind::Press) if self.editing.is_some() => {
+                let Some(editing) = self.editing else {
+                    return;
+                };
+
+                match key {
+                    KeyCode::Esc => {
+                        self.editing = None;
+                        self.filter_input_mut(editing).clear();
+
+                        if editing == Editing::Schedule {
+                            self.job_schedule = None;
+                        }
+
+                        self.reload();
+                    }
+                    KeyCode::Backspace => {
+                        self.filter_input_mut(editing).pop();
+                    }
+                    KeyCode::Enter => self.apply_filter(editing),
+                    KeyCode::Char(c) => {
+                        self.filter_input_mut(editing).push(c);
+                    }
+                    _ => {}
                 }
-                KeyCode::Backspace => {
-                    self.label_filter_mut().pop();
-                }
-                KeyCode::Enter => {
-                    self.labels_focused = false;
-                    self.reload();
-                }
-                KeyCode::Char(c) => {
-                    self.label_filter_mut().push(c);
-                }
-                _ => {}
-            },
+            }
             (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'), KeyEventKind::Press)
             | (KeyModifiers::CONTROL, KeyCode::Char('c'), KeyEventKind::Press) => {
                 self.quit();
@@ -803,10 +821,10 @@ impl App {
                 }
             }
             (KeyModifiers::NONE, KeyCode::Char('j' | 'J'), KeyEventKind::Press) => {
-                self.toggle_schedule_jobs();
+                self.schedule_jobs();
             }
             (KeyModifiers::NONE, KeyCode::Char('l' | 'L'), KeyEventKind::Press) => {
-                self.labels_focused = true;
+                self.editing = Some(Editing::Labels);
             }
             (KeyModifiers::NONE, KeyCode::Char('o' | 'O'), KeyEventKind::Press) => {
                 if self.tab == Tab::Schedules {
@@ -1075,6 +1093,39 @@ impl App {
         &mut self.label_filters[self.tab.index()]
     }
 
+    fn filter_input_mut(&mut self, editing: Editing) -> &mut String {
+        match editing {
+            Editing::Labels => self.label_filter_mut(),
+            Editing::Schedule => &mut self.schedule_input,
+        }
+    }
+
+    /// Stop typing into a filter and fetch the rows it narrows to.
+    ///
+    /// A schedule ID only takes once it parses, since a partial one
+    /// would match nothing; until then the typing goes on.
+    fn apply_filter(&mut self, editing: Editing) {
+        if editing == Editing::Schedule {
+            let input = self.schedule_input.trim();
+
+            if input.is_empty() {
+                self.job_schedule = None;
+            } else {
+                match input.parse() {
+                    Ok(id) => self.job_schedule = Some(ora::schedule::ScheduleId(id)),
+                    Err(_) => {
+                        self.status.error = Some(format!("not a schedule ID: {input}"));
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.editing = None;
+        self.status.error = None;
+        self.reload();
+    }
+
     /// The job type used to filter the jobs and schedules tabs.
     fn selected_job_type(&self) -> Option<ora::JobTypeId> {
         self.job_type_list.selected().map(|jt| jt.id.clone())
@@ -1204,6 +1255,7 @@ impl App {
         self.job_table.state.select(None);
         self.schedule_table.state.select(None);
         self.job_schedule = None;
+        self.schedule_input.clear();
         self.reload_job_type();
     }
 
@@ -1333,11 +1385,10 @@ impl App {
     }
 
     /// Show the jobs of the highlighted schedule, or on the jobs tab
-    /// go back to the jobs of every schedule.
-    fn toggle_schedule_jobs(&mut self) {
-        if self.tab == Tab::Jobs && self.job_schedule.is_some() {
-            self.job_schedule = None;
-            self.reload();
+    /// type the schedule they are narrowed to.
+    fn schedule_jobs(&mut self) {
+        if self.tab == Tab::Jobs {
+            self.editing = Some(Editing::Schedule);
             return;
         }
 
@@ -1354,6 +1405,7 @@ impl App {
         };
 
         self.job_schedule = Some(ora::schedule::ScheduleId(schedule_id));
+        self.schedule_input = schedule_id.to_string();
         self.tab = Tab::Jobs;
         self.close_detail();
         self.job_table.state.select(None);
@@ -1962,3 +2014,4 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
         }),
     })
 }
+

@@ -23,7 +23,7 @@ use ratatui::{
 pub(crate) use schedules::ScheduleTable;
 use serde_json::Value;
 
-use crate::tui::{App, Confirm, ConfirmAction, Counter, Tab};
+use crate::tui::{App, Confirm, ConfirmAction, Counter, Editing, Tab};
 
 const TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
@@ -271,14 +271,26 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
     }
 
     // Typing takes the row, which fits several pairs and their syntax.
-    if app.labels_focused {
+    if let Some(editing) = app.editing {
         let orange = Style::new().fg(tailwind::ORANGE.c600);
 
+        let (name, input, help) = match editing {
+            Editing::Labels => (
+                "labels: ",
+                app.label_filter(app.tab),
+                "   key=value or key, comma separated   enter apply   esc clear",
+            ),
+            Editing::Schedule => (
+                "schedule: ",
+                app.schedule_input.as_str(),
+                "   schedule ID   enter apply   esc clear",
+            ),
+        };
+
         return vec![
-            Span::from("labels: ").style(orange.bold()),
-            Span::from(format!("{}_", app.label_filter(app.tab))).style(orange),
-            Span::from("   key=value or key, comma separated   enter apply   esc clear")
-                .style(Style::new().fg(tailwind::GRAY.c600)),
+            Span::from(name).style(orange.bold()),
+            Span::from(format!("{input}_")).style(orange),
+            Span::from(help).style(Style::new().fg(tailwind::GRAY.c600)),
         ];
     }
 
@@ -320,12 +332,18 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
         spans.push(Span::from(" (l)").style(dim));
     }
 
-    if app.tab == Tab::Jobs
-        && let Some(schedule) = app.job_schedule
-    {
+    if app.tab == Tab::Jobs {
         spans.push(Span::from(SEPARATOR).style(dim));
-        spans.push(Span::from(format!("schedule {}", schedule.0)).style(Style::new().bold()));
-        spans.push(Span::from(" (j)").style(dim));
+
+        match app.job_schedule {
+            Some(schedule) => {
+                spans.push(
+                    Span::from(format!("schedule {}", schedule.0)).style(Style::new().bold()),
+                );
+                spans.push(Span::from(" (j)").style(dim));
+            }
+            None => spans.push(Span::from("schedule (j)").style(dim)),
+        }
     }
 
     spans
