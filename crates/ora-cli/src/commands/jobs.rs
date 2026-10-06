@@ -12,18 +12,23 @@ use futures::TryStreamExt;
 use jiff::{Timestamp, civil::Time, tz::TimeZone};
 use ora::{
     AdminClient, JobFilters, JobTypeId,
+    admin::jobs::Execution,
     common::{LabelFilter, TimeRange},
     execution::{ExecutionId, ExecutionStatus},
     executor::ExecutorId,
     job::JobId,
+    job_type::AnyJobType,
     proto::jobs::v1::{RetryPolicy, TimeoutBaseTime, TimeoutPolicy},
     schedule::ScheduleId,
 };
 use serde_json::Value;
 use tempfile::NamedTempFile;
 
-use crate::completions::{
-    complete_active_job_id, complete_any_job_id, complete_any_schedule_id, complete_job_type,
+use crate::{
+    completions::{
+        complete_active_job_id, complete_any_job_id, complete_any_schedule_id, complete_job_type,
+    },
+    output::{self, OutputFormat, Record, print_records},
 };
 
 #[derive(Subcommand)]
@@ -517,14 +522,18 @@ impl From<JobOrder> for ora::JobOrderBy {
 }
 
 impl Jobs {
-    pub(crate) async fn execute(self, client: AdminClient) -> eyre::Result<()> {
+    pub(crate) async fn execute(
+        self,
+        client: AdminClient,
+        output: OutputFormat,
+    ) -> eyre::Result<()> {
         match self {
             Jobs::List {
                 filters,
                 order,
                 limit,
             } => {
-                list_jobs(&client, order, limit, filters.try_into()?).await?;
+                list_jobs(&client, order, limit, filters.try_into()?, output).await?;
 
                 Ok(())
             }
@@ -745,6 +754,7 @@ impl Jobs {
                                 job_ids: Some(vec![job.id()]),
                                 ..Default::default()
                             },
+                            output,
                         )
                         .await?;
 
@@ -772,6 +782,7 @@ impl Jobs {
                             job_ids: Some(vec![job.id()]),
                             ..Default::default()
                         },
+                        output,
                     )
                     .await?;
                 }
@@ -804,6 +815,7 @@ impl Jobs {
                             job_ids: Some(vec![job.id()]),
                             ..Default::default()
                         },
+                        output,
                     )
                     .await?;
 
@@ -871,6 +883,7 @@ impl Jobs {
                         job_ids: Some(job_ids),
                         ..Default::default()
                     },
+                    output,
                 )
                 .await?;
 
@@ -910,10 +923,12 @@ async fn list_jobs(
     order: JobOrder,
     limit: u32,
     filters: JobFilters,
+    output: OutputFormat,
 ) -> Result<(), eyre::Error> {
     use core::fmt::Write;
 
     let mut stream = pin!(client.list_jobs(filters, order.into(), Some(limit)));
+    let mut records = Vec::new();
     let mut table = Table::new();
     table.load_style(presets::UTF8_FULL);
     table.set_header(["Type", "Target", "Status", "Labels", "Retries", "Misc"]);
@@ -921,6 +936,17 @@ async fn list_jobs(
         let last_exec = job.executions().await?.pop().unwrap();
         let raw = job.raw().await?;
         let raw_def = raw.job.ok_or_eyre("missing job data")?;
+
+        if !output.is_table() {
+            records.push(job_record(
+                job.id(),
+                &raw_def,
+                raw.schedule_id.as_deref(),
+                raw.executions.len(),
+                &last_exec,
+            ));
+            continue;
+        }
 
         let mut labels = String::new();
         for label in raw_def.labels {
@@ -1004,6 +1030,11 @@ async fn list_jobs(
             misc,
         ]);
     }
+
+    if !output.is_table() {
+        return print_records(output, &records);
+    }
+
     println!("{table}");
     Ok(())
 }
@@ -1018,4 +1049,84 @@ fn parse_ts_or_date(ts: &str) -> eyre::Result<Timestamp> {
         .to_datetime(Time::midnight())
         .in_tz("UTC")?
         .timestamp())
+}
+
+/// Build the machine-readable form of a row of the jobs table.
+///
+/// Unlike the table, every field is a value of its own: raw timestamps and
+/// millisecond durations, and the IDs the `Misc` column packs together.
+fn job_record(
+    job_id: JobId,
+    raw_def: &ora::proto::jobs::v1::Job,
+    schedule_id: Option<&str>,
+    execution_count: usize,
+    last_exec: &Execution<AnyJobType>,
+) -> Record {
+    let target_execution_time = raw_def
+        .target_execution_time
+        .map(SystemTime::try_from)
+        .transpose()
+        .ok()
+        .flatten();
+
+    let duration = match (target_execution_time, last_exec.ended_at()) {
+        (Some(started), Some(ended)) => ended.duration_since(started).ok(),
+        _ => None,
+    };
+
+    let retry_policy = raw_def.retry_policy.unwrap_or_default();
+
+    let mut record = Record::new();
+
+    record.insert("id".into(), job_id.to_string().into());
+    record.insert("job_type".into(), raw_def.job_type_id.clone().into());
+    record.insert(
+        "target_execution_time".into(),
+        output::timestamp(target_execution_time),
+    );
+    record.insert(
+        "status".into(),
+        JobStatus::from(last_exec.status()).to_string().into(),
+    );
+    record.insert(
+        "started_at".into(),
+        output::timestamp(last_exec.started_at()),
+    );
+    record.insert("ended_at".into(), output::timestamp(last_exec.ended_at()));
+    record.insert("duration_ms".into(), output::millis(duration));
+    record.insert("priority".into(), raw_def.priority.into());
+    record.insert(
+        "schedule_id".into(),
+        schedule_id.map_or(Value::Null, |id| Value::String(id.to_owned())),
+    );
+    record.insert(
+        "labels".into(),
+        output::labels(
+            raw_def
+                .labels
+                .iter()
+                .map(|label| (label.key.as_str(), label.value.as_str())),
+        ),
+    );
+    record.insert(
+        "retry_attempts".into(),
+        (execution_count.saturating_sub(1) as u64).into(),
+    );
+    record.insert("retry_max".into(), retry_policy.retries.into());
+    record.insert(
+        "retry_backoff_ms".into(),
+        output::millis(
+            retry_policy
+                .backoff_duration
+                .and_then(|d| std::time::Duration::try_from(d).ok()),
+        ),
+    );
+    record.insert(
+        "retry_backoff_strategy".into(),
+        BackoffStrategy::from(retry_policy.backoff_strategy())
+            .to_string()
+            .into(),
+    );
+
+    record
 }
