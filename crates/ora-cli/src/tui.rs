@@ -29,6 +29,9 @@ const COUNT_INTERVAL: Duration = Duration::from_secs(30);
 /// would otherwise ask for every type passed on the way.
 const SETTLE_INTERVAL: Duration = Duration::from_millis(250);
 
+/// How long the footer says what was copied.
+const COPIED_INTERVAL: Duration = Duration::from_secs(3);
+
 mod data;
 mod events;
 mod ui;
@@ -207,6 +210,8 @@ enum ConfirmAction {
 pub(crate) struct Status {
     pub(crate) error: Option<String>,
     pub(crate) updated_at: Option<Instant>,
+    /// What was last copied to the clipboard, and when.
+    pub(crate) copied: Option<(&'static str, Instant)>,
 }
 
 /// The request of one kind in flight, if any, and since when.
@@ -713,6 +718,10 @@ impl App {
                     KeyCode::PageUp => detail.scroll_up(20),
                     KeyCode::PageDown => detail.scroll_down(20),
                     KeyCode::Home => detail.scroll_home(),
+                    KeyCode::Char('y' | 'Y') => {
+                        let text = detail.page_text();
+                        self.copy("page", text);
+                    }
                     _ => {}
                 }
             }
@@ -772,6 +781,26 @@ impl App {
                 }
 
                 self.reload();
+            }
+            (KeyModifiers::NONE, KeyCode::Char('i' | 'I'), KeyEventKind::Press)
+                if self.tab == Tab::Jobs =>
+            {
+                if let Some(job) = self.job_table.selected() {
+                    let text = ui::job_input(job);
+                    self.copy("input", text);
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('y' | 'Y'), KeyEventKind::Press)
+                if self.tab == Tab::Jobs =>
+            {
+                if let Some(job) = self.job_table.selected() {
+                    let text = match ui::job_output(job) {
+                        Some(ui::JobOutput::Failure(reason)) => reason.to_string(),
+                        Some(ui::JobOutput::Json(json)) => json,
+                        None => String::new(),
+                    };
+                    self.copy("output", text);
+                }
             }
             (KeyModifiers::NONE, KeyCode::Char('j' | 'J'), KeyEventKind::Press) => {
                 self.toggle_schedule_jobs();
@@ -1605,6 +1634,30 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Put text on the clipboard of the terminal, which owns the mouse
+    /// selection and cannot be asked to select a single pane.
+    fn copy(&mut self, what: &'static str, text: String) {
+        if text.trim().is_empty() {
+            return;
+        }
+
+        // Through the terminal (OSC 52), so it works over SSH too.
+        match crossterm::execute!(
+            std::io::stdout(),
+            crossterm::clipboard::CopyToClipboard::to_clipboard_from(text)
+        ) {
+            Ok(()) => self.status.copied = Some((what, Instant::now())),
+            Err(error) => self.status.error = Some(format!("failed to copy {what}: {error}")),
+        }
+    }
+
+    pub(crate) fn copied(&self) -> Option<&'static str> {
+        self.status
+            .copied
+            .filter(|(_, at)| at.elapsed() < COPIED_INTERVAL)
+            .map(|(what, _)| what)
     }
 
     fn quit(&mut self) {
