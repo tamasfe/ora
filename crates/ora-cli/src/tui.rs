@@ -24,6 +24,11 @@ const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 /// can take a while on a large table.
 const COUNT_INTERVAL: Duration = Duration::from_secs(30);
 
+/// How long the job type selection has to hold still before the rows
+/// for it are asked for. Scrolling to a type further down the list
+/// would otherwise ask for every type passed on the way.
+const SETTLE_INTERVAL: Duration = Duration::from_millis(250);
+
 mod data;
 mod events;
 mod ui;
@@ -340,6 +345,9 @@ pub struct App {
     pub(crate) job_counts: Option<[u64; 5]>,
     /// When the job counts were last asked for.
     counted_at: Option<Instant>,
+    /// When the selected job type's rows are due, while the selection
+    /// is still settling. Nothing filtered by it is asked for until then.
+    settles_at: Option<Instant>,
 }
 
 impl App {
@@ -369,6 +377,7 @@ impl App {
             job_schedule: None,
             job_counts: None,
             counted_at: None,
+            settles_at: None,
         }
     }
 
@@ -401,6 +410,9 @@ impl App {
         self.job_type_list.focused = true;
         // All job types are listed without waiting for the list of them.
         self.job_type_list.state.select(Some(0));
+        // Counting every job type is the most expensive question there is,
+        // so it settles too: opening and scrolling down never asks it.
+        self.reload_job_type();
         self.fetch(true);
         self.running = true;
         terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
@@ -422,6 +434,11 @@ impl App {
         // Only the timers change on their own; a tick redraws
         // nothing while there is nothing pending to show one for.
         if let AppEvent::Tick = event {
+            if self.settled() {
+                self.fetch(true);
+                return Ok(true);
+            }
+
             // Its lines are built once, the wait they show with them.
             if self.tab == Tab::Executors && !self.pending.executor_jobs.idle() {
                 self.refresh_detail();
@@ -859,6 +876,12 @@ impl App {
             )));
         }
 
+        // Everything below is filtered by the job type, so while the
+        // selection is still moving there is no question to ask yet.
+        if self.settles_at.is_some() {
+            return;
+        }
+
         let job_type_id = self.selected_job_type();
 
         match (self.tab, self.job_type_list.state.selected()) {
@@ -957,15 +980,29 @@ impl App {
         self.fetch(true);
     }
 
-    /// Drop the rows of both tabs and fetch again.
+    /// Drop the rows of both tabs and fetch again once the selection
+    /// has settled.
     ///
     /// The job type is the one filter they share, so a change of it
-    /// leaves the tab that is not on screen stale as well.
+    /// leaves the tab that is not on screen stale as well. The rows
+    /// wait for [`SETTLE_INTERVAL`] because a selection being moved
+    /// through is not one the rows are wanted for.
     fn reload_job_type(&mut self) {
         self.invalidate();
         self.clear_rows(Tab::Jobs);
         self.clear_rows(Tab::Schedules);
-        self.fetch(true);
+        self.settles_at = Some(Instant::now() + SETTLE_INTERVAL);
+    }
+
+    /// Whether the job type selection has just come to rest, which
+    /// hands the wait it was holding back to [`App::fetch`].
+    fn settled(&mut self) -> bool {
+        if self.settles_at.is_some_and(|due| Instant::now() >= due) {
+            self.settles_at = None;
+            return true;
+        }
+
+        false
     }
 
     /// Discard what is in flight, whichever tab asked for it: its
