@@ -157,6 +157,21 @@ impl Detail {
         self.scroll = 0;
     }
 
+    /// The page on screen as plain text, to be copied.
+    pub(crate) fn page_text(&self) -> String {
+        self.pages[self.selected]
+            .lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// How far the page can be scrolled before its last line is at
     /// the bottom of the body. Zero while the page fits.
     fn max_scroll(&self) -> u16 {
@@ -197,7 +212,7 @@ impl Widget for &mut Detail {
             ));
         }
         tab_line.push_span(
-            Span::from("  ←/→ page  ↑/↓ scroll  esc close")
+            Span::from("  ←/→ page  ↑/↓ scroll  y copy  esc close")
                 .style(Style::new().fg(tailwind::GRAY.c600)),
         );
         tab_line.render(tabs, buf);

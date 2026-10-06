@@ -12,7 +12,7 @@ pub(crate) use executors::ExecutorTable;
 pub(crate) use form::{Form, FormKind, parse_cron};
 use jiff::{SignedDuration, Timestamp, TimestampRound};
 pub(crate) use job_types::JobTypeList;
-pub(crate) use jobs::JobTable;
+pub(crate) use jobs::{JobOutput, JobTable, job_input, job_output};
 use ora::{JobOrderBy, ScheduleOrderBy, proto::admin::v1::ExecutionStatus};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
@@ -209,6 +209,11 @@ fn action_spans(app: &App) -> Vec<Span<'static>> {
             if app.can_cancel_job() {
                 action("cancel (c)");
             }
+
+            if app.job_table.selected().is_some() {
+                action("copy input (i)");
+                action("copy output (y)");
+            }
         }
         Tab::Schedules => {
             if app.can_stop_schedule() {
@@ -332,6 +337,10 @@ fn status_line(app: &App, max_error: usize) -> Line<'static> {
     if let Some(error) = app.status.error.as_ref() {
         spans.push(
             Span::from(truncate(error, max_error)).style(Style::new().fg(tailwind::RED.c400)),
+        );
+    } else if let Some(what) = app.copied() {
+        spans.push(
+            Span::from(format!("copied {what}")).style(Style::new().fg(tailwind::GREEN.c400)),
         );
     } else {
         // Since the server last answered anything, not since these rows.
