@@ -9,6 +9,7 @@ use crate::commands::Cli;
 
 mod commands;
 mod completions;
+mod output;
 mod tui;
 
 fn main() {
@@ -42,7 +43,12 @@ async fn cmd_main() {
         Endpoint::from_shared(url).unwrap().connect_lazy(),
     ));
 
-    if let Err(error) = cli.command.unwrap_or_default().execute(client).await {
+    if let Err(error) = cli
+        .command
+        .unwrap_or_default()
+        .execute(client, cli.output)
+        .await
+    {
         tracing::error!(%error, "fatal error");
         std::process::exit(1);
     }

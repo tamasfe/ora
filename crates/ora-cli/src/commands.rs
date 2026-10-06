@@ -1,8 +1,11 @@
 use clap::{Parser, Subcommand};
 use ora::AdminClient;
 
-use crate::commands::{
-    executors::Executors, job_types::Types, maintenance::Maintenance, schedules::Schedules,
+use crate::{
+    commands::{
+        executors::Executors, job_types::Types, maintenance::Maintenance, schedules::Schedules,
+    },
+    output::OutputFormat,
 };
 
 pub(crate) mod executors;
@@ -18,6 +21,10 @@ pub(crate) struct Cli {
     /// The URL to the ora server.
     #[arg(global = true, long)]
     pub(crate) url: Option<String>,
+
+    /// The output format of list commands.
+    #[arg(global = true, long = "output", short = 'o', default_value = "table")]
+    pub(crate) output: OutputFormat,
 
     #[command(subcommand)]
     pub(crate) command: Option<Command>,
@@ -47,12 +54,16 @@ pub(crate) enum Command {
 }
 
 impl Command {
-    pub(crate) async fn execute(self, client: AdminClient) -> eyre::Result<()> {
+    pub(crate) async fn execute(
+        self,
+        client: AdminClient,
+        output: OutputFormat,
+    ) -> eyre::Result<()> {
         match self {
-            Command::Types(job_types) => job_types.execute(client).await,
-            Command::Jobs(jobs) => jobs.execute(client).await,
-            Command::Schedules(schedules) => schedules.execute(client).await,
-            Command::Executors(executors) => executors.execute(client).await,
+            Command::Types(job_types) => job_types.execute(client, output).await,
+            Command::Jobs(jobs) => jobs.execute(client, output).await,
+            Command::Schedules(schedules) => schedules.execute(client, output).await,
+            Command::Executors(executors) => executors.execute(client, output).await,
             Command::Maintenance(maintenance) => maintenance.execute(client).await,
             Command::Tui => crate::tui::run(client).await,
         }

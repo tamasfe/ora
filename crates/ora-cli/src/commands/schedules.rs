@@ -15,7 +15,11 @@ use ora::{
 use serde_json::Value;
 use tempfile::NamedTempFile;
 
-use crate::{commands::jobs::BackoffStrategy, completions::complete_job_type};
+use crate::{
+    commands::jobs::BackoffStrategy,
+    completions::complete_job_type,
+    output::{self, OutputFormat, Record, print_records},
+};
 
 #[derive(Subcommand)]
 pub(crate) enum Schedules {
@@ -372,14 +376,18 @@ impl From<ScheduleOrder> for ora::ScheduleOrderBy {
 }
 
 impl Schedules {
-    pub(crate) async fn execute(self, client: AdminClient) -> eyre::Result<()> {
+    pub(crate) async fn execute(
+        self,
+        client: AdminClient,
+        output: OutputFormat,
+    ) -> eyre::Result<()> {
         match self {
             Schedules::List {
                 filters,
                 order,
                 limit,
             } => {
-                list_schedules(&client, order, limit, filters.try_into()?).await?;
+                list_schedules(&client, order, limit, filters.try_into()?, output).await?;
 
                 Ok(())
             }
@@ -645,6 +653,7 @@ impl Schedules {
                         schedule_ids: Some(vec![schedule.id()]),
                         ..Default::default()
                     },
+                    output,
                 )
                 .await?;
 
@@ -679,6 +688,7 @@ impl Schedules {
                         schedule_ids: Some(schedule_ids),
                         ..Default::default()
                     },
+                    output,
                 )
                 .await?;
 
@@ -693,10 +703,12 @@ async fn list_schedules(
     order: ScheduleOrder,
     limit: u32,
     filters: ScheduleFilters,
+    output: OutputFormat,
 ) -> Result<(), eyre::Error> {
     use core::fmt::Write;
 
     let mut stream = pin!(client.list_schedules(filters, order.into(), Some(limit)));
+    let mut records = Vec::new();
     let mut table = Table::new();
     table.load_style(presets::UTF8_FULL);
     table.style_mut().header_separator.fill = Some('=');
@@ -705,6 +717,21 @@ async fn list_schedules(
         let raw = schedule.raw().await?;
         let raw_def = raw.schedule.ok_or_eyre("missing schedule data")?;
         let raw_job_def = raw_def.job_template.ok_or_eyre("missing job template")?;
+        let status = ScheduleStatusArg::from(schedule.status().await?).to_string();
+        let policy = SchedulingPolicy::try_from(
+            raw_def.scheduling.ok_or_eyre("missing scheduling policy")?,
+        )?;
+
+        if !output.is_table() {
+            records.push(schedule_record(
+                schedule.id(),
+                &raw_def.labels,
+                &raw_job_def,
+                &status,
+                &policy,
+            ));
+            continue;
+        }
 
         let mut labels = String::new();
         for label in raw_def.labels {
@@ -713,12 +740,6 @@ async fn list_schedules(
             }
             write!(&mut labels, "{}={}", label.key, label.value).unwrap();
         }
-
-        let status = ScheduleStatusArg::from(schedule.status().await?).to_string();
-
-        let policy = SchedulingPolicy::try_from(
-            raw_def.scheduling.ok_or_eyre("missing scheduling policy")?,
-        )?;
 
         let policy = match policy {
             SchedulingPolicy::FixedInterval { interval, .. } => {
@@ -761,6 +782,11 @@ async fn list_schedules(
             meta,
         ]);
     }
+
+    if !output.is_table() {
+        return print_records(output, &records);
+    }
+
     println!("{table}");
     Ok(())
 }
@@ -775,4 +801,64 @@ fn parse_ts_or_date(ts: &str) -> eyre::Result<Timestamp> {
         .to_datetime(Time::midnight())
         .in_tz("UTC")?
         .timestamp())
+}
+
+/// Build the machine-readable form of a row of the schedules table.
+///
+/// The scheduling policy becomes three fields rather than one rendered
+/// string, so a cron expression and an interval stay apart.
+fn schedule_record(
+    schedule_id: ScheduleId,
+    labels: &[ora::proto::common::v1::Label],
+    raw_job_def: &ora::proto::jobs::v1::Job,
+    status: &str,
+    policy: &SchedulingPolicy,
+) -> Record {
+    let retry_policy = raw_job_def.retry_policy.unwrap_or_default();
+
+    let mut record = Record::new();
+
+    record.insert("id".into(), schedule_id.to_string().into());
+    record.insert("job_type".into(), raw_job_def.job_type_id.clone().into());
+    record.insert("status".into(), status.into());
+
+    match policy {
+        SchedulingPolicy::FixedInterval { interval, .. } => {
+            record.insert("policy".into(), "fixed-interval".into());
+            record.insert("policy_interval_ms".into(), output::millis(Some(*interval)));
+            record.insert("policy_expression".into(), Value::Null);
+        }
+        SchedulingPolicy::Cron { expression, .. } => {
+            record.insert("policy".into(), "cron".into());
+            record.insert("policy_interval_ms".into(), Value::Null);
+            record.insert("policy_expression".into(), expression.clone().into());
+        }
+    }
+
+    record.insert("priority".into(), raw_job_def.priority.into());
+    record.insert(
+        "labels".into(),
+        output::labels(
+            labels
+                .iter()
+                .map(|label| (label.key.as_str(), label.value.as_str())),
+        ),
+    );
+    record.insert("retry_max".into(), retry_policy.retries.into());
+    record.insert(
+        "retry_backoff_ms".into(),
+        output::millis(
+            retry_policy
+                .backoff_duration
+                .and_then(|d| std::time::Duration::try_from(d).ok()),
+        ),
+    );
+    record.insert(
+        "retry_backoff_strategy".into(),
+        BackoffStrategy::from(retry_policy.backoff_strategy())
+            .to_string()
+            .into(),
+    );
+
+    record
 }
