@@ -255,62 +255,120 @@ impl Widget for JobDetails<'_> {
 
         Paragraph::new(meta).render(meta_area, buf);
 
+        let input = payload("Input", job_input(job), None);
+        let output = match job_output(job) {
+            Some(JobOutput::Failure(reason)) => payload(
+                "Output",
+                reason.to_string(),
+                Some(Style::new().fg(tailwind::RED.c400)),
+            ),
+            Some(JobOutput::Json(json)) => payload("Output", json, None),
+            None => payload("Output", String::new(), None),
+        };
+
+        // Measured without the block, which `line_count` would wrap
+        // the text at the outer width of.
+        let width = payloads.width.saturating_sub(4);
+
         // Stacked rather than side by side: the pane is far wider than tall.
-        let [input, output] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(payloads);
+        let [input_area, output_area] = Layout::vertical(split_payloads(
+            input.text.line_count(width),
+            output.text.line_count(width),
+            payloads.height,
+        ))
+        .areas(payloads);
 
-        let scroll = self.1;
-
-        payload(
-            "Input",
-            &pretty_json(&def.input_payload_json),
-            None,
-            scroll,
-            input,
-            buf,
-        );
-
-        match job.executions.last() {
-            Some(exec) => match (exec.failure_reason.as_ref(), exec.output_json.as_ref()) {
-                (Some(reason), _) => payload(
-                    "Output",
-                    reason,
-                    Some(Style::new().fg(tailwind::RED.c400)),
-                    scroll,
-                    output,
-                    buf,
-                ),
-                (_, Some(json)) => {
-                    payload("Output", &pretty_json(json), None, scroll, output, buf);
-                }
-                _ => payload("Output", "", None, scroll, output, buf),
-            },
-            None => payload("Output", "", None, scroll, output, buf),
-        }
+        render_payload(input, self.1, input_area, buf);
+        render_payload(output, self.1, output_area, buf);
     }
 }
 
-/// A bordered, wrapping, scrollable pane for a JSON payload or
-/// failure reason.
-fn payload(
-    title: &str,
-    text: &str,
-    style: Option<Style>,
+/// The input of a job as it is shown and copied.
+pub(crate) fn job_input(job: &Job) -> String {
+    pretty_json(
+        job.job
+            .as_ref()
+            .map_or("", |def| def.input_payload_json.as_str()),
+    )
+}
+
+pub(crate) enum JobOutput<'a> {
+    Failure(&'a str),
+    Json(String),
+}
+
+/// What the latest execution of a job left: why it failed, or the
+/// output it succeeded with.
+pub(crate) fn job_output(job: &Job) -> Option<JobOutput<'_>> {
+    let exec = job.executions.last()?;
+
+    match (exec.failure_reason.as_ref(), exec.output_json.as_ref()) {
+        (Some(reason), _) => Some(JobOutput::Failure(reason)),
+        (_, Some(json)) => Some(JobOutput::Json(pretty_json(json))),
+        _ => None,
+    }
+}
+
+/// The heights of the input and output panes, given the lines each
+/// needs. Even unless one needs less than half, which then goes to
+/// the other.
+fn split_payloads(input: usize, output: usize, height: u16) -> [Constraint; 2] {
+    let half = usize::from(height / 2);
+    let input = input + 2;
+    let output = output + 2;
+
+    if input < half && output > half {
+        [
+            Constraint::Length(u16::try_from(input).unwrap_or(0)),
+            Constraint::Fill(1),
+        ]
+    } else if output < half && input > half {
+        [
+            Constraint::Fill(1),
+            Constraint::Length(u16::try_from(output).unwrap_or(0)),
+        ]
+    } else {
+        [Constraint::Fill(1), Constraint::Fill(1)]
+    }
+}
+
+/// The wrapping text of a pane for a JSON payload or failure reason.
+fn payload(title: &'static str, text: String, style: Option<Style>) -> Payload {
+    Payload {
+        title,
+        text: Paragraph::new(text)
+            .style(style.unwrap_or_default())
+            .wrap(Wrap { trim: false }),
+    }
+}
+
+struct Payload {
+    title: &'static str,
+    text: Paragraph<'static>,
+}
+
+/// Render a payload pane scrolled no further than its last line, so
+/// a short one stays in view while a long one next to it scrolls.
+fn render_payload(
+    pane: Payload,
     scroll: u16,
     area: ratatui::prelude::Rect,
     buf: &mut ratatui::prelude::Buffer,
 ) {
-    Paragraph::new(text.to_string())
-        .style(style.unwrap_or_default())
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0))
-        .block(
-            Block::new()
-                .title(format!(" {title} "))
-                .borders(Borders::all())
-                .border_set(symbols::border::PLAIN)
-                .padding(Padding::horizontal(1)),
-        )
+    let block = Block::new()
+        .title(format!(" {} ", pane.title))
+        .borders(Borders::all())
+        .border_set(symbols::border::PLAIN)
+        .padding(Padding::horizontal(1));
+
+    let inner = block.inner(area);
+    let max = u16::try_from(pane.text.line_count(inner.width))
+        .unwrap_or(u16::MAX)
+        .saturating_sub(inner.height);
+
+    pane.text
+        .block(block)
+        .scroll((scroll.min(max), 0))
         .render(area, buf);
 }
 
