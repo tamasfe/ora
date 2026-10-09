@@ -4,7 +4,10 @@ use comfy_table::{Table, presets};
 use eyre::Context;
 use ora::AdminClient;
 
-use crate::completions::complete_job_type;
+use crate::{
+    completions::complete_job_type,
+    output::{OutputFormat, Record, print_records},
+};
 
 #[derive(Subcommand)]
 pub(crate) enum Types {
@@ -40,11 +43,30 @@ pub(crate) enum Types {
 }
 
 impl Types {
-    pub(crate) async fn execute(self, client: AdminClient) -> eyre::Result<()> {
+    pub(crate) async fn execute(
+        self,
+        client: AdminClient,
+        output: OutputFormat,
+    ) -> eyre::Result<()> {
         match self {
             Types::List => {
                 let mut job_types = client.list_job_types().await?;
                 job_types.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
+
+                if !output.is_table() {
+                    let records = job_types
+                        .iter()
+                        .map(|job_type| {
+                            let mut record = Record::new();
+                            record.insert("id".into(), job_type.id.as_str().into());
+                            record
+                                .insert("description".into(), job_type.description.clone().into());
+                            record
+                        })
+                        .collect::<Vec<_>>();
+
+                    return print_records(output, &records);
+                }
 
                 let mut table = Table::new();
                 table.load_style(presets::NOTHING);
