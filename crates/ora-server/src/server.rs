@@ -8,6 +8,7 @@ use wgroup::{WaitGroup, WaitGroupHandle};
 use crate::{
     ServerHandle, ServerOptions,
     executor_pool::ExecutorPool,
+    metrics::{self, executor_pool_metrics_loop, job_counts_metrics_loop},
     server::{
         delete_history::delete_history_loop,
         executions::{
@@ -32,6 +33,8 @@ pub(crate) fn spawn_server<B>(
 where
     B: Backend + 'static,
 {
+    metrics::describe();
+
     let handle = match &wg {
         Either::Left(wg) => wg.handle(),
         Either::Right(handle) => handle.clone(),
@@ -75,6 +78,20 @@ where
         backend.clone(),
         handle.add_with("scheduling_new_jobs"),
     ));
+
+    spawn(executor_pool_metrics_loop(
+        executor_pool.clone(),
+        handle.add_with("executor_pool_metrics"),
+    ));
+
+    if !options.job_count_metrics_interval.is_zero() {
+        spawn(job_counts_metrics_loop(
+            backend.clone(),
+            executor_pool.clone(),
+            options.job_count_metrics_interval,
+            handle.add_with("job_count_metrics"),
+        ));
+    }
 
     if !options.delete_history_after.is_zero() {
         spawn(delete_history_loop(

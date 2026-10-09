@@ -300,6 +300,8 @@ pub struct CancelledJob {
     pub job_id: JobId,
     /// The last execution ID of the job.
     pub last_execution_id: ExecutionId,
+    /// The job type ID of the job.
+    pub job_type_id: JobTypeId,
 }
 
 /// The result of adding jobs,

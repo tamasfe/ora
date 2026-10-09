@@ -7,6 +7,8 @@ use std::{
 };
 use wgroup::WaitGuard;
 
+use crate::metrics::{self, JobSource};
+
 use ora_backend::{
     Backend,
     jobs::{JobDefinition, NewJob},
@@ -30,6 +32,7 @@ pub(super) async fn schedule_new_jobs_loop(backend: Arc<impl Backend>, wg: WaitG
             let pending_schedules = match pending_schedules {
                 Ok(s) => s,
                 Err(error) => {
+                    metrics::backend_error("pending_schedules");
                     tracing::error!(%error, "failed to retrieve pending schedules");
                     unhandled_schedules = true;
                     break;
@@ -86,12 +89,19 @@ pub(super) async fn schedule_new_jobs_loop(backend: Arc<impl Backend>, wg: WaitG
             if !new_jobs.is_empty() {
                 match backend.add_jobs(&new_jobs, None).await {
                     Ok(jobs) => {
+                        if !jobs.added_job_ids().is_empty() {
+                            for job in &new_jobs {
+                                metrics::job_added(&job.job.job_type_id, JobSource::Schedule);
+                            }
+                        }
+
                         tracing::debug!(
                             job_count = jobs.added_job_ids().len(),
                             "spawned new jobs for schedules"
                         );
                     }
                     Err(error) => {
+                        metrics::backend_error("add_jobs");
                         tracing::error!(%error, "failed to spawn jobs for schedules");
                         unhandled_schedules = true;
                     }
@@ -113,6 +123,7 @@ pub(super) async fn schedule_new_jobs_loop(backend: Arc<impl Backend>, wg: WaitG
                         );
                     }
                     Err(error) => {
+                        metrics::backend_error("stop_schedules");
                         tracing::error!(%error, "failed to stop scheduling for ended schedules");
                         unhandled_schedules = true;
                     }

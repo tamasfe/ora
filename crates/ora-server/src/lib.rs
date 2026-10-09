@@ -10,6 +10,7 @@ use crate::{executor_pool::ExecutorPool, grpc::GrpcImpl};
 mod broadcast;
 mod executor_pool;
 mod grpc;
+mod metrics;
 pub mod proto;
 mod server;
 mod util;
@@ -28,6 +29,13 @@ pub struct ServerOptions {
     ///
     /// Defaults to 15 seconds.
     pub shutdown_grace_period: Duration,
+    /// How often unfinished jobs are counted in the backend
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics.
+    ///
+    /// A zero duration disables counting.
+    ///
+    /// Defaults to 15 seconds.
+    pub job_count_metrics_interval: Duration,
 }
 
 impl Default for ServerOptions {
@@ -35,6 +43,7 @@ impl Default for ServerOptions {
         Self {
             delete_history_after: Default::default(),
             shutdown_grace_period: Duration::from_secs(15),
+            job_count_metrics_interval: Duration::from_secs(15),
         }
     }
 }
@@ -68,6 +77,16 @@ impl<B> ServerBuilder<B> {
     /// Defaults to 15 seconds.
     pub fn shutdown_grace_period(mut self, duration: Duration) -> Self {
         self.options.shutdown_grace_period = duration;
+        self
+    }
+
+    /// Set how often unfinished jobs are counted in the backend
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics,
+    /// a zero duration disables counting.
+    ///
+    /// Defaults to 15 seconds.
+    pub fn job_count_metrics_interval(mut self, duration: Duration) -> Self {
+        self.options.job_count_metrics_interval = duration;
         self
     }
 }

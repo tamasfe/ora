@@ -53,9 +53,12 @@ pub(crate) async fn cancel_jobs(
         // Only the active execution is cancelled, earlier (failed) executions are kept as-is,
         // so that each job is returned once.
         .and_where(Expr::cust("ora.execution.status < 2"))
-        .returning(sea_query::ReturningClause::Columns(vec![
-            ("ora", "execution", "job_id").into(),
-            ("ora", "execution", "id").into(),
+        .returning(sea_query::ReturningClause::Exprs(vec![
+            Expr::col(("ora", "execution", "job_id")),
+            Expr::col(("ora", "execution", "id")),
+            Expr::cust(
+                "(SELECT ora.job.job_type_id FROM ora.job WHERE ora.job.id = ora.execution.job_id)",
+            ),
         ]))
         .build_postgres(PostgresQueryBuilder);
 
@@ -75,11 +78,13 @@ pub(crate) async fn cancel_jobs(
         for row in rows {
             let job_id = JobId(row.try_get(0)?);
             let last_execution_id = ExecutionId(row.try_get(1)?);
+            let job_type_id = JobTypeId::new_unchecked(row.try_get::<_, String>(2)?);
 
             if cancelled_job_ids.insert(job_id) {
                 cancelled_jobs.push(CancelledJob {
                     job_id,
                     last_execution_id,
+                    job_type_id,
                 });
             }
         }
