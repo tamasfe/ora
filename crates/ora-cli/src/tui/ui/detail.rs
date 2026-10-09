@@ -1,4 +1,4 @@
-use jiff::Timestamp;
+use jiff::{SignedDuration, Timestamp};
 use ora::{
     admin::executors::ExecutorInfo,
     proto::{
@@ -16,7 +16,7 @@ use ratatui::{
 
 use crate::tui::ui::{
     execution_status_label, execution_status_style, field, format_duration, format_time,
-    format_time_with_age, pretty_json, schedules::policy_summary, timestamp_of,
+    format_time_with_age, loading_line, pretty_json, schedules::policy_summary, timestamp_of,
 };
 
 /// A scrollable, paged read-only view of a single job or schedule.
@@ -98,7 +98,11 @@ impl Detail {
         }
     }
 
-    pub(crate) fn from_executor(executor: &ExecutorInfo, jobs: &[Job], loading: bool) -> Self {
+    pub(crate) fn from_executor(
+        executor: &ExecutorInfo,
+        jobs: &[Job],
+        loading: Option<&str>,
+    ) -> Self {
         let pages = vec![
             Page {
                 name: "Overview",
@@ -106,7 +110,7 @@ impl Detail {
             },
             Page {
                 name: "Recent jobs",
-                lines: executor_jobs(jobs, loading),
+                lines: executor_jobs(&executor.id.to_string(), jobs, loading),
             },
         ];
 
@@ -153,6 +157,21 @@ impl Detail {
         self.scroll = 0;
     }
 
+    /// The page on screen as plain text, to be copied.
+    pub(crate) fn page_text(&self) -> String {
+        self.pages[self.selected]
+            .lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// How far the page can be scrolled before its last line is at
     /// the bottom of the body. Zero while the page fits.
     fn max_scroll(&self) -> u16 {
@@ -193,7 +212,7 @@ impl Widget for &mut Detail {
             ));
         }
         tab_line.push_span(
-            Span::from("  ←/→ page  ↑/↓ scroll  esc close")
+            Span::from("  ←/→ page  ↑/↓ scroll  y copy  esc close")
                 .style(Style::new().fg(tailwind::GRAY.c600)),
         );
         tab_line.render(tabs, buf);
@@ -470,15 +489,34 @@ fn executor_overview(executor: &ExecutorInfo) -> Vec<Line<'static>> {
     lines
 }
 
+/// How long after its target time the job's latest run on the
+/// executor started.
+fn start_delay(executor_id: &str, job: &Job) -> Option<String> {
+    let execution = job
+        .executions
+        .iter()
+        .rev()
+        .find(|execution| execution.executor_id.as_deref() == Some(executor_id))?;
+
+    let started = timestamp_of(execution.started_at?)?;
+    let target = timestamp_of(execution.target_execution_time?)?;
+
+    Some(format!(
+        "{:#}",
+        SignedDuration::from_secs(started.duration_since(target).as_secs())
+    ))
+}
+
 /// The name of the first column, which is also its narrowest width.
 const JOB_TYPE: &str = "Job type";
 
-fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
+fn executor_jobs(executor_id: &str, jobs: &[Job], loading: Option<&str>) -> Vec<Line<'static>> {
     if jobs.is_empty() {
         // Fetched only once the view is opened, so empty means nothing yet.
-        let message = if loading { "Loading…" } else { "(no jobs)" };
-
-        return vec![Line::from(message).style(Style::new().fg(tailwind::GRAY.c500))];
+        return vec![match loading {
+            Some(timer) => loading_line("Loading…", timer),
+            None => Line::from("(no jobs)").style(Style::new().fg(tailwind::GRAY.c500)),
+        }];
     }
 
     let width = jobs
@@ -490,8 +528,8 @@ fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
         .unwrap_or(0);
 
     let header = Line::from(format!(
-        "{JOB_TYPE:<width$} {:<12}{:<30}ID",
-        "Status", "Created"
+        "{JOB_TYPE:<width$} {:<12}{:<12}{:<30}ID",
+        "Status", "Delay", "Created"
     ))
     .style(Style::new().bold().fg(tailwind::GRAY.c400));
 
@@ -513,6 +551,11 @@ fn executor_jobs(jobs: &[Job], loading: bool) -> Vec<Line<'static>> {
                 ),
                 None => spans.push(Span::from(format!("{:<12}", ""))),
             }
+
+            spans.push(Span::from(format!(
+                "{:<12}",
+                start_delay(executor_id, job).unwrap_or_default()
+            )));
 
             // Padded so the IDs line up to be copied out.
             spans.push(Span::from(format!(

@@ -1,10 +1,14 @@
-use ora::admin::job_types::JobTypeInfo;
+use std::collections::HashSet;
+
+use ora::{JobTypeId, admin::job_types::JobTypeInfo};
 use ratatui::{
+    layout::{Constraint, Layout},
     style::{
         Modifier, Style,
         palette::tailwind::{self, SLATE},
     },
     symbols,
+    text::{Line, Span},
     widgets::{
         Block, Borders, HighlightSpacing, List, ListItem, ListState, StatefulWidget, Widget,
     },
@@ -16,12 +20,21 @@ use crate::tui::ui::empty_message;
 /// job types are still loading or failed to load.
 const MIN_WIDTH: u16 = 16;
 
+/// The first entry, which lists the jobs and schedules of every job type.
+const ALL: &str = "(all)";
+
+const UNSERVED_STYLE: Style = Style::new().fg(tailwind::ORANGE.c400);
+
 #[derive(Debug, Default)]
 pub(crate) struct JobTypeList {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
     pub(crate) state: ListState,
     pub(crate) job_types: Vec<JobTypeInfo>,
+    /// The job types a connected executor serves,
+    /// `None` until the executors are known.
+    pub(crate) served: Option<HashSet<JobTypeId>>,
 }
 
 impl JobTypeList {
@@ -32,6 +45,30 @@ impl JobTypeList {
             .max()
             .unwrap_or(0)
             .clamp(MIN_WIDTH, 50)
+            + if self.any_unserved() { 2 } else { 0 }
+    }
+
+    /// Whether no connected executor serves the job type.
+    pub(crate) fn unserved(&self, job_type: &JobTypeId) -> bool {
+        self.served
+            .as_ref()
+            .is_some_and(|served| !served.contains(job_type))
+    }
+
+    fn any_unserved(&self) -> bool {
+        self.job_types
+            .iter()
+            .any(|job_type| self.unserved(&job_type.id))
+    }
+
+    /// The highlighted job type, `None` on the entry for all of them.
+    pub(crate) fn selected(&self) -> Option<&JobTypeInfo> {
+        self.job_types.get(self.state.selected()?.checked_sub(1)?)
+    }
+
+    /// Whether the entry for all job types is highlighted.
+    pub(crate) fn all_selected(&self) -> bool {
+        self.state.selected() == Some(0)
     }
 }
 
@@ -55,10 +92,16 @@ impl Widget for &mut JobTypeList {
 
         let inner = block.inner(area);
 
-        let items = self
-            .job_types
-            .iter()
-            .map(|job_type| ListItem::new(job_type.id.as_str()))
+        let items = std::iter::once(ListItem::new(ALL))
+            .chain(self.job_types.iter().map(|job_type| {
+                let mut line = Line::from(job_type.id.as_str());
+
+                if self.unserved(&job_type.id) {
+                    line.push_span(Span::from(" !").style(UNSERVED_STYLE));
+                }
+
+                ListItem::new(line)
+            }))
             .collect::<Vec<_>>();
 
         let list = List::new(items)
@@ -70,7 +113,9 @@ impl Widget for &mut JobTypeList {
         StatefulWidget::render(list, area, buf, &mut self.state);
 
         if self.job_types.is_empty() {
-            empty_message(self.loading, "No job types.", inner, buf);
+            let [_, below_all] =
+                Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+            empty_message(self.loading.as_deref(), "No job types.", below_all, buf);
         }
     }
 }

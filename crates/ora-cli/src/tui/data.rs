@@ -1,4 +1,4 @@
-use std::{future::Future, time::Duration};
+use std::future::Future;
 
 use flume::Sender;
 use futures::TryStreamExt;
@@ -20,26 +20,13 @@ const PAGE_SIZE: u32 = 25;
 /// How many of an executor's jobs are shown in its detail view.
 const EXECUTOR_JOB_LIMIT: u32 = 25;
 
-/// How long to wait for the server before giving up.
-///
-/// Without this a hung connection, such as a stale port forward,
-/// leaves the view loading forever with nothing to explain it.
-const REQUEST_TIMEOUT: Duration = Duration::from_mins(1);
-
-/// Await a request, turning both failures and timeouts into a message
-/// that can be shown in the footer.
+/// Await a request, turning a failure into a message for the footer.
+/// It has no timeout, how long it has been waiting is shown instead.
 async fn request<F, T>(what: &str, future: F) -> Result<T, String>
 where
     F: Future<Output = ora::Result<T>>,
 {
-    match tokio::time::timeout(REQUEST_TIMEOUT, future).await {
-        Ok(Ok(value)) => Ok(value),
-        Ok(Err(error)) => Err(format!("{what}: {error}")),
-        Err(_) => Err(format!(
-            "{what}: no response after {}s",
-            REQUEST_TIMEOUT.as_secs()
-        )),
-    }
+    future.await.map_err(|error| format!("{what}: {error}"))
 }
 
 pub(super) async fn update_job_types(admin: AdminClient, events: Sender<AppEvent>) {
@@ -53,16 +40,18 @@ pub(super) async fn update_job_types(admin: AdminClient, events: Sender<AppEvent
 
 pub(super) async fn update_jobs(
     token: u64,
-    job_type: JobTypeId,
+    job_type: Option<JobTypeId>,
     order: ora::JobOrderBy,
     statuses: Option<Vec<ExecutionStatus>>,
     admin: AdminClient,
     events: Sender<AppEvent>,
     label_filter: String,
+    schedule: Option<ScheduleId>,
     page_token: Option<String>,
 ) {
     let filters = JobFilters {
-        job_type_ids: Some(vec![job_type]),
+        job_type_ids: job_type.map(|job_type| vec![job_type]),
+        schedule_ids: schedule.map(|schedule| vec![schedule]),
         labels: parse_label_filter(&label_filter),
         execution_statuses: statuses,
         ..Default::default()
@@ -88,9 +77,47 @@ pub(super) async fn update_jobs(
     let _ = events.send_async(event).await;
 }
 
+/// The statuses the jobs are counted by, in the order they are shown.
+pub(super) const JOB_COUNT_STATUSES: [ExecutionStatus; 5] = [
+    ExecutionStatus::Pending,
+    ExecutionStatus::InProgress,
+    ExecutionStatus::Succeeded,
+    ExecutionStatus::Failed,
+    ExecutionStatus::Cancelled,
+];
+
+/// Count the jobs matching the jobs tab's filters by status.
+pub(super) async fn count_jobs(
+    token: u64,
+    job_type: Option<JobTypeId>,
+    admin: AdminClient,
+    events: Sender<AppEvent>,
+    label_filter: String,
+    schedule: Option<ScheduleId>,
+) {
+    let counts = JOB_COUNT_STATUSES.map(|status| {
+        admin.count_jobs(JobFilters {
+            job_type_ids: job_type.clone().map(|job_type| vec![job_type]),
+            schedule_ids: schedule.map(|schedule| vec![schedule]),
+            labels: parse_label_filter(&label_filter),
+            execution_statuses: Some(vec![status]),
+            ..Default::default()
+        })
+    });
+
+    let event = match request("job counts", futures::future::try_join_all(counts)).await {
+        Ok(counts) => {
+            AppEvent::JobCountsUpdated(token, counts.try_into().expect("one count per status"))
+        }
+        Err(error) => AppEvent::Failed(Request::JobCounts, error, Some(token)),
+    };
+
+    let _ = events.send_async(event).await;
+}
+
 pub(super) async fn update_schedules(
     token: u64,
-    job_type: JobTypeId,
+    job_type: Option<JobTypeId>,
     order: ScheduleOrderBy,
     statuses: Option<Vec<ScheduleStatus>>,
     admin: AdminClient,
@@ -99,7 +126,7 @@ pub(super) async fn update_schedules(
     page_token: Option<String>,
 ) {
     let filters = ScheduleFilters {
-        job_type_ids: Some(vec![job_type]),
+        job_type_ids: job_type.map(|job_type| vec![job_type]),
         labels: parse_label_filter(&label_filter),
         statuses,
         ..Default::default()

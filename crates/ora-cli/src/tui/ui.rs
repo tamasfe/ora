@@ -12,7 +12,7 @@ pub(crate) use executors::ExecutorTable;
 pub(crate) use form::{Form, FormKind, parse_cron};
 use jiff::{SignedDuration, Timestamp, TimestampRound};
 pub(crate) use job_types::JobTypeList;
-pub(crate) use jobs::JobTable;
+pub(crate) use jobs::{JobOutput, JobTable, job_input, job_output};
 use ora::{JobOrderBy, ScheduleOrderBy, proto::admin::v1::ExecutionStatus};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
@@ -23,11 +23,9 @@ use ratatui::{
 pub(crate) use schedules::ScheduleTable;
 use serde_json::Value;
 
-use crate::tui::{App, Confirm, Tab};
+use crate::tui::{App, Confirm, ConfirmAction, Counter, Editing, Tab};
 
 const TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
-
-const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 impl Widget for &mut App {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
@@ -44,15 +42,30 @@ impl Widget for &mut App {
 
         render_tabs(self, tabs, buf);
 
-        self.job_type_list.loading = !self.pending.job_types.idle();
-        self.job_table.loading = self.pending.for_tab(Tab::Jobs);
-        self.schedule_table.loading = self.pending.for_tab(Tab::Schedules);
-        self.executor_table.loading = self.pending.for_tab(Tab::Executors);
+        // A settling selection is a wait like any other, only its
+        // request has not been sent yet, so it shows a bare timer.
+        let settling = self.settles_at.is_some().then(String::new);
+
+        self.job_type_list.loading = timer(&self.pending.job_types);
+        self.job_table.loading = timer(&self.pending.jobs).or_else(|| settling.clone());
+        self.schedule_table.loading = timer(&self.pending.schedules).or_else(|| settling.clone());
+        self.executor_table.loading = timer(&self.pending.executors);
+
+        let all_types = self.job_type_list.all_selected();
+        self.job_table.all_types = all_types;
+        self.job_table.unserved = self
+            .job_type_list
+            .selected()
+            .is_some_and(|job_type| self.job_type_list.unserved(&job_type.id));
+        self.schedule_table.all_types = all_types;
 
         match self.tab {
             Tab::Jobs => {
                 let [left, right] = job_type_layout(self.job_type_list.max_width()).areas(content);
+                let [counts, right] =
+                    Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(right);
                 self.job_type_list.render(left, buf);
+                render_job_counts(self, counts, buf);
                 self.job_table.render(right, buf);
             }
             Tab::Schedules => {
@@ -81,6 +94,47 @@ impl Widget for &mut App {
             render_confirm(confirm, content, buf);
         }
     }
+}
+
+/// How many jobs have each status, above the jobs table.
+fn render_job_counts(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) {
+    let dim = Style::new().fg(tailwind::GRAY.c500);
+
+    let Some(counts) = app.job_counts else {
+        let settling = app.settles_at.is_some().then(String::new);
+
+        if let Some(timer) = timer(&app.pending.job_counts).or(settling) {
+            let mut line = loading_line("Counting…", &timer);
+            line.spans.insert(0, Span::from(" "));
+            line.render(area, buf);
+        }
+
+        return;
+    };
+
+    let mut spans = vec![Span::from(" ")];
+
+    for (status, count) in [
+        ExecutionStatus::Pending,
+        ExecutionStatus::InProgress,
+        ExecutionStatus::Succeeded,
+        ExecutionStatus::Failed,
+        ExecutionStatus::Cancelled,
+    ]
+    .into_iter()
+    .zip(counts)
+    {
+        if spans.len() > 1 {
+            spans.push(Span::from(SEPARATOR).style(dim));
+        }
+
+        spans.push(
+            Span::from(format!("{} {count}", execution_status_label(status)))
+                .style(execution_status_style(status)),
+        );
+    }
+
+    Line::from(spans).render(area, buf);
 }
 
 fn job_type_layout(max_width: u16) -> Layout {
@@ -155,10 +209,19 @@ fn action_spans(app: &App) -> Vec<Span<'static>> {
             if app.can_cancel_job() {
                 action("cancel (c)");
             }
+
+            if app.job_table.selected().is_some() {
+                action("copy input (i)");
+                action("copy output (y)");
+            }
         }
         Tab::Schedules => {
             if app.can_stop_schedule() {
                 action("stop (s)");
+            }
+
+            if app.can_show_schedule_jobs() {
+                action("jobs (j)");
             }
         }
         Tab::Executors => {}
@@ -208,14 +271,26 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
     }
 
     // Typing takes the row, which fits several pairs and their syntax.
-    if app.labels_focused {
+    if let Some(editing) = app.editing {
         let orange = Style::new().fg(tailwind::ORANGE.c600);
 
+        let (name, input, help) = match editing {
+            Editing::Labels => (
+                "labels: ",
+                app.label_filter(app.tab),
+                "   key=value or key, comma separated   enter apply   esc clear",
+            ),
+            Editing::Schedule => (
+                "schedule: ",
+                app.schedule_input.as_str(),
+                "   schedule ID   enter apply   esc clear",
+            ),
+        };
+
         return vec![
-            Span::from("labels: ").style(orange.bold()),
-            Span::from(format!("{}_", app.label_filter(app.tab))).style(orange),
-            Span::from("   key=value or key, comma separated   enter apply   esc clear")
-                .style(Style::new().fg(tailwind::GRAY.c600)),
+            Span::from(name).style(orange.bold()),
+            Span::from(format!("{input}_")).style(orange),
+            Span::from(help).style(Style::new().fg(tailwind::GRAY.c600)),
         ];
     }
 
@@ -257,26 +332,33 @@ fn filter_spans(app: &App) -> Vec<Span<'static>> {
         spans.push(Span::from(" (l)").style(dim));
     }
 
+    if app.tab == Tab::Jobs {
+        spans.push(Span::from(SEPARATOR).style(dim));
+
+        match app.job_schedule {
+            Some(schedule) => {
+                spans.push(
+                    Span::from(format!("schedule {}", schedule.0)).style(Style::new().bold()),
+                );
+                spans.push(Span::from(" (j)").style(dim));
+            }
+            None => spans.push(Span::from("schedule (j)").style(dim)),
+        }
+    }
+
     spans
 }
 
 fn status_line(app: &App, max_error: usize) -> Line<'static> {
     let mut spans = Vec::new();
 
-    if let Some(waited) = app.pending.waited() {
-        spans.push(
-            Span::from(format!(
-                "{} {}s ",
-                SPINNER[app.spinner % SPINNER.len()],
-                waited.as_secs()
-            ))
-            .style(Style::new().fg(tailwind::BLUE.c400)),
-        );
-    }
-
     if let Some(error) = app.status.error.as_ref() {
         spans.push(
             Span::from(truncate(error, max_error)).style(Style::new().fg(tailwind::RED.c400)),
+        );
+    } else if let Some(what) = app.copied() {
+        spans.push(
+            Span::from(format!("copied {what}")).style(Style::new().fg(tailwind::GREEN.c400)),
         );
     } else {
         // Since the server last answered anything, not since these rows.
@@ -310,10 +392,17 @@ fn render_confirm(confirm: &Confirm, area: Rect, buf: &mut ratatui::prelude::Buf
 
     Clear.render(area, buf);
 
+    let answers = match confirm.action {
+        ConfirmAction::StopSchedule(_) => {
+            "(y) stop and cancel its jobs   (k) stop, keep its jobs   (n) back"
+        }
+        _ => "(y) confirm   (n) cancel",
+    };
+
     Paragraph::new(vec![
         Line::from(confirm.prompt.clone()),
         Line::default(),
-        Line::from("(y) confirm   (n) cancel").style(Style::new().fg(tailwind::GRAY.c500)),
+        Line::from(answers).style(Style::new().fg(tailwind::GRAY.c500)),
     ])
     .wrap(Wrap { trim: true })
     .block(
@@ -430,9 +519,12 @@ pub(super) fn execution_status_label(status: ExecutionStatus) -> &'static str {
 pub(super) fn execution_status_style(status: ExecutionStatus) -> Style {
     match status {
         ExecutionStatus::Succeeded => Style::new().fg(tailwind::GREEN.c400),
-        ExecutionStatus::Failed | ExecutionStatus::Cancelled => Style::new().fg(tailwind::RED.c400),
+        ExecutionStatus::Failed => Style::new().fg(tailwind::RED.c400),
         ExecutionStatus::InProgress => Style::new().fg(tailwind::YELLOW.c400),
-        _ => Style::new().fg(tailwind::GRAY.c400),
+        ExecutionStatus::Unspecified | ExecutionStatus::Pending => {
+            Style::new().fg(tailwind::SKY.c400)
+        }
+        ExecutionStatus::Cancelled => Style::new().fg(tailwind::GRAY.c400),
     }
 }
 
@@ -444,17 +536,35 @@ pub(super) fn field(name: &str, value: impl Into<String>) -> Line<'static> {
     ])
 }
 
+/// How long a request has been waiting for its answer, e.g. `3s`, empty
+/// for the first second, `None` while it is not waiting.
+pub(crate) fn timer(counter: &Counter) -> Option<String> {
+    counter.waited().map(|waited| match waited.as_secs() {
+        0 => String::new(),
+        secs => format!("{secs}s"),
+    })
+}
+
+/// What is being waited for, followed by the timer of its request.
+pub(super) fn loading_line(text: &str, timer: &str) -> Line<'static> {
+    Line::from(format!("{text} {timer}").trim_end().to_string())
+        .style(Style::new().fg(tailwind::GRAY.c500))
+}
+
 /// Explain why a table has no rows, so that a pending request
 /// is never mistaken for a result set that came back empty.
 pub(super) fn empty_message(
-    loading: bool,
+    loading: Option<&str>,
     empty: &str,
     area: Rect,
     buf: &mut ratatui::prelude::Buffer,
 ) {
-    let text = if loading { "Loading…" } else { empty };
+    let line = match loading {
+        Some(timer) => loading_line("Loading…", timer),
+        None => Line::from(empty.to_string()),
+    };
 
-    Paragraph::new(Line::from(text.to_string()))
+    Paragraph::new(line)
         .style(Style::new().fg(tailwind::GRAY.c500))
         .block(Block::new().padding(ratatui::widgets::Padding::left(2)))
         .render(area, buf);

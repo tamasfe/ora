@@ -20,6 +20,18 @@ const TICK_INTERVAL: Duration = Duration::from_millis(120);
 /// How often data is refreshed in the background.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 
+/// How often the job counts are refreshed in the background, which
+/// can take a while on a large table.
+const COUNT_INTERVAL: Duration = Duration::from_secs(30);
+
+/// How long the job type selection has to hold still before the rows
+/// for it are asked for. Scrolling to a type further down the list
+/// would otherwise ask for every type passed on the way.
+const SETTLE_INTERVAL: Duration = Duration::from_millis(250);
+
+/// How long the footer says what was copied.
+const COPIED_INTERVAL: Duration = Duration::from_secs(3);
+
 mod data;
 mod events;
 mod ui;
@@ -178,6 +190,13 @@ const PAGE_AHEAD: usize = 5;
 /// on its own, which would drop them.
 const AUTO_PAGES: usize = 2;
 
+/// The filter being typed into in the footer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Editing {
+    Labels,
+    Schedule,
+}
+
 /// An action that is only carried out
 /// once the user confirms it.
 #[derive(Debug)]
@@ -198,6 +217,8 @@ enum ConfirmAction {
 pub(crate) struct Status {
     pub(crate) error: Option<String>,
     pub(crate) updated_at: Option<Instant>,
+    /// What was last copied to the clipboard, and when.
+    pub(crate) copied: Option<(&'static str, Instant)>,
 }
 
 /// The request of one kind in flight, if any, and since when.
@@ -267,34 +288,24 @@ pub(crate) struct Pending {
     schedules: Counter,
     executors: Counter,
     executor_jobs: Counter,
+    job_counts: Counter,
 }
 
 impl Pending {
-    fn counters(&self) -> [&Counter; 5] {
+    fn counters(&self) -> [&Counter; 6] {
         [
             &self.job_types,
             &self.jobs,
             &self.schedules,
             &self.executors,
             &self.executor_jobs,
+            &self.job_counts,
         ]
     }
 
-    /// How long the longest outstanding request has been waiting.
-    pub(crate) fn waited(&self) -> Option<Duration> {
-        self.counters()
-            .into_iter()
-            .filter_map(Counter::waited)
-            .max()
-    }
-
-    /// Whether the table backing the given tab is waiting for data.
-    pub(crate) fn for_tab(&self, tab: Tab) -> bool {
-        match tab {
-            Tab::Jobs => !self.jobs.idle(),
-            Tab::Schedules => !self.schedules.idle(),
-            Tab::Executors => !self.executors.idle(),
-        }
+    /// Whether any request is waiting for its answer.
+    fn busy(&self) -> bool {
+        self.counters().into_iter().any(|counter| !counter.idle())
     }
 
     fn finish(&mut self, request: Request) {
@@ -304,6 +315,7 @@ impl Pending {
             Request::Schedules => &mut self.schedules,
             Request::Executors => &mut self.executors,
             Request::ExecutorJobs => &mut self.executor_jobs,
+            Request::JobCounts => &mut self.job_counts,
             Request::Action => return,
         };
 
@@ -331,14 +343,25 @@ pub struct App {
     form: Option<ui::Form>,
     status: Status,
     pending: Pending,
-    spinner: usize,
     job_order: JobOrderBy,
     schedule_order: ScheduleOrderBy,
-    labels_focused: bool,
+    pub(crate) editing: Option<Editing>,
     /// The label filter of each tab, which they do not share.
     label_filters: [String; 3],
     job_status: JobStatus,
     schedule_status: ScheduleStatus,
+    /// The schedule the jobs tab is narrowed to, if any.
+    pub(crate) job_schedule: Option<ora::schedule::ScheduleId>,
+    /// The schedule ID as it is typed, applied to `job_schedule` on enter.
+    pub(crate) schedule_input: String,
+    /// How many of the jobs tab's jobs have each status, whatever
+    /// status it is filtered by.
+    pub(crate) job_counts: Option<[u64; 5]>,
+    /// When the job counts were last asked for.
+    counted_at: Option<Instant>,
+    /// When the selected job type's rows are due, while the selection
+    /// is still settling. Nothing filtered by it is asked for until then.
+    settles_at: Option<Instant>,
 }
 
 impl App {
@@ -358,14 +381,18 @@ impl App {
             form: None,
             status: Status::default(),
             pending: Pending::default(),
-            spinner: 0,
             events: Events::default(),
             job_order: JobOrderBy::CreatedAtDesc,
             schedule_order: ScheduleOrderBy::CreatedAtDesc,
-            labels_focused: false,
+            editing: None,
             label_filters: Default::default(),
             job_status: JobStatus::default(),
             schedule_status: ScheduleStatus::default(),
+            job_schedule: None,
+            schedule_input: String::new(),
+            job_counts: None,
+            counted_at: None,
+            settles_at: None,
         }
     }
 
@@ -396,6 +423,11 @@ impl App {
         });
 
         self.job_type_list.focused = true;
+        // All job types are listed without waiting for the list of them.
+        self.job_type_list.state.select(Some(0));
+        // Counting every job type is the most expensive question there is,
+        // so it settles too: opening and scrolling down never asks it.
+        self.reload_job_type();
         self.fetch(true);
         self.running = true;
         terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
@@ -414,11 +446,20 @@ impl App {
             return Ok(false);
         };
 
-        // Only the spinner animates on its own; a tick redraws
+        // Only the timers change on their own; a tick redraws
         // nothing while there is nothing pending to show one for.
         if let AppEvent::Tick = event {
-            self.spinner = self.spinner.wrapping_add(1);
-            return Ok(self.pending.waited().is_some());
+            if self.settled() {
+                self.fetch(true);
+                return Ok(true);
+            }
+
+            // Its lines are built once, the wait they show with them.
+            if self.tab == Tab::Executors && !self.pending.executor_jobs.idle() {
+                self.refresh_detail();
+            }
+
+            return Ok(self.pending.busy());
         }
 
         match event {
@@ -445,7 +486,9 @@ impl App {
                         .iter()
                         .position(|job_type| job_type.id == selected);
 
-                    self.job_type_list.state.select(moved);
+                    self.job_type_list
+                        .state
+                        .select(moved.map(|index| index + 1));
                 }
 
                 let prev_selection = self.job_type_list.state.selected();
@@ -471,13 +514,18 @@ impl App {
 
                     // A refresh starts over at the first page, so
                     // showing each as it lands blinks the later
-                    // ones out. Wait, unless the table is empty
-                    // and there is nothing to lose by not waiting.
+                    // ones out. Wait, unless no more rows are on
+                    // screen than arrived, so nothing is lost.
                     let more =
                         self.job_table.pages < AUTO_PAGES && self.job_table.next_page.is_some();
 
-                    if !more || self.job_table.jobs.is_empty() {
+                    if !more || self.job_table.jobs.len() <= self.job_table.incoming.len() {
                         self.job_table.jobs.clone_from(&self.job_table.incoming);
+                        self.job_table.extending = true;
+                        self.job_table
+                            .shown_next_page
+                            .clone_from(&self.job_table.next_page);
+                        self.job_table.shown_pages = self.job_table.pages;
                     }
 
                     self.data_updated();
@@ -521,8 +569,20 @@ impl App {
             }
             AppEvent::ExecutorsUpdated(executors) => {
                 self.pending.finish(Request::Executors);
+                self.job_type_list.served = Some(
+                    executors
+                        .iter()
+                        .flat_map(|executor| &executor.queues)
+                        .map(|queue| queue.job_type_id.clone())
+                        .collect(),
+                );
                 self.executor_table.executors = executors;
-                self.data_updated();
+
+                if self.tab == Tab::Executors {
+                    self.data_updated();
+                } else {
+                    self.answered();
+                }
                 self.refresh_detail();
             }
             AppEvent::ExecutorJobsUpdated(executor_id, jobs) => {
@@ -531,6 +591,13 @@ impl App {
                     self.executor_jobs = jobs;
                     self.data_updated();
                     self.refresh_detail();
+                }
+            }
+            AppEvent::JobCountsUpdated(token, counts) => {
+                if self.pending.job_counts.accepts(token) {
+                    self.pending.job_counts.finish();
+                    self.job_counts = Some(counts);
+                    self.answered();
                 }
             }
             AppEvent::Created => {
@@ -551,6 +618,7 @@ impl App {
                 let accepted = match (request, token) {
                     (Request::Jobs, Some(token)) => self.pending.jobs.accepts(token),
                     (Request::Schedules, Some(token)) => self.pending.schedules.accepts(token),
+                    (Request::JobCounts, Some(token)) => self.pending.job_counts.accepts(token),
                     _ => true,
                 };
 
@@ -578,8 +646,8 @@ impl App {
         for c in text.chars().filter(|c| !c.is_control()) {
             if let Some(form) = self.form.as_mut() {
                 form.push_char(c);
-            } else if self.labels_focused {
-                self.label_filter_mut().push(c);
+            } else if let Some(editing) = self.editing {
+                self.filter_input_mut(editing).push(c);
             } else {
                 return;
             }
@@ -592,6 +660,7 @@ impl App {
             // form, so it has to be matched before it.
             (KeyModifiers::NONE, key, KeyEventKind::Press) if self.confirm.is_some() => match key {
                 KeyCode::Char('y' | 'Y') | KeyCode::Enter => self.run_confirmed_action(),
+                KeyCode::Char('k' | 'K') => self.stop_schedule_keeping_jobs(),
                 KeyCode::Char('n' | 'N') | KeyCode::Esc => self.confirm = None,
                 _ => {}
             },
@@ -637,11 +706,11 @@ impl App {
                     _ => form.pop_word(),
                 }
             }
-            (KeyModifiers::NONE, KeyCode::Tab, KeyEventKind::Press) if !self.labels_focused => {
+            (KeyModifiers::NONE, KeyCode::Tab, KeyEventKind::Press) if self.editing.is_none() => {
                 self.switch_tab(true);
             }
             (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::BackTab, KeyEventKind::Press)
-                if !self.labels_focused =>
+                if self.editing.is_none() =>
             {
                 self.switch_tab(false);
             }
@@ -659,6 +728,10 @@ impl App {
                     KeyCode::PageUp => detail.scroll_up(20),
                     KeyCode::PageDown => detail.scroll_down(20),
                     KeyCode::Home => detail.scroll_home(),
+                    KeyCode::Char('y' | 'Y') => {
+                        let text = detail.page_text();
+                        self.copy("page", text);
+                    }
                     _ => {}
                 }
             }
@@ -670,24 +743,32 @@ impl App {
             {
                 self.job_table.scroll_payload_down();
             }
-            (KeyModifiers::NONE, key, KeyEventKind::Press) if self.labels_focused => match key {
-                KeyCode::Esc => {
-                    self.labels_focused = false;
-                    self.label_filter_mut().clear();
-                    self.reload();
+            (KeyModifiers::NONE, key, KeyEventKind::Press) if self.editing.is_some() => {
+                let Some(editing) = self.editing else {
+                    return;
+                };
+
+                match key {
+                    KeyCode::Esc => {
+                        self.editing = None;
+                        self.filter_input_mut(editing).clear();
+
+                        if editing == Editing::Schedule {
+                            self.job_schedule = None;
+                        }
+
+                        self.reload();
+                    }
+                    KeyCode::Backspace => {
+                        self.filter_input_mut(editing).pop();
+                    }
+                    KeyCode::Enter => self.apply_filter(editing),
+                    KeyCode::Char(c) => {
+                        self.filter_input_mut(editing).push(c);
+                    }
+                    _ => {}
                 }
-                KeyCode::Backspace => {
-                    self.label_filter_mut().pop();
-                }
-                KeyCode::Enter => {
-                    self.labels_focused = false;
-                    self.reload();
-                }
-                KeyCode::Char(c) => {
-                    self.label_filter_mut().push(c);
-                }
-                _ => {}
-            },
+            }
             (KeyModifiers::NONE, KeyCode::Esc | KeyCode::Char('q'), KeyEventKind::Press)
             | (KeyModifiers::CONTROL, KeyCode::Char('c'), KeyEventKind::Press) => {
                 self.quit();
@@ -719,8 +800,31 @@ impl App {
 
                 self.reload();
             }
+            (KeyModifiers::NONE, KeyCode::Char('i' | 'I'), KeyEventKind::Press)
+                if self.tab == Tab::Jobs =>
+            {
+                if let Some(job) = self.job_table.selected() {
+                    let text = ui::job_input(job);
+                    self.copy("input", text);
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('y' | 'Y'), KeyEventKind::Press)
+                if self.tab == Tab::Jobs =>
+            {
+                if let Some(job) = self.job_table.selected() {
+                    let text = match ui::job_output(job) {
+                        Some(ui::JobOutput::Failure(reason)) => reason.to_string(),
+                        Some(ui::JobOutput::Json(json)) => json,
+                        None => String::new(),
+                    };
+                    self.copy("output", text);
+                }
+            }
+            (KeyModifiers::NONE, KeyCode::Char('j' | 'J'), KeyEventKind::Press) => {
+                self.schedule_jobs();
+            }
             (KeyModifiers::NONE, KeyCode::Char('l' | 'L'), KeyEventKind::Press) => {
-                self.labels_focused = true;
+                self.editing = Some(Editing::Labels);
             }
             (KeyModifiers::NONE, KeyCode::Char('o' | 'O'), KeyEventKind::Press) => {
                 if self.tab == Tab::Schedules {
@@ -811,12 +915,29 @@ impl App {
             )));
         }
 
-        match (self.tab, self.selected_job_type()) {
-            (Tab::Jobs, Some(job_type_id)) => {
+        // The job type list warns of the job types no executor serves.
+        if force || self.pending.executors.idle() {
+            self.pending.executors.start(spawn(data::update_executors(
+                self.client.clone(),
+                self.events.sender(),
+            )));
+        }
+
+        // Everything below is filtered by the job type, so while the
+        // selection is still moving there is no question to ask yet.
+        if self.settles_at.is_some() {
+            return;
+        }
+
+        let job_type_id = self.selected_job_type();
+
+        match (self.tab, self.job_type_list.state.selected()) {
+            (Tab::Jobs, Some(_)) => {
                 // Refreshing on the timer would drop every page loaded
                 // past the first, so once one is loaded the table is
                 // only refreshed when asked for.
                 if force || (self.pending.jobs.idle() && self.job_table.pages <= AUTO_PAGES) {
+                    self.job_table.extending = false;
                     let token = self.pending.jobs.next_token();
                     self.pending.jobs.start(spawn(data::update_jobs(
                         token,
@@ -826,11 +947,18 @@ impl App {
                         self.client.clone(),
                         self.events.sender(),
                         self.label_filter(Tab::Jobs).to_string(),
+                        self.job_schedule,
                         None,
                     )));
                 }
+
+                if force {
+                    self.counted_at = None;
+                }
+
+                self.fetch_job_counts();
             }
-            (Tab::Schedules, Some(job_type_id)) => {
+            (Tab::Schedules, Some(_)) => {
                 if force
                     || (self.pending.schedules.idle() && self.schedule_table.pages <= AUTO_PAGES)
                 {
@@ -848,13 +976,6 @@ impl App {
                 }
             }
             (Tab::Executors, _) => {
-                if force || self.pending.executors.idle() {
-                    self.pending.executors.start(spawn(data::update_executors(
-                        self.client.clone(),
-                        self.events.sender(),
-                    )));
-                }
-
                 if self.detail().is_some() && (force || self.pending.executor_jobs.idle()) {
                     self.fetch_executor_jobs();
                 }
@@ -873,6 +994,29 @@ impl App {
         }
     }
 
+    /// Count the jobs tab's jobs by status, unless counted recently.
+    fn fetch_job_counts(&mut self) {
+        let due = self
+            .counted_at
+            .is_none_or(|at| at.elapsed() >= COUNT_INTERVAL);
+
+        if !due || !self.pending.job_counts.idle() || self.job_type_list.state.selected().is_none()
+        {
+            return;
+        }
+
+        let token = self.pending.job_counts.next_token();
+        self.counted_at = Some(Instant::now());
+        self.pending.job_counts.start(spawn(data::count_jobs(
+            token,
+            self.selected_job_type(),
+            self.client.clone(),
+            self.events.sender(),
+            self.label_filter(Tab::Jobs).to_string(),
+            self.job_schedule,
+        )));
+    }
+
     /// Drop the rows of the active tab and fetch again.
     ///
     /// Used whenever its filters change, so that rows matching the
@@ -883,15 +1027,29 @@ impl App {
         self.fetch(true);
     }
 
-    /// Drop the rows of both tabs and fetch again.
+    /// Drop the rows of both tabs and fetch again once the selection
+    /// has settled.
     ///
     /// The job type is the one filter they share, so a change of it
-    /// leaves the tab that is not on screen stale as well.
+    /// leaves the tab that is not on screen stale as well. The rows
+    /// wait for [`SETTLE_INTERVAL`] because a selection being moved
+    /// through is not one the rows are wanted for.
     fn reload_job_type(&mut self) {
         self.invalidate();
         self.clear_rows(Tab::Jobs);
         self.clear_rows(Tab::Schedules);
-        self.fetch(true);
+        self.settles_at = Some(Instant::now() + SETTLE_INTERVAL);
+    }
+
+    /// Whether the job type selection has just come to rest, which
+    /// hands the wait it was holding back to [`App::fetch`].
+    fn settled(&mut self) -> bool {
+        if self.settles_at.is_some_and(|due| Instant::now() >= due) {
+            self.settles_at = None;
+            return true;
+        }
+
+        false
     }
 
     /// Discard what is in flight, whichever tab asked for it: its
@@ -899,6 +1057,9 @@ impl App {
     fn invalidate(&mut self) {
         self.pending.jobs.cancel();
         self.pending.schedules.cancel();
+        self.pending.job_counts.cancel();
+        self.job_counts = None;
+        self.counted_at = None;
         self.status.error = None;
     }
 
@@ -909,6 +1070,8 @@ impl App {
                 self.job_table.incoming.clear();
                 self.job_table.next_page = None;
                 self.job_table.pages = 0;
+                self.job_table.shown_next_page = None;
+                self.job_table.shown_pages = 0;
             }
             Tab::Schedules => {
                 self.schedule_table.schedules.clear();
@@ -930,14 +1093,42 @@ impl App {
         &mut self.label_filters[self.tab.index()]
     }
 
+    fn filter_input_mut(&mut self, editing: Editing) -> &mut String {
+        match editing {
+            Editing::Labels => self.label_filter_mut(),
+            Editing::Schedule => &mut self.schedule_input,
+        }
+    }
+
+    /// Stop typing into a filter and fetch the rows it narrows to.
+    ///
+    /// A schedule ID only takes once it parses, since a partial one
+    /// would match nothing; until then the typing goes on.
+    fn apply_filter(&mut self, editing: Editing) {
+        if editing == Editing::Schedule {
+            let input = self.schedule_input.trim();
+
+            if input.is_empty() {
+                self.job_schedule = None;
+            } else {
+                match input.parse() {
+                    Ok(id) => self.job_schedule = Some(ora::schedule::ScheduleId(id)),
+                    Err(_) => {
+                        self.status.error = Some(format!("not a schedule ID: {input}"));
+                        return;
+                    }
+                }
+            }
+        }
+
+        self.editing = None;
+        self.status.error = None;
+        self.reload();
+    }
+
     /// The job type used to filter the jobs and schedules tabs.
     fn selected_job_type(&self) -> Option<ora::JobTypeId> {
-        self.job_type_list.state.selected().and_then(|index| {
-            self.job_type_list
-                .job_types
-                .get(index)
-                .map(|jt| jt.id.clone())
-        })
+        self.job_type_list.selected().map(|jt| jt.id.clone())
     }
 
     /// Move the selection in whichever list has focus.
@@ -951,6 +1142,12 @@ impl App {
                 self.job_type_list.state.select_previous();
             }
 
+            // Past the last job type would be taken for the entry for all of them.
+            let last = self.job_type_list.job_types.len();
+            if self.job_type_list.state.selected() > Some(last) {
+                self.job_type_list.state.select(Some(last));
+            }
+
             self.job_type_selected(previous, self.job_type_list.state.selected());
             return;
         }
@@ -962,6 +1159,13 @@ impl App {
             state.select_next();
         } else {
             state.select_previous();
+        }
+
+        // The table clamps it only once drawn, and a row can follow the last one.
+        if let Some(row) = state.selected()
+            && row >= len
+        {
+            state.select(len.checked_sub(1));
         }
 
         let row = state.selected();
@@ -1050,6 +1254,8 @@ impl App {
 
         self.job_table.state.select(None);
         self.schedule_table.state.select(None);
+        self.job_schedule = None;
+        self.schedule_input.clear();
         self.reload_job_type();
     }
 
@@ -1075,7 +1281,7 @@ impl App {
             Tab::Executors => self
                 .executor_table
                 .selected()
-                .map(|executor| ui::Detail::from_executor(executor, &[], true)),
+                .map(|executor| ui::Detail::from_executor(executor, &[], None)),
         };
 
         let opened = detail.is_some();
@@ -1086,6 +1292,7 @@ impl App {
         if opened && self.tab == Tab::Executors {
             self.executor_jobs.clear();
             self.fetch_executor_jobs();
+            self.refresh_detail();
         }
     }
 
@@ -1125,7 +1332,7 @@ impl App {
                     ui::Detail::from_executor(
                         executor,
                         &self.executor_jobs,
-                        !self.pending.executor_jobs.idle(),
+                        ui::timer(&self.pending.executor_jobs).as_deref(),
                     )
                 }),
         };
@@ -1170,15 +1377,65 @@ impl App {
                 .is_some_and(|schedule| schedule.status() != ProtoScheduleStatus::Stopped)
     }
 
+    /// Whether the highlighted schedule's jobs can be shown.
+    pub(crate) fn can_show_schedule_jobs(&self) -> bool {
+        self.tab == Tab::Schedules
+            && self.table_focused()
+            && self.schedule_table.selected().is_some()
+    }
+
+    /// Show the jobs of the highlighted schedule, or on the jobs tab
+    /// type the schedule they are narrowed to.
+    fn schedule_jobs(&mut self) {
+        if self.tab == Tab::Jobs {
+            self.editing = Some(Editing::Schedule);
+            return;
+        }
+
+        if !self.can_show_schedule_jobs() {
+            return;
+        }
+
+        let Some(schedule_id) = self
+            .schedule_table
+            .selected()
+            .and_then(|schedule| schedule.id.parse().ok())
+        else {
+            return;
+        };
+
+        self.job_schedule = Some(ora::schedule::ScheduleId(schedule_id));
+        self.schedule_input = schedule_id.to_string();
+        self.tab = Tab::Jobs;
+        self.close_detail();
+        self.job_table.state.select(None);
+        self.reload();
+        self.focus_table(true);
+    }
+
     /// Fetch the page after the rows already in the jobs table.
     fn load_more_jobs(&mut self) {
+        // Scrolling past the rows on screen matters more than a refresh,
+        // which would only replace them, so it goes on from those rows.
+        if !self.pending.jobs.idle() && !self.job_table.extending {
+            self.pending.jobs.cancel();
+            self.job_table.incoming.clone_from(&self.job_table.jobs);
+            self.job_table
+                .next_page
+                .clone_from(&self.job_table.shown_next_page);
+            self.job_table.pages = self.job_table.shown_pages;
+            self.job_table.extending = true;
+        }
+
         if self.job_table.next_page.is_none() || !self.pending.jobs.idle() {
             return;
         }
 
-        let Some(job_type_id) = self.selected_job_type() else {
+        if self.job_type_list.state.selected().is_none() {
             return;
-        };
+        }
+
+        let job_type_id = self.selected_job_type();
 
         let token = self.pending.jobs.next_token();
         self.pending.jobs.start(spawn(data::update_jobs(
@@ -1189,6 +1446,7 @@ impl App {
             self.client.clone(),
             self.events.sender(),
             self.label_filter(Tab::Jobs).to_string(),
+            self.job_schedule,
             self.job_table.next_page.clone(),
         )));
     }
@@ -1199,9 +1457,11 @@ impl App {
             return;
         }
 
-        let Some(job_type_id) = self.selected_job_type() else {
+        if self.job_type_list.state.selected().is_none() {
             return;
-        };
+        }
+
+        let job_type_id = self.selected_job_type();
 
         let token = self.pending.schedules.next_token();
         self.pending.schedules.start(spawn(data::update_schedules(
@@ -1242,8 +1502,7 @@ impl App {
             return None;
         }
 
-        let index = self.job_type_list.state.selected()?;
-        let job_type = self.job_type_list.job_types.get(index)?;
+        let job_type = self.job_type_list.selected()?;
 
         let kind = if self.tab == Tab::Jobs {
             ui::FormKind::Job
@@ -1358,9 +1617,29 @@ impl App {
         };
 
         self.confirm = Some(Confirm {
-            prompt: format!("Stop schedule {} and cancel its jobs?", schedule.id),
+            prompt: format!("Stop schedule {}?", schedule.id),
             action: ConfirmAction::StopSchedule(schedule.id.clone()),
         });
+    }
+
+    /// Stop the schedule being confirmed, leaving its active jobs to run.
+    fn stop_schedule_keeping_jobs(&mut self) {
+        let Some(Confirm {
+            action: ConfirmAction::StopSchedule(schedule_id),
+            ..
+        }) = self
+            .confirm
+            .take_if(|confirm| matches!(confirm.action, ConfirmAction::StopSchedule(_)))
+        else {
+            return;
+        };
+
+        spawn(data::stop_schedule(
+            schedule_id,
+            false,
+            self.client.clone(),
+            self.events.sender(),
+        ));
     }
 
     fn run_confirmed_action(&mut self) {
@@ -1407,6 +1686,30 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Put text on the clipboard of the terminal, which owns the mouse
+    /// selection and cannot be asked to select a single pane.
+    fn copy(&mut self, what: &'static str, text: String) {
+        if text.trim().is_empty() {
+            return;
+        }
+
+        // Through the terminal (OSC 52), so it works over SSH too.
+        match crossterm::execute!(
+            std::io::stdout(),
+            crossterm::clipboard::CopyToClipboard::to_clipboard_from(text)
+        ) {
+            Ok(()) => self.status.copied = Some((what, Instant::now())),
+            Err(error) => self.status.error = Some(format!("failed to copy {what}: {error}")),
+        }
+    }
+
+    pub(crate) fn copied(&self) -> Option<&'static str> {
+        self.status
+            .copied
+            .filter(|(_, at)| at.elapsed() < COPIED_INTERVAL)
+            .map(|(what, _)| what)
     }
 
     fn quit(&mut self) {
@@ -1462,16 +1765,43 @@ fn policies(
             .map_err(|error| format!("invalid retries: {error}"))?
     };
 
+    let base_time = match form.option("timeout_base").as_str() {
+        "target" => ora::proto::jobs::v1::TimeoutBaseTime::TargetExecutionTime,
+        _ => ora::proto::jobs::v1::TimeoutBaseTime::StartTime,
+    };
+
+    let backoff_strategy = match form.option("backoff_strategy").as_str() {
+        "exponential" => ora::proto::jobs::v1::BackoffStrategy::Exponential,
+        _ => ora::proto::jobs::v1::BackoffStrategy::Fixed,
+    };
+
     Ok((
         ora::proto::jobs::v1::TimeoutPolicy {
             timeout: timeout.and_then(|d| d.try_into().ok()),
-            base_time: ora::proto::jobs::v1::TimeoutBaseTime::StartTime as _,
+            base_time: base_time as _,
         },
         ora::proto::jobs::v1::RetryPolicy {
             retries,
-            ..Default::default()
+            backoff_duration: duration_option(form, "backoff", "retry backoff")?
+                .and_then(|d| d.try_into().ok()),
+            max_backoff_duration: duration_option(form, "max_backoff", "max backoff")?
+                .and_then(|d| d.try_into().ok()),
+            backoff_strategy: backoff_strategy as _,
         },
     ))
+}
+
+/// An option field parsed as a duration, `None` when it is empty.
+fn duration_option(form: &ui::Form, key: &str, name: &str) -> Result<Option<Duration>, String> {
+    let text = form.option(key);
+
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+
+    humantime::parse_duration(text.trim())
+        .map(Some)
+        .map_err(|error| format!("invalid {name}: {error}"))
 }
 
 /// The priority option every job and schedule shares.
@@ -1502,8 +1832,34 @@ fn fill_policies(
         form.set_option("timeout", humantime::format_duration(timeout).to_string());
     }
 
+    if timeout.is_some_and(|policy| {
+        policy.base_time() == ora::proto::jobs::v1::TimeoutBaseTime::TargetExecutionTime
+    }) {
+        form.set_option_choice("timeout_base", "target");
+    }
+
     if let Some(retries) = retry.map(|policy| policy.retries).filter(|r| *r > 0) {
         form.set_option("retries", retries.to_string());
+    }
+
+    let Some(retry) = retry else {
+        return;
+    };
+
+    for (key, duration) in [
+        ("backoff", retry.backoff_duration),
+        ("max_backoff", retry.max_backoff_duration),
+    ] {
+        if let Some(duration) = duration
+            .and_then(|duration| std::time::Duration::try_from(duration).ok())
+            .filter(|duration| !duration.is_zero())
+        {
+            form.set_option(key, humantime::format_duration(duration).to_string());
+        }
+    }
+
+    if retry.backoff_strategy() == ora::proto::jobs::v1::BackoffStrategy::Exponential {
+        form.set_option_choice("backoff_strategy", "exponential");
     }
 }
 
@@ -1548,6 +1904,28 @@ fn fill_from_schedule(form: &mut ui::Form, schedule: &ora::proto::schedules::v1:
         }
         None => {}
     }
+
+    let missed = match schedule.scheduling.as_ref().and_then(|s| s.policy.as_ref()) {
+        Some(Policy::Cron(cron)) => cron.missed_time_policy(),
+        Some(Policy::Interval(interval)) => interval.missed_time_policy(),
+        None => ora::proto::schedules::v1::MissedTimePolicy::Unspecified,
+    };
+
+    if missed == ora::proto::schedules::v1::MissedTimePolicy::Create {
+        form.set_option_choice("missed", "create");
+    }
+
+    // A past start would have the copy create the jobs of every time it missed since.
+    if let Some(range) = schedule.time_range.as_ref() {
+        for (key, time) in [("start", range.start), ("end", range.end)] {
+            if let Some(time) = time
+                .and_then(ui::timestamp_of)
+                .filter(|time| *time > jiff::Timestamp::now())
+            {
+                form.set_option(key, time.to_string());
+            }
+        }
+    }
 }
 
 fn label_rows(labels: &[ora::proto::common::v1::Label]) -> Vec<(String, String)> {
@@ -1584,13 +1962,18 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
     let interval = form.option("interval");
     let immediate = form.option_bool("immediate");
 
+    let missed_time_policy = match form.option("missed").as_str() {
+        "create" => ora::proto::schedules::v1::MissedTimePolicy::Create,
+        _ => ora::proto::schedules::v1::MissedTimePolicy::Skip,
+    };
+
     let policy = if !cron.trim().is_empty() {
         ui::parse_cron(&cron).map_err(|error| format!("invalid cron: {error}"))?;
 
         Policy::Cron(SchedulingPolicyCron {
             cron_expression: cron.trim().to_string(),
             immediate,
-            ..Default::default()
+            missed_time_policy: missed_time_policy as _,
         })
     } else if !interval.trim().is_empty() {
         let interval = humantime::parse_duration(interval.trim())
@@ -1599,7 +1982,7 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
         Policy::Interval(SchedulingPolicyInterval {
             interval: interval.try_into().ok(),
             immediate,
-            ..Default::default()
+            missed_time_policy: missed_time_policy as _,
         })
     } else {
         return Err("a cron expression or an interval is required".to_string());
@@ -1621,6 +2004,14 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
             priority: priority(form)?,
         }),
         labels: parse_labels(&form.pairs_option("labels")),
-        time_range: None,
+        time_range: Some(ora::proto::common::v1::TimeRange {
+            start: form
+                .time_option("start")?
+                .map(|time| std::time::SystemTime::from(time).into()),
+            end: form
+                .time_option("end")?
+                .map(|time| std::time::SystemTime::from(time).into()),
+        }),
     })
 }
+

@@ -870,6 +870,16 @@ impl Form {
         }
     }
 
+    /// Select the choice of an option field by its name.
+    pub(crate) fn set_option_choice(&mut self, key: &str, value: &str) {
+        if let Some(field) = self.option_field_mut(key)
+            && let FieldKind::Choice(choices) = &field.kind
+            && let Some(index) = choices.iter().position(|choice| choice == value)
+        {
+            field.choice = index;
+        }
+    }
+
     /// Set the rows of an option field that holds key and value pairs.
     pub(crate) fn set_pairs_option(&mut self, key: &str, rows: Vec<(String, String)>) {
         if let Some(field) = self.option_field_mut(key) {
@@ -1006,6 +1016,24 @@ fn option_fields(kind: FormKind) -> Vec<Field> {
                 FieldKind::Bool,
                 "Create a job as soon as the schedule is added.",
             ),
+            Field::option(
+                "missed",
+                "missed times",
+                FieldKind::Choice(vec!["skip".to_string(), "create".to_string()]),
+                "Whether to create the jobs of times that were missed, e.g. while the server was down.",
+            ),
+            Field::option(
+                "start",
+                "active from",
+                FieldKind::Time,
+                "No jobs are created before this time. Empty means from now.",
+            ),
+            Field::option(
+                "end",
+                "active until",
+                FieldKind::Time,
+                "No jobs are created after this time. Empty means indefinitely.",
+            ),
         ],
     };
 
@@ -1022,10 +1050,34 @@ fn option_fields(kind: FormKind) -> Vec<Field> {
         "How long a run may take, e.g. `2h`. Empty means no timeout.",
     ));
     fields.push(Field::option(
+        "timeout_base",
+        "timeout from",
+        FieldKind::Choice(vec!["start".to_string(), "target".to_string()]),
+        "Whether the timeout counts from when a run starts or from its target time.",
+    ));
+    fields.push(Field::option(
         "retries",
         "retries",
         FieldKind::Integer,
         "How many times to retry a failed run.",
+    ));
+    fields.push(Field::option(
+        "backoff",
+        "retry backoff",
+        FieldKind::Text,
+        "How long to wait before a retry, e.g. `30s`. Empty means retry immediately.",
+    ));
+    fields.push(Field::option(
+        "backoff_strategy",
+        "backoff strategy",
+        FieldKind::Choice(vec!["fixed".to_string(), "exponential".to_string()]),
+        "Whether every retry waits the same, or each waits twice as long as the one before.",
+    ));
+    fields.push(Field::option(
+        "max_backoff",
+        "max backoff",
+        FieldKind::Text,
+        "The longest an exponential backoff may grow to, e.g. `1h`. Empty means unlimited.",
     ));
     fields.push(Field::option(
         "priority",

@@ -9,6 +9,7 @@ use ratatui::{
         palette::tailwind::{self, SLATE},
     },
     symbols,
+    text::{Line, Span},
     widgets::{
         Block, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row, StatefulWidget, Table,
         TableState, Widget, Wrap,
@@ -17,7 +18,7 @@ use ratatui::{
 
 use crate::tui::ui::{
     compact_duration, empty_message, execution_status_label, execution_status_style, field,
-    format_time, format_time_with_age, pretty_json, timestamp_of,
+    format_time, format_time_with_age, loading_line, pretty_json, timestamp_of,
 };
 
 /// How many lines the input/output payloads scroll per key press.
@@ -26,7 +27,12 @@ const PAYLOAD_SCROLL_STEP: u16 = 3;
 #[derive(Debug, Default)]
 pub(crate) struct JobTable {
     pub(crate) focused: bool,
-    pub(crate) loading: bool,
+    /// The timer of the request for the rows, while it is waiting.
+    pub(crate) loading: Option<String>,
+    /// Whether the rows are of every job type, so each has to say which.
+    pub(crate) all_types: bool,
+    /// Whether no connected executor serves the job type of the rows.
+    pub(crate) unserved: bool,
     pub(crate) state: TableState,
     pub(crate) jobs: Vec<Job>,
     /// The token for the page after the rows held here, when the
@@ -37,6 +43,13 @@ pub(crate) struct JobTable {
     /// The pages of the fetch in progress. The rows on screen are
     /// replaced from here once enough of them have arrived.
     pub(crate) incoming: Vec<Job>,
+    /// Whether the request in flight adds to the rows on screen,
+    /// rather than replacing them.
+    pub(crate) extending: bool,
+    /// The page token and page count of the rows on screen, which a
+    /// refresh in flight has replaced with its own.
+    pub(crate) shown_next_page: Option<String>,
+    pub(crate) shown_pages: usize,
     /// How far the input/output payloads are scrolled, and the job
     /// they belong to, so selecting a different one resets it.
     payload_scroll: u16,
@@ -62,11 +75,18 @@ impl Widget for &mut JobTable {
     where
         Self: Sized,
     {
-        let layout = Layout::horizontal([Constraint::Length(44), Constraint::Fill(1)]);
+        let layout = Layout::horizontal([Constraint::Length(53), Constraint::Fill(1)]);
         let [left, right] = layout.areas(area);
 
         let block = Block::new()
-            .title(" Jobs ")
+            .title(if self.unserved {
+                Line::from(vec![
+                    Span::from(" Jobs "),
+                    Span::from("· no executor ").style(Style::new().fg(tailwind::ORANGE.c400)),
+                ])
+            } else {
+                Line::from(" Jobs ")
+            })
             .title_style(Style::new().bold())
             .borders(Borders::all())
             .border_set(symbols::border::PLAIN)
@@ -77,6 +97,11 @@ impl Widget for &mut JobTable {
             });
 
         let block_inner = block.inner(left);
+
+        let loading_row = self
+            .loading
+            .as_deref()
+            .filter(|_| self.extending && !self.jobs.is_empty());
 
         let rows = self
             .jobs
@@ -105,24 +130,52 @@ impl Widget for &mut JobTable {
                             .style(execution_status_style(status)),
                         None => Cell::new(""),
                     },
+                    Cell::new(
+                        job.job
+                            .as_ref()
+                            .map(|def| def.priority.to_string())
+                            .unwrap_or_default(),
+                    ),
                     Cell::new(job.id.clone()),
                 ])
             })
+            .chain(loading_row.map(|timer| Row::new([Cell::new(loading_line("Loading…", timer))])))
             .collect::<Vec<_>>();
 
-        let table = Table::new(rows, [Constraint::Length(26), Constraint::Length(12)])
-            .block(block)
-            .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
-            .highlight_symbol("> ")
-            .highlight_spacing(HighlightSpacing::Always);
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Length(26),
+                Constraint::Length(12),
+                Constraint::Length(8),
+            ],
+        )
+        .header(
+            Row::new(["Target", "Status", "Priority"])
+                .style(Style::new().bold().fg(tailwind::GRAY.c400)),
+        )
+        .block(block)
+        .row_highlight_style(Style::new().bg(SLATE.c800).add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ")
+        .highlight_spacing(HighlightSpacing::Always);
+
+        // The table scrolls only as far as the selected row, which on the
+        // last job leaves the loading row after it off screen.
+        if loading_row.is_some() && self.state.selected() == Some(self.jobs.len() - 1) {
+            let visible = usize::from(block_inner.height.saturating_sub(1));
+            let offset = (self.jobs.len() + 1).saturating_sub(visible);
+            *self.state.offset_mut() = self.state.offset().max(offset);
+        }
 
         StatefulWidget::render(table, left, buf, &mut self.state);
 
         if self.jobs.is_empty() {
+            let [_, body] =
+                Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(block_inner);
             empty_message(
-                self.loading,
+                self.loading.as_deref(),
                 "No jobs match the current filter.",
-                block_inner,
+                body,
                 buf,
             );
         }
@@ -134,12 +187,12 @@ impl Widget for &mut JobTable {
             self.payload_job_id = selected.map(|job| job.id.clone());
         }
 
-        JobDetails(selected, self.payload_scroll).render(right, buf);
+        JobDetails(selected, self.payload_scroll, self.all_types).render(right, buf);
     }
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct JobDetails<'a>(Option<&'a Job>, u16);
+pub(crate) struct JobDetails<'a>(Option<&'a Job>, u16, bool);
 
 impl Widget for JobDetails<'_> {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
@@ -163,10 +216,13 @@ impl Widget for JobDetails<'_> {
             return;
         };
 
-        let mut meta = vec![
-            field("ID", job.id.clone()),
-            field("Created", format_time_with_age(job.created_at)),
-        ];
+        let mut meta = vec![field("ID", job.id.clone())];
+
+        if self.2 {
+            meta.push(field("Type", def.job_type_id.clone()));
+        }
+
+        meta.push(field("Created", format_time_with_age(job.created_at)));
 
         meta.push(
             match job
@@ -199,62 +255,120 @@ impl Widget for JobDetails<'_> {
 
         Paragraph::new(meta).render(meta_area, buf);
 
+        let input = payload("Input", job_input(job), None);
+        let output = match job_output(job) {
+            Some(JobOutput::Failure(reason)) => payload(
+                "Output",
+                reason.to_string(),
+                Some(Style::new().fg(tailwind::RED.c400)),
+            ),
+            Some(JobOutput::Json(json)) => payload("Output", json, None),
+            None => payload("Output", String::new(), None),
+        };
+
+        // Measured without the block, which `line_count` would wrap
+        // the text at the outer width of.
+        let width = payloads.width.saturating_sub(4);
+
         // Stacked rather than side by side: the pane is far wider than tall.
-        let [input, output] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Fill(1)]).areas(payloads);
+        let [input_area, output_area] = Layout::vertical(split_payloads(
+            input.text.line_count(width),
+            output.text.line_count(width),
+            payloads.height,
+        ))
+        .areas(payloads);
 
-        let scroll = self.1;
-
-        payload(
-            "Input",
-            &pretty_json(&def.input_payload_json),
-            None,
-            scroll,
-            input,
-            buf,
-        );
-
-        match job.executions.last() {
-            Some(exec) => match (exec.failure_reason.as_ref(), exec.output_json.as_ref()) {
-                (Some(reason), _) => payload(
-                    "Output",
-                    reason,
-                    Some(Style::new().fg(tailwind::RED.c400)),
-                    scroll,
-                    output,
-                    buf,
-                ),
-                (_, Some(json)) => {
-                    payload("Output", &pretty_json(json), None, scroll, output, buf);
-                }
-                _ => payload("Output", "", None, scroll, output, buf),
-            },
-            None => payload("Output", "", None, scroll, output, buf),
-        }
+        render_payload(input, self.1, input_area, buf);
+        render_payload(output, self.1, output_area, buf);
     }
 }
 
-/// A bordered, wrapping, scrollable pane for a JSON payload or
-/// failure reason.
-fn payload(
-    title: &str,
-    text: &str,
-    style: Option<Style>,
+/// The input of a job as it is shown and copied.
+pub(crate) fn job_input(job: &Job) -> String {
+    pretty_json(
+        job.job
+            .as_ref()
+            .map_or("", |def| def.input_payload_json.as_str()),
+    )
+}
+
+pub(crate) enum JobOutput<'a> {
+    Failure(&'a str),
+    Json(String),
+}
+
+/// What the latest execution of a job left: why it failed, or the
+/// output it succeeded with.
+pub(crate) fn job_output(job: &Job) -> Option<JobOutput<'_>> {
+    let exec = job.executions.last()?;
+
+    match (exec.failure_reason.as_ref(), exec.output_json.as_ref()) {
+        (Some(reason), _) => Some(JobOutput::Failure(reason)),
+        (_, Some(json)) => Some(JobOutput::Json(pretty_json(json))),
+        _ => None,
+    }
+}
+
+/// The heights of the input and output panes, given the lines each
+/// needs. Even unless one needs less than half, which then goes to
+/// the other.
+fn split_payloads(input: usize, output: usize, height: u16) -> [Constraint; 2] {
+    let half = usize::from(height / 2);
+    let input = input + 2;
+    let output = output + 2;
+
+    if input < half && output > half {
+        [
+            Constraint::Length(u16::try_from(input).unwrap_or(0)),
+            Constraint::Fill(1),
+        ]
+    } else if output < half && input > half {
+        [
+            Constraint::Fill(1),
+            Constraint::Length(u16::try_from(output).unwrap_or(0)),
+        ]
+    } else {
+        [Constraint::Fill(1), Constraint::Fill(1)]
+    }
+}
+
+/// The wrapping text of a pane for a JSON payload or failure reason.
+fn payload(title: &'static str, text: String, style: Option<Style>) -> Payload {
+    Payload {
+        title,
+        text: Paragraph::new(text)
+            .style(style.unwrap_or_default())
+            .wrap(Wrap { trim: false }),
+    }
+}
+
+struct Payload {
+    title: &'static str,
+    text: Paragraph<'static>,
+}
+
+/// Render a payload pane scrolled no further than its last line, so
+/// a short one stays in view while a long one next to it scrolls.
+fn render_payload(
+    pane: Payload,
     scroll: u16,
     area: ratatui::prelude::Rect,
     buf: &mut ratatui::prelude::Buffer,
 ) {
-    Paragraph::new(text.to_string())
-        .style(style.unwrap_or_default())
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0))
-        .block(
-            Block::new()
-                .title(format!(" {title} "))
-                .borders(Borders::all())
-                .border_set(symbols::border::PLAIN)
-                .padding(Padding::horizontal(1)),
-        )
+    let block = Block::new()
+        .title(format!(" {} ", pane.title))
+        .borders(Borders::all())
+        .border_set(symbols::border::PLAIN)
+        .padding(Padding::horizontal(1));
+
+    let inner = block.inner(area);
+    let max = u16::try_from(pane.text.line_count(inner.width))
+        .unwrap_or(u16::MAX)
+        .saturating_sub(inner.height);
+
+    pane.text
+        .block(block)
+        .scroll((scroll.min(max), 0))
         .render(area, buf);
 }
 
