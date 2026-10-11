@@ -25,11 +25,11 @@ import { jobsLink, useRefreshInterval } from "../../util/route";
 import { parseSchema, validateJson } from "../../util/schema";
 import {
   executionEndedAt,
-  executionStatusInfo,
+  executionInfo,
   isJobActive,
   jobEndedAt,
   jobStartedAt,
-  jobStatus,
+  jobStatusInfo,
 } from "../../util/status";
 import { useStopwatch } from "../../util/time";
 
@@ -63,7 +63,7 @@ const job = computed(() => (loader.stale.value ? undefined : (loader.data.value 
 const notFound = computed(() => !loader.stale.value && loader.data.value === null);
 const definition = computed(() => job.value?.job);
 const jobType = computed(() => byId.value.get(definition.value?.jobTypeId ?? ""));
-const status = computed(() => (job.value ? executionStatusInfo[jobStatus(job.value)] : undefined));
+const status = computed(() => (job.value ? jobStatusInfo(job.value) : undefined));
 const outputSchema = computed(() => parseSchema(jobType.value?.outputSchemaJson));
 const active = computed(() => !!job.value && isJobActive(job.value));
 const startedAt = computed(() => (job.value ? jobStartedAt(job.value) : undefined));
@@ -341,18 +341,9 @@ function cancel() {
             <Column header="Status">
               <template #body="{ data }">
                 <Tag
-                  :value="
-                    executionStatusInfo[data.execution.status as keyof typeof executionStatusInfo]
-                      .label
-                  "
-                  :severity="
-                    executionStatusInfo[data.execution.status as keyof typeof executionStatusInfo]
-                      .severity
-                  "
-                  :icon="
-                    executionStatusInfo[data.execution.status as keyof typeof executionStatusInfo]
-                      .icon
-                  "
+                  :value="executionInfo(data.execution).label"
+                  :severity="executionInfo(data.execution).severity"
+                  :icon="executionInfo(data.execution).icon"
                 />
               </template>
             </Column>

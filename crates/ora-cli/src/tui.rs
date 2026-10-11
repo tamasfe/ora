@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ora::{
     AdminClient, JobOrderBy, ScheduleOrderBy,
-    execution::ExecutionStatus as FilterExecutionStatus,
+    execution::{ExecutionPendingReason, ExecutionStatus as FilterExecutionStatus},
     proto::admin::v1::{ExecutionStatus, ScheduleStatus as ProtoScheduleStatus},
 };
 use ratatui::DefaultTerminal;
@@ -96,6 +96,8 @@ pub(crate) enum JobStatus {
     All,
     Active,
     Pending,
+    Scheduled,
+    Ready,
     InProgress,
     Succeeded,
     Failed,
@@ -107,7 +109,9 @@ impl JobStatus {
         match self {
             JobStatus::All => JobStatus::Active,
             JobStatus::Active => JobStatus::Pending,
-            JobStatus::Pending => JobStatus::InProgress,
+            JobStatus::Pending => JobStatus::Scheduled,
+            JobStatus::Scheduled => JobStatus::Ready,
+            JobStatus::Ready => JobStatus::InProgress,
             JobStatus::InProgress => JobStatus::Succeeded,
             JobStatus::Succeeded => JobStatus::Failed,
             JobStatus::Failed => JobStatus::Cancelled,
@@ -123,11 +127,22 @@ impl JobStatus {
                 FilterExecutionStatus::Pending,
                 FilterExecutionStatus::InProgress,
             ]),
-            JobStatus::Pending => Some(vec![FilterExecutionStatus::Pending]),
+            JobStatus::Pending | JobStatus::Scheduled | JobStatus::Ready => {
+                Some(vec![FilterExecutionStatus::Pending])
+            }
             JobStatus::InProgress => Some(vec![FilterExecutionStatus::InProgress]),
             JobStatus::Succeeded => Some(vec![FilterExecutionStatus::Succeeded]),
             JobStatus::Failed => Some(vec![FilterExecutionStatus::Failed]),
             JobStatus::Cancelled => Some(vec![FilterExecutionStatus::Cancelled]),
+        }
+    }
+
+    /// The pending reasons sent to the server, `None` meaning no filter.
+    pub(crate) fn pending_reasons(self) -> Option<Vec<ExecutionPendingReason>> {
+        match self {
+            JobStatus::Scheduled => Some(vec![ExecutionPendingReason::Scheduled]),
+            JobStatus::Ready => Some(vec![ExecutionPendingReason::Ready]),
+            _ => None,
         }
     }
 
@@ -136,6 +151,8 @@ impl JobStatus {
             JobStatus::All => "all",
             JobStatus::Active => "active",
             JobStatus::Pending => "pending",
+            JobStatus::Scheduled => "scheduled",
+            JobStatus::Ready => "ready",
             JobStatus::InProgress => "in-progress",
             JobStatus::Succeeded => "succeeded",
             JobStatus::Failed => "failed",
@@ -943,7 +960,7 @@ impl App {
                         token,
                         job_type_id,
                         self.job_order,
-                        self.job_status.statuses(),
+                        self.job_status,
                         self.client.clone(),
                         self.events.sender(),
                         self.label_filter(Tab::Jobs).to_string(),
@@ -1442,7 +1459,7 @@ impl App {
             token,
             job_type_id,
             self.job_order,
-            self.job_status.statuses(),
+            self.job_status,
             self.client.clone(),
             self.events.sender(),
             self.label_filter(Tab::Jobs).to_string(),
@@ -2014,4 +2031,3 @@ fn build_schedule(form: &ui::Form) -> Result<ora::proto::schedules::v1::Schedule
         }),
     })
 }
-

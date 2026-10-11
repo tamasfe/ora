@@ -121,13 +121,11 @@ impl Widget for &mut JobTable {
                     .map(|ts| ts.strftime("%Y-%m-%d %H:%M:%S%:z").to_string())
                     .unwrap_or_default();
 
-                let status = job.executions.last().map(Execution::status);
-
                 Row::new([
                     Cell::new(target_time),
-                    match status {
-                        Some(status) => Cell::new(execution_status_label(status))
-                            .style(execution_status_style(status)),
+                    match job.executions.last() {
+                        Some(execution) => Cell::new(execution_status_label(execution))
+                            .style(execution_status_style(execution.status())),
                         None => Cell::new(""),
                     },
                     Cell::new(

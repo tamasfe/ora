@@ -32,6 +32,10 @@ message Execution {
   // in cases such as when an execution is created as part of
   // a retry of a failed execution.
   google.protobuf.Timestamp target_execution_time = 11;
+  // The reason the execution has not started yet.
+  //
+  // This is only set for pending executions.
+  optional ExecutionPendingReason pending_reason = 12;
 }
 
 // Status of a job execution.
@@ -48,4 +52,15 @@ enum ExecutionStatus {
   EXECUTION_STATUS_FAILED = 4;
   // The execution was cancelled.
   EXECUTION_STATUS_CANCELLED = 5;
+}
+
+// The reason a pending execution has not started yet.
+enum ExecutionPendingReason {
+  // Unknown reason.
+  EXECUTION_PENDING_REASON_UNSPECIFIED = 0;
+  // The target execution time has not been reached yet.
+  EXECUTION_PENDING_REASON_SCHEDULED = 1;
+  // The target execution time has passed,
+  // but no executor has started the execution yet.
+  EXECUTION_PENDING_REASON_READY = 2;
 }

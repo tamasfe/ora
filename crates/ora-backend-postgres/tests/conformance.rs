@@ -176,3 +176,27 @@ async fn priorities() {
     )
     .await;
 }
+
+#[tokio::test]
+async fn pending_reasons() {
+    let mut cfg = Config::new();
+    cfg.url = Some(database_url());
+    cfg.manager = Some(ManagerConfig {
+        recycling_method: RecyclingMethod::Fast,
+    });
+    let pool = cfg.create_pool(Some(Runtime::Tokio1), NoTls).unwrap();
+
+    pool.get()
+        .await
+        .unwrap()
+        .execute("DROP SCHEMA IF EXISTS ora CASCADE", &[])
+        .await
+        .unwrap();
+
+    ora_backend::test::pending_reasons(
+        &ora_backend_postgres::PostgresBackend::new(pool)
+            .await
+            .unwrap(),
+    )
+    .await;
+}

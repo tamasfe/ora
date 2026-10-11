@@ -258,10 +258,10 @@ fn job_overview(job: &Job) -> Vec<Line<'static>> {
     }
 
     if let Some(execution) = job.executions.last() {
-        let status = execution.status();
         lines.push(Line::from(vec![
             Span::from("Status: ").style(Style::new().bold()),
-            Span::from(execution_status_label(status)).style(execution_status_style(status)),
+            Span::from(execution_status_label(execution))
+                .style(execution_status_style(execution.status())),
         ]));
     }
 
@@ -301,11 +301,10 @@ fn job_executions(job: &Job) -> Vec<Line<'static>> {
             lines.push(Line::default());
         }
 
-        let status = execution.status();
-
         lines.push(Line::from(vec![
             Span::from(format!("#{} ", index + 1)).style(Style::new().bold()),
-            Span::from(execution_status_label(status)).style(execution_status_style(status)),
+            Span::from(execution_status_label(execution))
+                .style(execution_status_style(execution.status())),
         ]));
 
         lines.push(text_line(&format!(
@@ -535,7 +534,7 @@ fn executor_jobs(executor_id: &str, jobs: &[Job], loading: Option<&str>) -> Vec<
 
     std::iter::once(header)
         .chain(jobs.iter().map(|job| {
-            let status = job.executions.last().map(Execution::status);
+            let execution = job.executions.last();
             let job_type = job
                 .job
                 .as_ref()
@@ -544,10 +543,10 @@ fn executor_jobs(executor_id: &str, jobs: &[Job], loading: Option<&str>) -> Vec<
 
             let mut spans = vec![Span::from(format!("{job_type:<width$} "))];
 
-            match status {
-                Some(status) => spans.push(
-                    Span::from(format!("{:<12}", execution_status_label(status)))
-                        .style(execution_status_style(status)),
+            match execution {
+                Some(execution) => spans.push(
+                    Span::from(format!("{:<12}", execution_status_label(execution)))
+                        .style(execution_status_style(execution.status())),
                 ),
                 None => spans.push(Span::from(format!("{:<12}", ""))),
             }

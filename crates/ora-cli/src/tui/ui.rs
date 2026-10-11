@@ -13,7 +13,10 @@ pub(crate) use form::{Form, FormKind, parse_cron};
 use jiff::{SignedDuration, Timestamp, TimestampRound};
 pub(crate) use job_types::JobTypeList;
 pub(crate) use jobs::{JobOutput, JobTable, job_input, job_output};
-use ora::{JobOrderBy, ScheduleOrderBy, proto::admin::v1::ExecutionStatus};
+use ora::{
+    JobOrderBy, ScheduleOrderBy,
+    proto::admin::v1::{Execution, ExecutionPendingReason, ExecutionStatus},
+};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Style, palette::tailwind},
@@ -129,7 +132,7 @@ fn render_job_counts(app: &App, area: Rect, buf: &mut ratatui::prelude::Buffer) 
         }
 
         spans.push(
-            Span::from(format!("{} {count}", execution_status_label(status)))
+            Span::from(format!("{} {count}", status_label(status)))
                 .style(execution_status_style(status)),
         );
     }
@@ -506,7 +509,25 @@ pub(super) fn pretty_json(json: &str) -> String {
         .unwrap_or_else(|| json.to_string())
 }
 
-pub(super) fn execution_status_label(status: ExecutionStatus) -> &'static str {
+/// The status of an execution, pending executions are labelled
+/// by the reason they have not started yet if it is known.
+pub(super) fn execution_status_label(execution: &Execution) -> &'static str {
+    match execution.status() {
+        ExecutionStatus::Unspecified | ExecutionStatus::Pending => {
+            match execution
+                .pending_reason
+                .and_then(|reason| ExecutionPendingReason::try_from(reason).ok())
+            {
+                Some(ExecutionPendingReason::Scheduled) => "scheduled",
+                Some(ExecutionPendingReason::Ready) => "ready",
+                Some(ExecutionPendingReason::Unspecified) | None => "pending",
+            }
+        }
+        status => status_label(status),
+    }
+}
+
+pub(super) fn status_label(status: ExecutionStatus) -> &'static str {
     match status {
         ExecutionStatus::Unspecified | ExecutionStatus::Pending => "pending",
         ExecutionStatus::InProgress => "in-progress",

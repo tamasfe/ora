@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     admin::{AdminClient, schedules::Schedule},
     common::{AddedOrExisting, LabelFilter, TimeRange},
-    execution::{ExecutionId, ExecutionStatus},
+    execution::{ExecutionId, ExecutionPendingReason, ExecutionStatus},
     executor::ExecutorId,
     job::{JobDefinition, JobId},
     job_type::{AnyJobType, JobType, JobTypeId},
@@ -406,6 +406,16 @@ pub struct JobFilters {
     pub min_priority: Option<i32>,
     /// Filter by maximum priority (inclusive).
     pub max_priority: Option<i32>,
+    /// Filter pending jobs by the reason their last execution
+    /// has not started yet.
+    ///
+    /// This only narrows down the pending jobs, jobs with other statuses
+    /// in `execution_statuses` are not affected. If `execution_statuses`
+    /// is not set, only pending jobs are matched, otherwise it must
+    /// contain [`ExecutionStatus::Pending`].
+    ///
+    /// Servers that do not support this filter ignore it.
+    pub pending_reasons: Option<Vec<ExecutionPendingReason>>,
 }
 
 impl JobFilters {
@@ -575,6 +585,20 @@ impl<J> Job<J> {
                     cancelled_at: e.cancelled_at.map(TryFrom::try_from).transpose()?,
                     output_json: e.output_json.clone(),
                     failure_reason: e.failure_reason.clone(),
+                    // Unknown reasons are ignored, newer servers might add more.
+                    pending_reason: e.pending_reason.and_then(|reason| {
+                        match proto::admin::v1::ExecutionPendingReason::try_from(reason) {
+                            Ok(proto::admin::v1::ExecutionPendingReason::Scheduled) => {
+                                Some(ExecutionPendingReason::Scheduled)
+                            }
+                            Ok(proto::admin::v1::ExecutionPendingReason::Ready) => {
+                                Some(ExecutionPendingReason::Ready)
+                            }
+                            Ok(proto::admin::v1::ExecutionPendingReason::Unspecified) | Err(_) => {
+                                None
+                            }
+                        }
+                    }),
                     _job_type: PhantomData,
                 })
             })
@@ -893,6 +917,7 @@ pub struct Execution<J> {
     cancelled_at: Option<SystemTime>,
     output_json: Option<String>,
     failure_reason: Option<String>,
+    pending_reason: Option<ExecutionPendingReason>,
     _job_type: PhantomData<J>,
 }
 
@@ -908,6 +933,7 @@ impl<J> PartialEq for Execution<J> {
             && self.cancelled_at == other.cancelled_at
             && self.output_json == other.output_json
             && self.failure_reason == other.failure_reason
+            && self.pending_reason == other.pending_reason
             && self._job_type == other._job_type
     }
 }
@@ -927,6 +953,7 @@ impl<J> Clone for Execution<J> {
             cancelled_at: self.cancelled_at,
             output_json: self.output_json.clone(),
             failure_reason: self.failure_reason.clone(),
+            pending_reason: self.pending_reason,
             _job_type: PhantomData,
         }
     }
@@ -952,6 +979,16 @@ impl<J> Execution<J> {
     #[must_use]
     pub const fn status(&self) -> ExecutionStatus {
         self.status
+    }
+
+    /// Return the reason the execution has not started yet,
+    /// only set for pending executions.
+    ///
+    /// Servers that do not support pending reasons do not set it.
+    #[inline]
+    #[must_use]
+    pub const fn pending_reason(&self) -> Option<ExecutionPendingReason> {
+        self.pending_reason
     }
 
     /// Return the timestamp when the execution was created.

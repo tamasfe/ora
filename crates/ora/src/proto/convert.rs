@@ -2,7 +2,7 @@ use crate::{
     JobDefinition, JobType, ScheduleDefinition,
     admin::{jobs::JobFilters, schedules::ScheduleFilters},
     common::LabelFilter,
-    execution::ExecutionStatus,
+    execution::{ExecutionPendingReason, ExecutionStatus},
     job::{BackoffStrategy, RetryPolicy, TimeoutPolicy},
     proto::{self, common::v1::TimeRange},
     schedule::SchedulingPolicy,
@@ -57,6 +57,12 @@ impl From<JobFilters> for proto::admin::v1::JobFilters {
                 .collect(),
             min_priority: value.min_priority,
             max_priority: value.max_priority,
+            pending_reasons: value
+                .pending_reasons
+                .into_iter()
+                .flatten()
+                .map(|v| proto::admin::v1::ExecutionPendingReason::from(v) as i32)
+                .collect(),
         }
     }
 }
@@ -69,6 +75,17 @@ impl From<ExecutionStatus> for proto::admin::v1::ExecutionStatus {
             ExecutionStatus::Succeeded => proto::admin::v1::ExecutionStatus::Succeeded,
             ExecutionStatus::Failed => proto::admin::v1::ExecutionStatus::Failed,
             ExecutionStatus::Cancelled => proto::admin::v1::ExecutionStatus::Cancelled,
+        }
+    }
+}
+
+impl From<ExecutionPendingReason> for proto::admin::v1::ExecutionPendingReason {
+    fn from(value: ExecutionPendingReason) -> Self {
+        match value {
+            ExecutionPendingReason::Scheduled => {
+                proto::admin::v1::ExecutionPendingReason::Scheduled
+            }
+            ExecutionPendingReason::Ready => proto::admin::v1::ExecutionPendingReason::Ready,
         }
     }
 }

@@ -50,6 +50,17 @@ message JobFilters {
   optional int32 min_priority = 10;
   // Filter by maximum priority (inclusive).
   optional int32 max_priority = 11;
+  // Filter pending jobs by the reason their last execution
+  // has not started yet.
+  //
+  // This only narrows down the pending jobs, jobs with other
+  // statuses in `execution_statuses` are not affected.
+  // If `execution_statuses` is empty, only pending jobs are matched,
+  // otherwise it must contain the pending status.
+  //
+  // Servers that do not support this filter ignore it
+  // and return all pending jobs.
+  repeated ExecutionPendingReason pending_reasons = 12;
 }
 
 // Ordering options for listing jobs.
