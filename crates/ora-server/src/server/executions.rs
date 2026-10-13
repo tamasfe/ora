@@ -63,7 +63,6 @@ pub(super) async fn ready_executions_loop(
             let ready_executions = match ready_executions {
                 Ok(ready_executions) => ready_executions,
                 Err(error) => {
-                    metrics::backend_error("ready_executions");
                     tracing::error!(%error, "error fetching ready executions");
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     continue 'main_loop;
@@ -320,8 +319,6 @@ pub(super) async fn executor_events_loop(
                             failure_kind: FailureKind::InvalidOutput,
                         });
 
-                        metrics::backend_error("executions_succeeded");
-
                         continue;
                     }
 
@@ -376,7 +373,6 @@ pub(super) async fn executor_events_loop(
                 }
                 ExecutorEvent::JobTypesAdded { job_types } => {
                     if let Err(error) = backend.add_job_types(&job_types).await {
-                        metrics::backend_error("add_job_types");
                         tracing::error!(%error, "error adding job types to backend");
                     }
                 }
@@ -493,7 +489,6 @@ pub(super) async fn execution_timeouts_loop(
             let in_progress_executions = match in_progress_executions {
                 Ok(in_progress_executions) => in_progress_executions,
                 Err(error) => {
-                    metrics::backend_error("in_progress_executions");
                     tracing::error!(%error, "error fetching in-progress executions");
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     continue 'main_loop;
@@ -678,7 +673,6 @@ where
         })
         .await
         {
-            metrics::backend_error("executions_failed");
             tracing::error!(%error, "error updating failed executions");
         } else {
             tracing::debug!(
@@ -699,7 +693,6 @@ where
         })
         .await
     {
-        metrics::backend_error("executions_retried");
         tracing::error!(%error, "error updating retried executions");
     } else {
         for m in &retried_metrics {

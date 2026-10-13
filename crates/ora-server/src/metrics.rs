@@ -15,6 +15,10 @@ use wgroup::WaitGuard;
 
 use crate::executor_pool::ExecutorPool;
 
+mod backend;
+
+pub(crate) use backend::InstrumentedBackend;
+
 pub(crate) const JOBS_ADDED_TOTAL: &str = "ora_jobs_added_total";
 pub(crate) const JOBS_FINISHED_TOTAL: &str = "ora_jobs_finished_total";
 pub(crate) const JOBS: &str = "ora_jobs";
@@ -342,7 +346,6 @@ pub(crate) async fn job_counts_metrics_loop(
                 in_progress.set(in_progress_counts);
             }
             Err(error) => {
-                backend_error("count_jobs");
                 tracing::error!(%error, "failed to count jobs for metrics");
             }
         }

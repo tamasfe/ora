@@ -22,7 +22,6 @@ pub(super) async fn delete_history_loop(
             )
             .await
         {
-            crate::metrics::backend_error("delete_history");
             tracing::error!(%error, "failed to delete historical data");
         }
 

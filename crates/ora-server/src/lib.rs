@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Duration};
 use either::Either;
 use wgroup::{WaitGroup, WaitGroupHandle, WaitGuard};
 
-use crate::{executor_pool::ExecutorPool, grpc::GrpcImpl};
+use crate::{executor_pool::ExecutorPool, grpc::GrpcImpl, metrics::InstrumentedBackend};
 
 mod broadcast;
 mod executor_pool;
@@ -120,7 +120,7 @@ where
 #[derive(Debug)]
 #[must_use]
 pub struct ServerHandle<B> {
-    backend: Arc<B>,
+    backend: Arc<InstrumentedBackend<B>>,
     executor_pool: ExecutorPool,
     wg: Either<WaitGroup, WaitGroupHandle>,
 }

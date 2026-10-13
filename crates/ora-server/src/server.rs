@@ -8,7 +8,7 @@ use wgroup::{WaitGroup, WaitGroupHandle};
 use crate::{
     ServerHandle, ServerOptions,
     executor_pool::ExecutorPool,
-    metrics::{self, executor_pool_metrics_loop, job_counts_metrics_loop},
+    metrics::{self, InstrumentedBackend, executor_pool_metrics_loop, job_counts_metrics_loop},
     server::{
         delete_history::delete_history_loop,
         executions::{
@@ -34,6 +34,8 @@ where
     B: Backend + 'static,
 {
     metrics::describe();
+
+    let backend = std::sync::Arc::new(InstrumentedBackend::new(backend));
 
     let handle = match &wg {
         Either::Left(wg) => wg.handle(),

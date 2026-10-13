@@ -1,8 +1,7 @@
-use std::{collections::HashSet, time::SystemTime};
+use std::time::SystemTime;
 
 use crate::{
     grpc::GrpcImpl,
-    metrics::{self, JobOutcome, JobSource},
     proto::admin::v1::{self, admin_service_server::AdminService},
     server::validate_schedule,
     util::{deduplicate_labels, inherit_labels, validate_json, validate_labels, validate_time},
@@ -106,12 +105,7 @@ where
             .err_status()?;
 
         let (added_job_ids, existing_job_ids) = match added_jobs {
-            ora_backend::jobs::AddedJobs::Added(job_ids) => {
-                for job in &new_jobs {
-                    metrics::job_added(&job.job.job_type_id, JobSource::Api);
-                }
-                (job_ids, Vec::new())
-            }
+            ora_backend::jobs::AddedJobs::Added(job_ids) => (job_ids, Vec::new()),
             ora_backend::jobs::AddedJobs::Existing(job_ids) => (Vec::new(), job_ids),
         };
 
@@ -198,14 +192,6 @@ where
             .err_status()?;
 
         self.executor_pool.cancel_executions(&cancelled_jobs);
-
-        // The backend returns a row per execution, count each job only once.
-        let mut counted_job_ids = HashSet::new();
-        for job in &cancelled_jobs {
-            if counted_job_ids.insert(job.job_id) {
-                metrics::job_finished(&job.job_type_id, JobOutcome::Cancelled);
-            }
-        }
 
         Ok(Response::new(v1::CancelJobsResponse {
             cancelled_job_ids: cancelled_jobs
