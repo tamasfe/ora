@@ -6,7 +6,7 @@ import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2"
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Execution, ExecutionStatus } from "./executions_pb";
+import type { Execution, ExecutionPendingReason, ExecutionStatus } from "./executions_pb";
 import { file_ora_admin_v1_executions } from "./executions_pb";
 import type { LabelFilter } from "../../common/v1/label_pb";
 import { file_ora_common_v1_label } from "../../common/v1/label_pb";
@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ora/admin/v1/jobs.proto.
  */
 export const file_ora_admin_v1_jobs: GenFile = /*@__PURE__*/
-  fileDesc("ChdvcmEvYWRtaW4vdjEvam9icy5wcm90bxIMb3JhLmFkbWluLnYxIrcBCgNKb2ISCgoCaWQYASABKAkSHQoDam9iGAIgASgLMhAub3JhLmpvYnMudjEuSm9iEhgKC3NjaGVkdWxlX2lkGAMgASgJSACIAQESLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoKZXhlY3V0aW9ucxgFIAMoCzIXLm9yYS5hZG1pbi52MS5FeGVjdXRpb25CDgoMX3NjaGVkdWxlX2lkIs8DCgpKb2JGaWx0ZXJzEg8KB2pvYl9pZHMYASADKAkSFAoMam9iX3R5cGVfaWRzGAIgAygJEhQKDHNjaGVkdWxlX2lkcxgDIAMoCRIUCgxleGVjdXRvcl9pZHMYBCADKAkSFQoNZXhlY3V0aW9uX2lkcxgFIAMoCRI5ChJleGVjdXRpb25fc3RhdHVzZXMYBiADKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEjwKFXRhcmdldF9leGVjdXRpb25fdGltZRgHIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSACIAQESMQoKY3JlYXRlZF9hdBgIIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSAGIAQESKgoGbGFiZWxzGAkgAygLMhoub3JhLmNvbW1vbi52MS5MYWJlbEZpbHRlchIZCgxtaW5fcHJpb3JpdHkYCiABKAVIAogBARIZCgxtYXhfcHJpb3JpdHkYCyABKAVIA4gBAUIYChZfdGFyZ2V0X2V4ZWN1dGlvbl90aW1lQg0KC19jcmVhdGVkX2F0Qg8KDV9taW5fcHJpb3JpdHlCDwoNX21heF9wcmlvcml0eSqFAgoKSm9iT3JkZXJCeRIcChhKT0JfT1JERVJfQllfVU5TUEVDSUZJRUQQABIfChtKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9BU0MQARIgChxKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9ERVNDEAISKgomSk9CX09SREVSX0JZX1RBUkdFVF9FWEVDVVRJT05fVElNRV9BU0MQAxIrCidKT0JfT1JERVJfQllfVEFSR0VUX0VYRUNVVElPTl9USU1FX0RFU0MQBBIdChlKT0JfT1JERVJfQllfUFJJT1JJVFlfQVNDEAUSHgoaSk9CX09SREVSX0JZX1BSSU9SSVRZX0RFU0MQBmIGcHJvdG8z", [file_google_protobuf_timestamp, file_ora_admin_v1_executions, file_ora_common_v1_label, file_ora_common_v1_time_range, file_ora_jobs_v1_job]);
+  fileDesc("ChdvcmEvYWRtaW4vdjEvam9icy5wcm90bxIMb3JhLmFkbWluLnYxIrcBCgNKb2ISCgoCaWQYASABKAkSHQoDam9iGAIgASgLMhAub3JhLmpvYnMudjEuSm9iEhgKC3NjaGVkdWxlX2lkGAMgASgJSACIAQESLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoKZXhlY3V0aW9ucxgFIAMoCzIXLm9yYS5hZG1pbi52MS5FeGVjdXRpb25CDgoMX3NjaGVkdWxlX2lkIo4ECgpKb2JGaWx0ZXJzEg8KB2pvYl9pZHMYASADKAkSFAoMam9iX3R5cGVfaWRzGAIgAygJEhQKDHNjaGVkdWxlX2lkcxgDIAMoCRIUCgxleGVjdXRvcl9pZHMYBCADKAkSFQoNZXhlY3V0aW9uX2lkcxgFIAMoCRI5ChJleGVjdXRpb25fc3RhdHVzZXMYBiADKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEjwKFXRhcmdldF9leGVjdXRpb25fdGltZRgHIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSACIAQESMQoKY3JlYXRlZF9hdBgIIAEoCzIYLm9yYS5jb21tb24udjEuVGltZVJhbmdlSAGIAQESKgoGbGFiZWxzGAkgAygLMhoub3JhLmNvbW1vbi52MS5MYWJlbEZpbHRlchIZCgxtaW5fcHJpb3JpdHkYCiABKAVIAogBARIZCgxtYXhfcHJpb3JpdHkYCyABKAVIA4gBARI9Cg9wZW5kaW5nX3JlYXNvbnMYDCADKA4yJC5vcmEuYWRtaW4udjEuRXhlY3V0aW9uUGVuZGluZ1JlYXNvbkIYChZfdGFyZ2V0X2V4ZWN1dGlvbl90aW1lQg0KC19jcmVhdGVkX2F0Qg8KDV9taW5fcHJpb3JpdHlCDwoNX21heF9wcmlvcml0eSqFAgoKSm9iT3JkZXJCeRIcChhKT0JfT1JERVJfQllfVU5TUEVDSUZJRUQQABIfChtKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9BU0MQARIgChxKT0JfT1JERVJfQllfQ1JFQVRFRF9BVF9ERVNDEAISKgomSk9CX09SREVSX0JZX1RBUkdFVF9FWEVDVVRJT05fVElNRV9BU0MQAxIrCidKT0JfT1JERVJfQllfVEFSR0VUX0VYRUNVVElPTl9USU1FX0RFU0MQBBIdChlKT0JfT1JERVJfQllfUFJJT1JJVFlfQVNDEAUSHgoaSk9CX09SREVSX0JZX1BSSU9SSVRZX0RFU0MQBmIGcHJvdG8z", [file_google_protobuf_timestamp, file_ora_admin_v1_executions, file_ora_common_v1_label, file_ora_common_v1_time_range, file_ora_jobs_v1_job]);
 
 /**
  * Details of a job.
@@ -157,6 +157,22 @@ export type JobFilters = Message<"ora.admin.v1.JobFilters"> & {
    * @generated from field: optional int32 max_priority = 11;
    */
   maxPriority?: number | undefined;
+
+  /**
+   * Filter pending jobs by the reason their last execution
+   * has not started yet.
+   *
+   * This only narrows down the pending jobs, jobs with other
+   * statuses in `execution_statuses` are not affected.
+   * If `execution_statuses` is empty, only pending jobs are matched,
+   * otherwise it must contain the pending status.
+   *
+   * Servers that do not support this filter ignore it
+   * and return all pending jobs.
+   *
+   * @generated from field: repeated ora.admin.v1.ExecutionPendingReason pending_reasons = 12;
+   */
+  pendingReasons: ExecutionPendingReason[];
 };
 
 /**

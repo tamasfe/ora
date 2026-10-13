@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     common::{Label, LabelFilter, TimeRange},
-    executions::{ExecutionDetails, ExecutionId, ExecutionStatus},
+    executions::{ExecutionDetails, ExecutionId, ExecutionPendingReason, ExecutionStatus},
     executors::ExecutorId,
     schedules::ScheduleId,
 };
@@ -266,6 +266,14 @@ pub struct JobFilters {
     /// Filter by maximum priority (inclusive).
     #[serde(default)]
     pub max_priority: Option<i32>,
+    /// Filter pending jobs by the reason their last execution
+    /// has not started yet.
+    ///
+    /// This only narrows down the pending jobs, jobs with other statuses
+    /// in `execution_statuses` are not affected. If `execution_statuses`
+    /// is not set, only pending jobs are matched.
+    #[serde(default)]
+    pub pending_reasons: Option<Vec<ExecutionPendingReason>>,
 }
 
 /// The ordering options for listing jobs.

@@ -13,8 +13,8 @@ use crate::{
     Backend,
     common::{Label, TimeRange},
     executions::{
-        ExecutionId, ExecutionStatus, FailedExecution, RetriedExecution, StartedExecution,
-        SucceededExecution,
+        ExecutionId, ExecutionPendingReason, ExecutionStatus, FailedExecution, RetriedExecution,
+        StartedExecution, SucceededExecution,
     },
     jobs::{
         JobDefinition, JobDetails, JobFilters, JobOrderBy, JobTypeId, NewJob, RetryPolicy,
@@ -1059,6 +1059,187 @@ pub async fn counts(backend: &impl Backend) {
             .unwrap(),
         3
     );
+}
+
+/// Tests for the reasons executions are pending and filtering by them.
+pub async fn pending_reasons(backend: &impl Backend) {
+    use ExecutionPendingReason::{Ready, Scheduled};
+    use ExecutionStatus::{InProgress, Pending, Succeeded};
+
+    fn job(target_execution_time: SystemTime) -> JobDefinition {
+        JobDefinition {
+            job_type_id: JobTypeId::new("PendingReasons").unwrap(),
+            target_execution_time,
+            input_payload_json: "{}".to_string(),
+            labels: vec![],
+            timeout_policy: TimeoutPolicy {
+                timeout: Duration::from_secs(20),
+                base_time: crate::jobs::TimeoutBaseTime::StartTime,
+            },
+            retry_policy: RetryPolicy {
+                retries: 1,
+                ..Default::default()
+            },
+            priority: 0,
+        }
+    }
+
+    async fn list_jobs(backend: &impl Backend, filters: JobFilters) -> Vec<JobDetails> {
+        backend.list_jobs(filters, None, 100, None).await.unwrap().0
+    }
+
+    let past = SystemTime::now() - Duration::from_secs(1);
+    let future = SystemTime::now() + Duration::from_hours(1);
+
+    let job_ids = backend
+        .add_jobs(
+            &new_jobs(&[job(future), job(past), job(past), job(past), job(past)]),
+            None,
+        )
+        .await
+        .unwrap()
+        .job_ids()
+        .to_vec();
+
+    // scheduled: in the future, ready: in the past but not started,
+    // in_progress: started, succeeded: finished,
+    // retried: failed and retried in the future.
+    let [scheduled, ready, in_progress, succeeded, retried] = job_ids[..] else {
+        panic!("unexpected number of jobs");
+    };
+
+    let ready_executions = pin!(backend.ready_executions(&[]))
+        .try_next()
+        .await
+        .unwrap()
+        .unwrap();
+    let execution_id = |job_id| {
+        ready_executions
+            .iter()
+            .find(|execution| execution.job_id == job_id)
+            .unwrap()
+            .execution_id
+    };
+
+    backend
+        .executions_started(
+            &[in_progress, succeeded, retried].map(|job_id| StartedExecution {
+                execution_id: execution_id(job_id),
+                executor_id: Uuid::nil().into(),
+                started_at: SystemTime::now(),
+            }),
+        )
+        .await
+        .unwrap();
+
+    backend
+        .executions_succeeded(&[SucceededExecution {
+            execution_id: execution_id(succeeded),
+            succeeded_at: SystemTime::now(),
+            output_json: "{}".to_string(),
+        }])
+        .await
+        .unwrap();
+
+    // The retry is scheduled by its own target time,
+    // even though the target time of the job has passed.
+    backend
+        .executions_retried(&[RetriedExecution {
+            failed_execution: FailedExecution {
+                execution_id: execution_id(retried),
+                job_id: retried,
+                failed_at: SystemTime::now(),
+                failure_reason: "retried".to_string(),
+            },
+            retry_execution_time: future,
+        }])
+        .await
+        .unwrap();
+
+    let jobs = list_jobs(backend, JobFilters::default()).await;
+    let reasons = |job_id| {
+        jobs.iter()
+            .find(|job| job.id == job_id)
+            .unwrap()
+            .executions
+            .iter()
+            .map(|execution| execution.pending_reason)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(reasons(scheduled), [Some(Scheduled)]);
+    assert_eq!(reasons(ready), [Some(Ready)]);
+    assert_eq!(reasons(in_progress), [None]);
+    assert_eq!(reasons(succeeded), [None]);
+    assert_eq!(reasons(retried), [None, Some(Scheduled)]);
+
+    let filters =
+        |statuses: Option<&[ExecutionStatus]>,
+         pending_reasons: Option<&[ExecutionPendingReason]>| JobFilters {
+            execution_statuses: statuses.map(<[_]>::to_vec),
+            pending_reasons: pending_reasons.map(<[_]>::to_vec),
+            ..Default::default()
+        };
+    let job_ids = async |statuses, pending_reasons| {
+        let mut job_ids = list_jobs(backend, filters(statuses, pending_reasons))
+            .await
+            .into_iter()
+            .map(|job| job.id)
+            .collect::<Vec<_>>();
+        job_ids.sort();
+        job_ids
+    };
+    let count = async |statuses, pending_reasons| {
+        backend
+            .count_jobs(filters(statuses, pending_reasons))
+            .await
+            .unwrap()
+    };
+    let sorted = |mut job_ids: Vec<crate::jobs::JobId>| {
+        job_ids.sort();
+        job_ids
+    };
+
+    // Without statuses, only pending jobs are matched.
+    assert_eq!(
+        job_ids(None, Some(&[Scheduled])).await,
+        sorted(vec![scheduled, retried])
+    );
+    assert_eq!(job_ids(None, Some(&[Ready])).await, [ready]);
+    assert_eq!(count(None, Some(&[Scheduled, Ready])).await, 3);
+    assert_eq!(count(None, Some(&[])).await, 0);
+    assert_eq!(count(Some(&[Pending]), None).await, 3);
+
+    // Pending reasons only narrow down the pending jobs.
+    assert_eq!(
+        job_ids(Some(&[Pending, InProgress]), Some(&[Ready])).await,
+        sorted(vec![ready, in_progress])
+    );
+    assert_eq!(
+        job_ids(Some(&[Pending, Succeeded]), Some(&[Scheduled])).await,
+        sorted(vec![scheduled, succeeded, retried])
+    );
+    assert_eq!(
+        count(Some(&[Pending, InProgress, Succeeded]), Some(&[Ready])).await,
+        3
+    );
+    assert_eq!(
+        count(Some(&[InProgress, Succeeded]), Some(&[Ready])).await,
+        2
+    );
+    assert_eq!(count(Some(&[Pending, Succeeded]), Some(&[])).await, 1);
+
+    // Pending reasons alone do not cancel jobs in progress.
+    let cancelled = backend
+        .cancel_jobs(filters(None, Some(&[Ready])))
+        .await
+        .unwrap();
+    assert_eq!(
+        cancelled.iter().map(|job| job.job_id).collect::<Vec<_>>(),
+        [ready]
+    );
+    assert_eq!(count(Some(&[InProgress]), None).await, 1);
+    assert_eq!(count(None, Some(&[Scheduled])).await, 2);
 }
 
 /// Tests for edge cases of executions, cancellations and schedules.

@@ -153,6 +153,47 @@ impl TryFrom<proto::admin::v1::JobFilters> for ora_backend::jobs::JobFilters {
             },
             min_priority: value.min_priority,
             max_priority: value.max_priority,
+            pending_reasons: if value.pending_reasons.is_empty() {
+                None
+            } else {
+                // Pending reasons only narrow down the pending jobs,
+                // other statuses could only be meant by mistake.
+                if !value.execution_statuses.is_empty()
+                    && !value.execution_statuses.iter().any(|&status| {
+                        // Unspecified statuses are also treated as pending.
+                        matches!(
+                            proto::admin::v1::ExecutionStatus::try_from(status),
+                            Ok(proto::admin::v1::ExecutionStatus::Pending
+                                | proto::admin::v1::ExecutionStatus::Unspecified)
+                        )
+                    })
+                {
+                    return Err(Status::invalid_argument(
+                        "pending reasons require the pending execution status",
+                    ));
+                }
+
+                Some(
+                    value
+                        .pending_reasons
+                        .iter()
+                        .map(|&reason| {
+                            match proto::admin::v1::ExecutionPendingReason::try_from(reason) {
+                                Ok(proto::admin::v1::ExecutionPendingReason::Scheduled) => {
+                                    Ok(ora_backend::executions::ExecutionPendingReason::Scheduled)
+                                }
+                                Ok(proto::admin::v1::ExecutionPendingReason::Ready) => {
+                                    Ok(ora_backend::executions::ExecutionPendingReason::Ready)
+                                }
+                                Ok(proto::admin::v1::ExecutionPendingReason::Unspecified)
+                                | Err(_) => Err(Status::invalid_argument(format!(
+                                    "invalid pending reason: {reason}"
+                                ))),
+                            }
+                        })
+                        .collect::<Result<_, _>>()?,
+                )
+            },
         })
     }
 }
@@ -454,6 +495,24 @@ impl From<ora_backend::executions::ExecutionDetails> for proto::admin::v1::Execu
             output_json: value.output_json,
             failure_reason: value.failure_reason,
             target_execution_time: Some(value.target_execution_time.into()),
+            pending_reason: value
+                .pending_reason
+                .map(|reason| proto::admin::v1::ExecutionPendingReason::from(reason).into()),
+        }
+    }
+}
+
+impl From<ora_backend::executions::ExecutionPendingReason>
+    for proto::admin::v1::ExecutionPendingReason
+{
+    fn from(value: ora_backend::executions::ExecutionPendingReason) -> Self {
+        match value {
+            ora_backend::executions::ExecutionPendingReason::Scheduled => {
+                proto::admin::v1::ExecutionPendingReason::Scheduled
+            }
+            ora_backend::executions::ExecutionPendingReason::Ready => {
+                proto::admin::v1::ExecutionPendingReason::Ready
+            }
         }
     }
 }

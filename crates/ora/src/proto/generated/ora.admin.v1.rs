@@ -88,6 +88,11 @@ pub struct Execution {
     /// a retry of a failed execution.
     #[prost(message, optional, tag = "11")]
     pub target_execution_time: ::core::option::Option<::prost_types::Timestamp>,
+    /// The reason the execution has not started yet.
+    ///
+    /// This is only set for pending executions.
+    #[prost(enumeration = "ExecutionPendingReason", optional, tag = "12")]
+    pub pending_reason: ::core::option::Option<i32>,
 }
 impl ::prost::Name for Execution {
     const NAME: &'static str = "Execution";
@@ -140,6 +145,40 @@ impl ExecutionStatus {
             "EXECUTION_STATUS_SUCCEEDED" => Some(Self::Succeeded),
             "EXECUTION_STATUS_FAILED" => Some(Self::Failed),
             "EXECUTION_STATUS_CANCELLED" => Some(Self::Cancelled),
+            _ => None,
+        }
+    }
+}
+/// The reason a pending execution has not started yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ExecutionPendingReason {
+    /// Unknown reason.
+    Unspecified = 0,
+    /// The target execution time has not been reached yet.
+    Scheduled = 1,
+    /// The target execution time has passed,
+    /// but no executor has started the execution yet.
+    Ready = 2,
+}
+impl ExecutionPendingReason {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "EXECUTION_PENDING_REASON_UNSPECIFIED",
+            Self::Scheduled => "EXECUTION_PENDING_REASON_SCHEDULED",
+            Self::Ready => "EXECUTION_PENDING_REASON_READY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "EXECUTION_PENDING_REASON_UNSPECIFIED" => Some(Self::Unspecified),
+            "EXECUTION_PENDING_REASON_SCHEDULED" => Some(Self::Scheduled),
+            "EXECUTION_PENDING_REASON_READY" => Some(Self::Ready),
             _ => None,
         }
     }
@@ -213,6 +252,18 @@ pub struct JobFilters {
     /// Filter by maximum priority (inclusive).
     #[prost(int32, optional, tag = "11")]
     pub max_priority: ::core::option::Option<i32>,
+    /// Filter pending jobs by the reason their last execution
+    /// has not started yet.
+    ///
+    /// This only narrows down the pending jobs, jobs with other
+    /// statuses in `execution_statuses` are not affected.
+    /// If `execution_statuses` is empty, only pending jobs are matched,
+    /// otherwise it must contain the pending status.
+    ///
+    /// Servers that do not support this filter ignore it
+    /// and return all pending jobs.
+    #[prost(enumeration = "ExecutionPendingReason", repeated, tag = "12")]
+    pub pending_reasons: ::prost::alloc::vec::Vec<i32>,
 }
 impl ::prost::Name for JobFilters {
     const NAME: &'static str = "JobFilters";

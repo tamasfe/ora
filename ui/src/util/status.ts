@@ -1,5 +1,9 @@
 import { timestampMs } from "@bufbuild/protobuf/wkt";
-import { ExecutionStatus, type Execution } from "../api/ora/admin/v1/executions_pb";
+import {
+  ExecutionPendingReason,
+  ExecutionStatus,
+  type Execution,
+} from "../api/ora/admin/v1/executions_pb";
 import type { Job } from "../api/ora/admin/v1/jobs_pb";
 import { ScheduleStatus } from "../api/ora/admin/v1/schedules_pb";
 
@@ -31,6 +35,43 @@ export const executionStatusInfo: Record<ExecutionStatus, StatusInfo> = {
   [ExecutionStatus.FAILED]: { label: "Failed", severity: "danger", icon: "pi pi-times-circle" },
   [ExecutionStatus.CANCELLED]: { label: "Cancelled", severity: "secondary", icon: "pi pi-ban" },
 };
+
+/** Pending executions are shown by the reason they have not started yet (if known). */
+export const pendingReasonInfo: Record<ExecutionPendingReason, StatusInfo> = {
+  [ExecutionPendingReason.UNSPECIFIED]: executionStatusInfo[ExecutionStatus.PENDING],
+  [ExecutionPendingReason.SCHEDULED]: {
+    label: "Scheduled",
+    severity: "info",
+    icon: "pi pi-calendar",
+  },
+  [ExecutionPendingReason.READY]: { label: "Ready", severity: "info", icon: "pi pi-clock" },
+};
+
+/** Names of pending reasons in URLs. */
+export const pendingReasonNames: Record<string, ExecutionPendingReason> = {
+  scheduled: ExecutionPendingReason.SCHEDULED,
+  ready: ExecutionPendingReason.READY,
+};
+
+/** Pending reasons that can be selected in filters. */
+export const pendingReasonOptions = [
+  ExecutionPendingReason.SCHEDULED,
+  ExecutionPendingReason.READY,
+].map(value => ({ value, ...pendingReasonInfo[value] }));
+
+/**
+ * The status of an execution to display, pending executions
+ * are shown by the reason they have not started yet.
+ */
+export function executionInfo(execution: Execution | undefined): StatusInfo {
+  const status = execution?.status ?? ExecutionStatus.UNSPECIFIED;
+
+  if (status === ExecutionStatus.PENDING && execution?.pendingReason !== undefined) {
+    return pendingReasonInfo[execution.pendingReason] ?? executionStatusInfo[status];
+  }
+
+  return executionStatusInfo[status] ?? executionStatusInfo[ExecutionStatus.UNSPECIFIED];
+}
 
 /** Names of execution statuses in URLs. */
 export const executionStatusNames: Record<string, ExecutionStatus> = {
@@ -97,6 +138,13 @@ export function lastExecution(job: Job): Execution | undefined {
  */
 export function jobStatus(job: Job): ExecutionStatus {
   return lastExecution(job)?.status ?? ExecutionStatus.UNSPECIFIED;
+}
+
+/**
+ * The status of a job to display, based on its latest execution.
+ */
+export function jobStatusInfo(job: Job): StatusInfo {
+  return executionInfo(lastExecution(job));
 }
 
 /**

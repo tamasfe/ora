@@ -27,13 +27,7 @@ import { pageSizeOptions, tableScrollHeight, useTokenPagination } from "../util/
 import { usePolling } from "../util/polling";
 import { param, useRouteQuery, useRouteQueryFields } from "../util/query";
 import { jobFilterFields, jobOrders, jobsLink, queryKey, useRefreshInterval } from "../util/route";
-import {
-  executionStatusInfo,
-  isJobActive,
-  jobEndedAt,
-  jobStartedAt,
-  jobStatus,
-} from "../util/status";
+import { isJobActive, jobEndedAt, jobStartedAt, jobStatusInfo } from "../util/status";
 import { useStopwatch } from "../util/time";
 
 const props = withDefaults(
@@ -186,6 +180,7 @@ const hasFilters = computed(() => {
       f.executorIds.length +
       f.executionIds.length +
       f.executionStatuses.length +
+      f.pendingReasons.length +
       f.labels.length >
       0 ||
     !!f.targetExecutionTime ||
@@ -420,9 +415,9 @@ defineExpose({ reload });
       <Column header="Status" header-style="width: 9rem">
         <template #body="{ data }">
           <Tag
-            :value="executionStatusInfo[jobStatus(data)].label"
-            :severity="executionStatusInfo[jobStatus(data)].severity"
-            :icon="executionStatusInfo[jobStatus(data)].icon"
+            :value="jobStatusInfo(data).label"
+            :severity="jobStatusInfo(data).severity"
+            :icon="jobStatusInfo(data).icon"
             class="whitespace-nowrap"
           />
         </template>

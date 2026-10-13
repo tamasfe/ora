@@ -62,6 +62,10 @@ pub struct ExecutionDetails {
     /// This might differ from the job's target execution time
     /// if the execution was created as a retry of a failed execution.
     pub target_execution_time: SystemTime,
+    /// The reason the execution has not started yet,
+    /// only set for pending executions.
+    #[serde(default)]
+    pub pending_reason: Option<ExecutionPendingReason>,
 }
 
 /// The status of an execution.
@@ -77,6 +81,16 @@ pub enum ExecutionStatus {
     Failed,
     /// The execution was cancelled.
     Cancelled,
+}
+
+/// The reason a pending execution has not started yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExecutionPendingReason {
+    /// The target execution time has not been reached yet.
+    Scheduled,
+    /// The target execution time has passed,
+    /// but no executor has started the execution yet.
+    Ready,
 }
 
 /// An execution ready to be executed.

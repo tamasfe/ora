@@ -8,7 +8,7 @@ import {
   type ScheduleFilters,
 } from "../api/ora/admin/v1/schedules_pb";
 import { encodeQueryFields, param, useRouteQuery, type QueryFields } from "./query";
-import { executionStatusNames, scheduleStatusNames } from "./status";
+import { executionStatusNames, pendingReasonNames, scheduleStatusNames } from "./status";
 import { useDebounced } from "./time";
 
 /** Job filters in URLs, e.g. `?label=project=abc&status=failed`. */
@@ -16,6 +16,7 @@ export const jobFilterFields: QueryFields<JobFilters> = {
   labels: ["label", param.labelFilters],
   jobTypeIds: ["type", param.stringList],
   executionStatuses: ["status", param.oneOfList(executionStatusNames)],
+  pendingReasons: ["pending", param.oneOfList(pendingReasonNames)],
   jobIds: ["id", param.stringList],
   scheduleIds: ["schedule", param.stringList],
   executorIds: ["executor", param.stringList],

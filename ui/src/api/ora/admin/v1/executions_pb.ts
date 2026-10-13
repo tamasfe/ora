@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file ora/admin/v1/executions.proto.
  */
 export const file_ora_admin_v1_executions: GenFile = /*@__PURE__*/
-  fileDesc("Ch1vcmEvYWRtaW4vdjEvZXhlY3V0aW9ucy5wcm90bxIMb3JhLmFkbWluLnYxIssECglFeGVjdXRpb24SCgoCaWQYASABKAkSGAoLZXhlY3V0b3JfaWQYAiABKAlIAIgBARItCgZzdGF0dXMYAyABKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKCnN0YXJ0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESNQoMc3VjY2VlZGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgCiAEBEjIKCWZhaWxlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIA4gBARI1CgxjYW5jZWxsZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSASIAQESGAoLb3V0cHV0X2pzb24YCSABKAlIBYgBARIbCg5mYWlsdXJlX3JlYXNvbhgKIAEoCUgGiAEBEjkKFXRhcmdldF9leGVjdXRpb25fdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCDgoMX2V4ZWN1dG9yX2lkQg0KC19zdGFydGVkX2F0Qg8KDV9zdWNjZWVkZWRfYXRCDAoKX2ZhaWxlZF9hdEIPCg1fY2FuY2VsbGVkX2F0Qg4KDF9vdXRwdXRfanNvbkIRCg9fZmFpbHVyZV9yZWFzb24q0AEKD0V4ZWN1dGlvblN0YXR1cxIgChxFWEVDVVRJT05fU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYRVhFQ1VUSU9OX1NUQVRVU19QRU5ESU5HEAESIAocRVhFQ1VUSU9OX1NUQVRVU19JTl9QUk9HUkVTUxACEh4KGkVYRUNVVElPTl9TVEFUVVNfU1VDQ0VFREVEEAMSGwoXRVhFQ1VUSU9OX1NUQVRVU19GQUlMRUQQBBIeChpFWEVDVVRJT05fU1RBVFVTX0NBTkNFTExFRBAFYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1vcmEvYWRtaW4vdjEvZXhlY3V0aW9ucy5wcm90bxIMb3JhLmFkbWluLnYxIqEFCglFeGVjdXRpb24SCgoCaWQYASABKAkSGAoLZXhlY3V0b3JfaWQYAiABKAlIAIgBARItCgZzdGF0dXMYAyABKA4yHS5vcmEuYWRtaW4udjEuRXhlY3V0aW9uU3RhdHVzEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKCnN0YXJ0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAGIAQESNQoMc3VjY2VlZGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgCiAEBEjIKCWZhaWxlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBIA4gBARI1CgxjYW5jZWxsZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSASIAQESGAoLb3V0cHV0X2pzb24YCSABKAlIBYgBARIbCg5mYWlsdXJlX3JlYXNvbhgKIAEoCUgGiAEBEjkKFXRhcmdldF9leGVjdXRpb25fdGltZRgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQQoOcGVuZGluZ19yZWFzb24YDCABKA4yJC5vcmEuYWRtaW4udjEuRXhlY3V0aW9uUGVuZGluZ1JlYXNvbkgHiAEBQg4KDF9leGVjdXRvcl9pZEINCgtfc3RhcnRlZF9hdEIPCg1fc3VjY2VlZGVkX2F0QgwKCl9mYWlsZWRfYXRCDwoNX2NhbmNlbGxlZF9hdEIOCgxfb3V0cHV0X2pzb25CEQoPX2ZhaWx1cmVfcmVhc29uQhEKD19wZW5kaW5nX3JlYXNvbirQAQoPRXhlY3V0aW9uU3RhdHVzEiAKHEVYRUNVVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIcChhFWEVDVVRJT05fU1RBVFVTX1BFTkRJTkcQARIgChxFWEVDVVRJT05fU1RBVFVTX0lOX1BST0dSRVNTEAISHgoaRVhFQ1VUSU9OX1NUQVRVU19TVUNDRUVERUQQAxIbChdFWEVDVVRJT05fU1RBVFVTX0ZBSUxFRBAEEh4KGkVYRUNVVElPTl9TVEFUVVNfQ0FOQ0VMTEVEEAUqjgEKFkV4ZWN1dGlvblBlbmRpbmdSZWFzb24SKAokRVhFQ1VUSU9OX1BFTkRJTkdfUkVBU09OX1VOU1BFQ0lGSUVEEAASJgoiRVhFQ1VUSU9OX1BFTkRJTkdfUkVBU09OX1NDSEVEVUxFRBABEiIKHkVYRUNVVElPTl9QRU5ESU5HX1JFQVNPTl9SRUFEWRACYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * A job execution.
@@ -100,6 +100,15 @@ export type Execution = Message<"ora.admin.v1.Execution"> & {
    * @generated from field: google.protobuf.Timestamp target_execution_time = 11;
    */
   targetExecutionTime?: Timestamp | undefined;
+
+  /**
+   * The reason the execution has not started yet.
+   *
+   * This is only set for pending executions.
+   *
+   * @generated from field: optional ora.admin.v1.ExecutionPendingReason pending_reason = 12;
+   */
+  pendingReason?: ExecutionPendingReason | undefined;
 };
 
 /**
@@ -163,4 +172,39 @@ export enum ExecutionStatus {
  */
 export const ExecutionStatusSchema: GenEnum<ExecutionStatus> = /*@__PURE__*/
   enumDesc(file_ora_admin_v1_executions, 0);
+
+/**
+ * The reason a pending execution has not started yet.
+ *
+ * @generated from enum ora.admin.v1.ExecutionPendingReason
+ */
+export enum ExecutionPendingReason {
+  /**
+   * Unknown reason.
+   *
+   * @generated from enum value: EXECUTION_PENDING_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The target execution time has not been reached yet.
+   *
+   * @generated from enum value: EXECUTION_PENDING_REASON_SCHEDULED = 1;
+   */
+  SCHEDULED = 1,
+
+  /**
+   * The target execution time has passed,
+   * but no executor has started the execution yet.
+   *
+   * @generated from enum value: EXECUTION_PENDING_REASON_READY = 2;
+   */
+  READY = 2,
+}
+
+/**
+ * Describes the enum ora.admin.v1.ExecutionPendingReason.
+ */
+export const ExecutionPendingReasonSchema: GenEnum<ExecutionPendingReason> = /*@__PURE__*/
+  enumDesc(file_ora_admin_v1_executions, 1);
 

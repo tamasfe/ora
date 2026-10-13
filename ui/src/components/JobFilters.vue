@@ -3,7 +3,8 @@ import { computed, ref } from "vue";
 import { create } from "@bufbuild/protobuf";
 import { JobFiltersSchema, type JobFilters } from "../api/ora/admin/v1/jobs_pb";
 import { useJobTypes } from "../util/data";
-import { executionStatusOptions } from "../util/status";
+import { ExecutionStatus } from "../api/ora/admin/v1/executions_pb";
+import { executionStatusOptions, pendingReasonOptions } from "../util/status";
 
 const props = defineProps<{
   /** Filters that are not editable (e.g. fixed by the parent view). */
@@ -49,8 +50,25 @@ const moreKeys = [
 const moreCount = computed(() => moreKeys.filter(isSet).length);
 const activeCount = computed(
   () =>
-    moreCount.value + (["labels", "jobTypeIds", "executionStatuses"] as const).filter(isSet).length,
+    moreCount.value +
+    (["labels", "jobTypeIds", "executionStatuses", "pendingReasons"] as const).filter(isSet).length,
 );
+
+/** Pending reasons only narrow down the pending jobs, they need the pending status (or no status). */
+const pendingSelectable = computed(
+  () =>
+    model.value.executionStatuses.length === 0 ||
+    model.value.executionStatuses.includes(ExecutionStatus.PENDING),
+);
+
+function setStatuses(statuses: ExecutionStatus[]) {
+  const pending = statuses.length === 0 || statuses.includes(ExecutionStatus.PENDING);
+  model.value = {
+    ...model.value,
+    executionStatuses: statuses,
+    pendingReasons: pending ? model.value.pendingReasons : [],
+  };
+}
 
 // Filters from a shared link should be visible.
 const showMore = ref(moreCount.value > 0);
@@ -105,7 +123,22 @@ function clear() {
         :max-selected-labels="2"
         show-clear
         class="w-56"
-        @update:model-value="set('executionStatuses', $event)"
+        @update:model-value="setStatuses($event ?? [])"
+      >
+        <template #option="{ option }">
+          <Tag :value="option.label" :severity="option.severity" :icon="option.icon" />
+        </template>
+      </MultiSelect>
+      <MultiSelect
+        v-if="visible('pendingReasons') && pendingSelectable"
+        :model-value="model.pendingReasons"
+        :options="pendingReasonOptions"
+        option-label="label"
+        option-value="value"
+        placeholder="Pending reason"
+        show-clear
+        class="w-52"
+        @update:model-value="set('pendingReasons', $event ?? [])"
       >
         <template #option="{ option }">
           <Tag :value="option.label" :severity="option.severity" :icon="option.icon" />

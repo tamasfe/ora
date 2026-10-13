@@ -52,3 +52,13 @@ impl ExecutionStatus {
         )
     }
 }
+
+/// The reason a pending execution has not started yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExecutionPendingReason {
+    /// The target execution time has not been reached yet.
+    Scheduled,
+    /// The target execution time has passed,
+    /// but no executor has started the execution yet.
+    Ready,
+}

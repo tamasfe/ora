@@ -7,7 +7,7 @@ use std::{
 use base64::Engine;
 use ora_backend::{
     common::{Label, NextPageToken},
-    executions::{ExecutionDetails, ExecutionId, ExecutionStatus},
+    executions::{ExecutionDetails, ExecutionId, ExecutionPendingReason, ExecutionStatus},
     executors::ExecutorId,
     jobs::{CancelledJob, JobDefinition, JobDetails, JobFilters, JobId, JobOrderBy, JobTypeId},
     schedules::ScheduleId,
@@ -43,6 +43,8 @@ pub(crate) async fn cancel_jobs(
 
             Some(s)
         }
+        // Pending reasons alone only match pending jobs.
+        None if filters.pending_reasons.is_some() => Some(vec![ExecutionStatus::Pending]),
         None => Some(vec![ExecutionStatus::InProgress, ExecutionStatus::Pending]),
     };
 
@@ -339,7 +341,10 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
                 failure_reason,
                 status,
                 executor_id,
-                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION
+                EXTRACT(EPOCH FROM ora.execution.target_execution_time)::DOUBLE PRECISION,
+                -- Whether a pending execution is scheduled (or ready),
+                -- `NOW()` is the same for the filters in the transaction.
+                CASE WHEN status = 0 THEN target_execution_time > NOW() END
             FROM
                 ora.execution
             WHERE
@@ -370,6 +375,13 @@ async fn collect_executions(tx: &DbTransaction<'_>, jobs: &mut [JobDetails]) -> 
             status: PgExecutionStatus::from(row.try_get::<_, i16>(9)?).into(),
             executor_id: row.try_get::<_, Option<Uuid>>(10)?.map(ExecutorId),
             target_execution_time: systemtime_from_ts(row.try_get(11)?),
+            pending_reason: row.try_get::<_, Option<bool>>(12)?.map(|scheduled| {
+                if scheduled {
+                    ExecutionPendingReason::Scheduled
+                } else {
+                    ExecutionPendingReason::Ready
+                }
+            }),
         });
     }
 
@@ -457,6 +469,7 @@ fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
         schedule_ids,
         min_priority,
         max_priority,
+        pending_reasons,
     } = filters;
 
     let mut select = SelectStatement::new().from(("ora", "job")).take();
@@ -560,8 +573,11 @@ fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
         }
     }
 
-    if let Some(statuses) = execution_statuses {
-        select.and_where(status_filter(statuses));
+    if execution_statuses.is_some() || pending_reasons.is_some() {
+        select.and_where(status_filter(
+            execution_statuses.as_deref(),
+            pending_reasons.as_deref(),
+        ));
     }
 
     if let Some(labels) = labels {
@@ -608,45 +624,81 @@ fn filtered_jobs(filters: &JobFilters) -> (SelectStatement, bool) {
     (select, executions_joined)
 }
 
-/// Filters jobs by the status of their latest execution.
-fn status_filter(statuses: &[ExecutionStatus]) -> Expr {
-    let active_statuses = [ExecutionStatus::Pending, ExecutionStatus::InProgress];
+/// Filters jobs by the status of their latest execution
+/// and the reason it is pending.
+///
+/// Pending reasons only narrow down the pending jobs,
+/// without statuses only pending jobs are matched.
+fn status_filter(
+    statuses: Option<&[ExecutionStatus]>,
+    pending_reasons: Option<&[ExecutionPendingReason]>,
+) -> Expr {
+    let statuses = statuses.unwrap_or(&[ExecutionStatus::Pending]);
+
     let inactive_statuses = [
         ExecutionStatus::Succeeded,
         ExecutionStatus::Failed,
         ExecutionStatus::Cancelled,
     ];
 
-    let status_values = |candidates: &[ExecutionStatus]| -> Vec<i16> {
-        candidates
-            .iter()
-            .filter(|s| statuses.contains(s))
-            .map(|s| PgExecutionStatus::from(*s) as i16)
-            .collect()
+    let inactive_values: Vec<i16> = inactive_statuses
+        .iter()
+        .filter(|s| statuses.contains(s))
+        .map(|s| PgExecutionStatus::from(*s) as i16)
+        .collect();
+
+    let pending = statuses.contains(&ExecutionStatus::Pending);
+    let scheduled =
+        pending && pending_reasons.is_none_or(|r| r.contains(&ExecutionPendingReason::Scheduled));
+    let ready =
+        pending && pending_reasons.is_none_or(|r| r.contains(&ExecutionPendingReason::Ready));
+    let in_progress = statuses.contains(&ExecutionStatus::InProgress);
+
+    // Conditions for the active execution of active jobs, the statuses
+    // are literals so that the partial indexes on them can be used.
+    let pending_condition = match (scheduled, ready) {
+        (true, true) => Some("status = 0"),
+        (true, false) => Some("(status = 0 AND target_execution_time > NOW())"),
+        (false, true) => Some("(status = 0 AND target_execution_time <= NOW())"),
+        (false, false) => None,
     };
+    let in_progress_condition = in_progress.then_some("status = 1");
 
-    let active_values = status_values(&active_statuses);
-    let inactive_values = status_values(&inactive_statuses);
+    let all_active = scheduled && ready && in_progress;
+    let all_inactive = inactive_values.len() == inactive_statuses.len();
 
-    if active_values.len() == active_statuses.len()
-        && inactive_values.len() == inactive_statuses.len()
-    {
+    if all_active && all_inactive {
         return Expr::cust("TRUE");
     }
 
     // Active jobs have no stored status, their executions are only needed
-    // if a subset of the active statuses is requested.
-    let active = match active_values.len() {
-        0 => None,
-        n if n == active_statuses.len() => {
-            Some(Expr::col(("ora", "job", "inactive_status")).is_null())
-        }
-        _ => Some(Expr::col(("ora", "job", "inactive_status")).is_null().and(
-            Expr::cust_with_values(
-                "ora.job.id IN (SELECT job_id FROM ora.execution WHERE status = ANY($1::SMALLINT[]))",
-                [active_values],
-            ),
-        )),
+    // if a subset of the active executions is requested.
+    let active = if all_active {
+        Some(Expr::col(("ora", "job", "inactive_status")).is_null())
+    } else {
+        let conditions = pending_condition
+            .into_iter()
+            .chain(in_progress_condition)
+            .collect::<Vec<_>>();
+
+        // The conditions are combined in a single subquery, separate
+        // subqueries combined with OR cannot be planned as a semi-join.
+        //
+        // `EXISTS` is used instead of `IN`, as with OR (below) `IN` is
+        // planned as a hashed subplan that is replaced by a scan of all
+        // matching executions for every job if they do not fit in `work_mem`.
+        (!conditions.is_empty()).then(|| {
+            Expr::col(("ora", "job", "inactive_status"))
+                .is_null()
+                .and(Expr::cust(format!(
+                    r#"--sql
+                    EXISTS (
+                        SELECT FROM ora.execution
+                        WHERE ora.execution.job_id = ora.job.id AND ({})
+                    )"#,
+                    conditions.join(" OR ")
+                )))
+        })
     };
 
     let inactive = match inactive_values.len() {

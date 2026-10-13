@@ -14,7 +14,7 @@ use ora::{
     AdminClient, JobFilters, JobTypeId,
     admin::jobs::Execution,
     common::{LabelFilter, TimeRange},
-    execution::{ExecutionId, ExecutionStatus},
+    execution::{ExecutionId, ExecutionPendingReason, ExecutionStatus},
     executor::ExecutorId,
     job::JobId,
     job_type::AnyJobType,
@@ -204,6 +204,15 @@ pub(crate) struct JobFilterArgs {
     /// comma-separated values are also supported.
     #[arg(long = "status", value_delimiter = ',')]
     execution_statuses: Vec<JobStatus>,
+    /// Filter pending jobs by the reason they have not started yet.
+    ///
+    /// Only pending jobs are matched unless other statuses are given,
+    /// which must include `pending`.
+    ///
+    /// Can be specified multiple times,
+    /// comma-separated values are also supported.
+    #[arg(long = "pending-reason", value_delimiter = ',')]
+    pending_reasons: Vec<PendingReason>,
     /// Filter for jobs with a target execution time
     /// after the given timestamp or date.
     ///
@@ -246,6 +255,7 @@ impl TryFrom<JobFilterArgs> for JobFilters {
             execution_ids,
             labels,
             execution_statuses,
+            pending_reasons,
             target_execution_time_after,
             target_execution_time_before,
             created_after,
@@ -384,6 +394,11 @@ impl TryFrom<JobFilterArgs> for JobFilters {
             },
             min_priority,
             max_priority,
+            pending_reasons: if pending_reasons.is_empty() {
+                None
+            } else {
+                Some(pending_reasons.into_iter().map(Into::into).collect())
+            },
         })
     }
 }
@@ -436,6 +451,44 @@ impl From<ExecutionStatus> for JobStatus {
             ExecutionStatus::Succeeded => JobStatus::Succeeded,
             ExecutionStatus::Failed => JobStatus::Failed,
             ExecutionStatus::Cancelled => JobStatus::Cancelled,
+        }
+    }
+}
+
+/// The reason a pending job has not started yet.
+#[derive(ValueEnum, Clone)]
+pub(crate) enum PendingReason {
+    /// The target execution time has not been reached yet.
+    Scheduled,
+    /// The target execution time has passed,
+    /// but no executor has started the job yet.
+    Ready,
+}
+
+impl core::fmt::Display for PendingReason {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = match self {
+            PendingReason::Scheduled => "scheduled",
+            PendingReason::Ready => "ready",
+        };
+        write!(f, "{s}")
+    }
+}
+
+impl From<PendingReason> for ExecutionPendingReason {
+    fn from(reason: PendingReason) -> Self {
+        match reason {
+            PendingReason::Scheduled => ExecutionPendingReason::Scheduled,
+            PendingReason::Ready => ExecutionPendingReason::Ready,
+        }
+    }
+}
+
+impl From<ExecutionPendingReason> for PendingReason {
+    fn from(reason: ExecutionPendingReason) -> Self {
+        match reason {
+            ExecutionPendingReason::Scheduled => PendingReason::Scheduled,
+            ExecutionPendingReason::Ready => PendingReason::Ready,
         }
     }
 }
@@ -957,6 +1010,10 @@ async fn list_jobs(
         }
 
         let mut status = JobStatus::from(last_exec.status()).to_string();
+
+        if let Some(reason) = last_exec.pending_reason() {
+            write!(&mut status, " ({})", PendingReason::from(reason)).unwrap();
+        }
 
         if let (Some(started), Some(ended)) = (raw_def.target_execution_time, last_exec.ended_at())
         {

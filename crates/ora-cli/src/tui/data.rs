@@ -8,7 +8,7 @@ use ora::{
     executor::ExecutorId, job::JobId, schedule::ScheduleId,
 };
 
-use crate::tui::{AppEvent, events::Request};
+use crate::tui::{AppEvent, JobStatus, events::Request};
 
 /// How many jobs or schedules are fetched at a time.
 ///
@@ -42,7 +42,7 @@ pub(super) async fn update_jobs(
     token: u64,
     job_type: Option<JobTypeId>,
     order: ora::JobOrderBy,
-    statuses: Option<Vec<ExecutionStatus>>,
+    status: JobStatus,
     admin: AdminClient,
     events: Sender<AppEvent>,
     label_filter: String,
@@ -53,7 +53,8 @@ pub(super) async fn update_jobs(
         job_type_ids: job_type.map(|job_type| vec![job_type]),
         schedule_ids: schedule.map(|schedule| vec![schedule]),
         labels: parse_label_filter(&label_filter),
-        execution_statuses: statuses,
+        execution_statuses: status.statuses(),
+        pending_reasons: status.pending_reasons(),
         ..Default::default()
     };
 
