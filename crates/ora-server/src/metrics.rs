@@ -8,7 +8,7 @@ use std::{
 
 use ora_backend::{
     Backend,
-    executions::ExecutionStatus,
+    executions::{ExecutionPendingReason, ExecutionStatus},
     jobs::{JobFilters, JobTypeId},
 };
 use wgroup::WaitGuard;
@@ -110,7 +110,7 @@ pub(crate) fn describe() {
         describe_gauge!(
             JOBS,
             Unit::Count,
-            "The count of unfinished jobs, by job type and status (pending or in_progress)."
+            "The count of unfinished jobs, by job type, status (pending or in_progress) and pending_reason (scheduled or ready, only for pending jobs)."
         );
         describe_counter!(
             EXECUTIONS_STARTED_TOTAL,
@@ -324,29 +324,26 @@ pub(crate) async fn job_counts_metrics_loop(
     interval: Duration,
     wg: WaitGuard,
 ) {
-    let mut pending = JobTypeGauges::new(JOBS).with_label("status", "pending");
+    let mut scheduled = JobTypeGauges::new(JOBS)
+        .with_label("status", "pending")
+        .with_label("pending_reason", "scheduled");
+    let mut ready = JobTypeGauges::new(JOBS)
+        .with_label("status", "pending")
+        .with_label("pending_reason", "ready");
     let mut in_progress = JobTypeGauges::new(JOBS).with_label("status", "in_progress");
     let mut unassigned = JobTypeGauges::new(EXECUTIONS_UNASSIGNED);
 
     loop {
         match count_unfinished_jobs(&*backend).await {
-            Ok((pending_counts, in_progress_counts)) => {
-                pending.set(pending_counts);
+            Ok((scheduled_counts, ready_counts, in_progress_counts)) => {
+                scheduled.set(scheduled_counts);
+                unassigned.set(unassigned_counts(&ready_counts, &executor_pool));
+                ready.set(ready_counts);
                 in_progress.set(in_progress_counts);
             }
             Err(error) => {
                 backend_error("count_jobs");
                 tracing::error!(%error, "failed to count jobs for metrics");
-            }
-        }
-
-        match backend.count_ready_executions().await {
-            Ok(ready_counts) => {
-                unassigned.set(unassigned_counts(ready_counts, &executor_pool));
-            }
-            Err(error) => {
-                backend_error("count_ready_executions");
-                tracing::error!(%error, "failed to count ready executions for metrics");
             }
         }
 
@@ -365,37 +362,44 @@ type JobCounts = HashMap<JobTypeId, f64>;
 /// Ready executions in the backend minus the ones
 /// already offered to (or accepted by) executors,
 /// as those are still pending in the backend.
-fn unassigned_counts(
-    ready_counts: Vec<(JobTypeId, u64)>,
-    executor_pool: &ExecutorPool,
-) -> JobCounts {
+fn unassigned_counts(ready_counts: &JobCounts, executor_pool: &ExecutorPool) -> JobCounts {
     let in_flight = executor_pool.stats().in_flight_executions;
 
     ready_counts
-        .into_iter()
+        .iter()
         .map(|(job_type_id, count)| {
-            #[allow(clippy::cast_precision_loss)]
-            let count = count as f64 - in_flight.get(&job_type_id).copied().unwrap_or_default();
-            (job_type_id, count.max(0.0))
+            let count = count - in_flight.get(job_type_id).copied().unwrap_or_default();
+            (job_type_id.clone(), count.max(0.0))
         })
         .collect()
 }
 
 async fn count_unfinished_jobs<B: Backend>(
     backend: &B,
-) -> Result<(JobCounts, JobCounts), B::Error> {
-    let mut pending = HashMap::new();
+) -> Result<(JobCounts, JobCounts, JobCounts), B::Error> {
+    let mut scheduled = HashMap::new();
+    let mut ready = HashMap::new();
     let mut in_progress = HashMap::new();
 
     for job_type in backend.list_job_types().await? {
-        for (status, counts) in [
-            (ExecutionStatus::Pending, &mut pending),
-            (ExecutionStatus::InProgress, &mut in_progress),
+        for (status, pending_reasons, counts) in [
+            (
+                ExecutionStatus::Pending,
+                Some(vec![ExecutionPendingReason::Scheduled]),
+                &mut scheduled,
+            ),
+            (
+                ExecutionStatus::Pending,
+                Some(vec![ExecutionPendingReason::Ready]),
+                &mut ready,
+            ),
+            (ExecutionStatus::InProgress, None, &mut in_progress),
         ] {
             let count = backend
                 .count_jobs(JobFilters {
                     job_type_ids: Some(vec![job_type.id.clone()]),
                     execution_statuses: Some(vec![status]),
+                    pending_reasons,
                     ..Default::default()
                 })
                 .await?;
@@ -405,5 +409,5 @@ async fn count_unfinished_jobs<B: Backend>(
         }
     }
 
-    Ok((pending, in_progress))
+    Ok((scheduled, ready, in_progress))
 }
