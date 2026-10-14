@@ -16,7 +16,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 
 use crate::{
-    commands::{jobs::BackoffStrategy, parse_label_filter},
+    commands::{jobs::BackoffStrategy, parse_label_filters},
     completions::complete_job_type,
     output::{self, OutputFormat, Record, print_records},
 };
@@ -170,12 +170,12 @@ pub(crate) struct ScheduleFilterArgs {
     job_type_ids: Vec<String>,
     /// Filter by labels.
     ///
-    /// The format can be either `key=value`, `key=a|b`
-    /// that will match any of the values, or just `key`
+    /// The format can be either `key=value` or just `key`
     /// that will match any value for the given key.
     ///
     /// Can be specified multiple times,
     /// comma-separated values are also supported.
+    /// The same key with different values matches any of them.
     #[arg(long = "label", value_delimiter = ',')]
     labels: Vec<String>,
     /// Filter by schedule status.
@@ -258,7 +258,7 @@ impl TryFrom<ScheduleFilterArgs> for ScheduleFilters {
             labels: if labels.is_empty() {
                 None
             } else {
-                Some(labels.into_iter().map(|l| parse_label_filter(&l)).collect())
+                Some(parse_label_filters(&labels))
             },
             statuses: if statuses.is_empty() {
                 None

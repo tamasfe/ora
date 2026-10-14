@@ -278,13 +278,9 @@ fn parse_label_filter(filter: &str) -> Option<Vec<LabelFilter>> {
         return None;
     }
 
-    Some(
-        filter
-            .trim()
-            .split(',')
-            .map(crate::commands::parse_label_filter)
-            .collect(),
-    )
+    Some(crate::commands::parse_label_filters(
+        &filter.trim().split(',').collect::<Vec<_>>(),
+    ))
 }
 
 pub(super) async fn add_job(

@@ -25,7 +25,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 
 use crate::{
-    commands::parse_label_filter,
+    commands::parse_label_filters,
     completions::{
         complete_active_job_id, complete_any_job_id, complete_any_schedule_id, complete_job_type,
     },
@@ -192,12 +192,12 @@ pub(crate) struct JobFilterArgs {
     execution_ids: Vec<String>,
     /// Filter by labels.
     ///
-    /// The format can be either `key=value`, `key=a|b`
-    /// that will match any of the values, or just `key`
+    /// The format can be either `key=value` or just `key`
     /// that will match any value for the given key.
     ///
     /// Can be specified multiple times,
     /// comma-separated values are also supported.
+    /// The same key with different values matches any of them.
     #[arg(long = "label", value_delimiter = ',')]
     labels: Vec<String>,
     /// Filter by job status.
@@ -364,7 +364,7 @@ impl TryFrom<JobFilterArgs> for JobFilters {
             labels: if labels.is_empty() {
                 None
             } else {
-                Some(labels.into_iter().map(|l| parse_label_filter(&l)).collect())
+                Some(parse_label_filters(&labels))
             },
             schedule_ids: if schedule_ids.is_empty() {
                 None

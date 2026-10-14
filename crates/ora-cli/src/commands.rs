@@ -14,24 +14,51 @@ pub(crate) mod jobs;
 pub(crate) mod maintenance;
 pub(crate) mod schedules;
 
-/// Parse a label filter: `key` matches any value, `key=value` one value,
-/// `key=a|b` any of the values.
-pub(crate) fn parse_label_filter(filter: &str) -> LabelFilter {
-    let mut parts = filter.trim().splitn(2, '=');
-    let key = parts.next().unwrap_or_default().trim().to_string();
+/// Parse `key` or `key=value` label filters.
+///
+/// Values of the same key match any of them, a label has one value per key.
+pub(crate) fn parse_label_filters<S: AsRef<str>>(filters: &[S]) -> Vec<LabelFilter> {
+    let mut values_by_key: Vec<(String, Vec<String>)> = Vec::new();
 
-    match parts.next() {
-        Some(values) if values.contains('|') => LabelFilter {
-            key,
-            value: None,
-            value_in: Some(values.split('|').map(ToString::to_string).collect()),
-        },
-        value => LabelFilter {
-            key,
-            value: value.map(ToString::to_string),
-            value_in: None,
-        },
+    for filter in filters {
+        let mut parts = filter.as_ref().trim().splitn(2, '=');
+        let key = parts.next().unwrap_or_default().trim();
+
+        let values = match values_by_key.iter_mut().find(|(k, _)| k == key) {
+            Some((_, values)) => values,
+            None => {
+                values_by_key.push((key.to_string(), Vec::new()));
+                &mut values_by_key.last_mut().unwrap().1
+            }
+        };
+
+        if let Some(value) = parts.next()
+            && !values.iter().any(|v| v == value)
+        {
+            values.push(value.to_string());
+        }
     }
+
+    values_by_key
+        .into_iter()
+        .map(|(key, mut values)| match values.len() {
+            0 => LabelFilter {
+                key,
+                value: None,
+                value_in: None,
+            },
+            1 => LabelFilter {
+                key,
+                value: values.pop(),
+                value_in: None,
+            },
+            _ => LabelFilter {
+                key,
+                value: None,
+                value_in: Some(values),
+            },
+        })
+        .collect()
 }
 
 /// Command-line client for the ora scheduler.
