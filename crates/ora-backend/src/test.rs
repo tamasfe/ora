@@ -392,6 +392,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 labels: Some(vec![crate::common::LabelFilter {
                     key: "foo".to_string(),
                     value: Some("bar".to_string()),
+                    value_in: None,
                 }]),
                 ..Default::default()
             },
@@ -411,6 +412,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 labels: Some(vec![crate::common::LabelFilter {
                     key: "foo".to_string(),
                     value: Some("bar".to_string()),
+                    value_in: None,
                 }]),
                 job_type_ids: Some(vec![JobTypeId::new("QueryJob1").unwrap()]),
                 ..Default::default()
@@ -431,6 +433,7 @@ pub async fn job_queries(backend: &impl Backend) {
                 labels: Some(vec![crate::common::LabelFilter {
                     key: "foo".to_string(),
                     value: None,
+                    value_in: None,
                 }]),
                 ..Default::default()
             },
@@ -451,10 +454,12 @@ pub async fn job_queries(backend: &impl Backend) {
                     crate::common::LabelFilter {
                         key: "foo".to_string(),
                         value: None,
+                        value_in: None,
                     },
                     crate::common::LabelFilter {
                         key: "foo".to_string(),
                         value: Some("bar".to_string()),
+                        value_in: None,
                     },
                 ]),
                 ..Default::default()
@@ -468,6 +473,36 @@ pub async fn job_queries(backend: &impl Backend) {
         .0;
 
     assert_eq!(foo_bar_jobs.len(), 2);
+
+    let count_foo_value_in = |values: &[&str]| {
+        let values = values.iter().map(ToString::to_string).collect();
+        let backend = &backend;
+        async move {
+            backend
+                .list_jobs(
+                    JobFilters {
+                        labels: Some(vec![crate::common::LabelFilter {
+                            key: "foo".to_string(),
+                            value: None,
+                            value_in: Some(values),
+                        }]),
+                        ..Default::default()
+                    },
+                    None,
+                    10,
+                    None,
+                )
+                .await
+                .expect("Failed to list jobs")
+                .0
+                .len()
+        }
+    };
+
+    assert_eq!(count_foo_value_in(&["bar", "baz"]).await, 3);
+    assert_eq!(count_foo_value_in(&["baz", "nope"]).await, 1);
+    assert_eq!(count_foo_value_in(&["nope"]).await, 0);
+    assert_eq!(count_foo_value_in(&[]).await, 0);
 
     let jobs = backend
         .list_jobs(

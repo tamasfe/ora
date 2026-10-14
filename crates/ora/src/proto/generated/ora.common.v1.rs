@@ -30,6 +30,12 @@ pub struct LabelFilter {
     /// the given key and any value will match.
     #[prost(string, optional, tag = "2")]
     pub value: ::core::option::Option<::prost::alloc::string::String>,
+    /// An optional set of values of the label to filter by,
+    /// entities with any of the values will match.
+    ///
+    /// Takes precedence over `value`, an empty set matches nothing.
+    #[prost(message, optional, tag = "3")]
+    pub value_in: ::core::option::Option<LabelValueSet>,
 }
 impl ::prost::Name for LabelFilter {
     const NAME: &'static str = "LabelFilter";
@@ -39,6 +45,23 @@ impl ::prost::Name for LabelFilter {
     }
     fn type_url() -> ::prost::alloc::string::String {
         "/ora.common.v1.LabelFilter".into()
+    }
+}
+/// A set of label values.
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
+pub struct LabelValueSet {
+    /// The values in the set.
+    #[prost(string, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+impl ::prost::Name for LabelValueSet {
+    const NAME: &'static str = "LabelValueSet";
+    const PACKAGE: &'static str = "ora.common.v1";
+    fn full_name() -> ::prost::alloc::string::String {
+        "ora.common.v1.LabelValueSet".into()
+    }
+    fn type_url() -> ::prost::alloc::string::String {
+        "/ora.common.v1.LabelValueSet".into()
     }
 }
 /// A time range.

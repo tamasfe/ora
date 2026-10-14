@@ -13,7 +13,7 @@ use jiff::{Timestamp, civil::Time, tz::TimeZone};
 use ora::{
     AdminClient, JobFilters, JobTypeId,
     admin::jobs::Execution,
-    common::{LabelFilter, TimeRange},
+    common::TimeRange,
     execution::{ExecutionId, ExecutionPendingReason, ExecutionStatus},
     executor::ExecutorId,
     job::JobId,
@@ -25,6 +25,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 
 use crate::{
+    commands::parse_label_filter,
     completions::{
         complete_active_job_id, complete_any_job_id, complete_any_schedule_id, complete_job_type,
     },
@@ -191,7 +192,8 @@ pub(crate) struct JobFilterArgs {
     execution_ids: Vec<String>,
     /// Filter by labels.
     ///
-    /// The format can be either `key=value` or just `key`
+    /// The format can be either `key=value`, `key=a|b`
+    /// that will match any of the values, or just `key`
     /// that will match any value for the given key.
     ///
     /// Can be specified multiple times,
@@ -362,21 +364,7 @@ impl TryFrom<JobFilterArgs> for JobFilters {
             labels: if labels.is_empty() {
                 None
             } else {
-                Some(
-                    labels
-                        .into_iter()
-                        .map(|l| {
-                            let mut parts = l.trim().splitn(2, '=');
-                            let key = parts.next().unwrap_or_default().trim();
-                            let value = parts.next();
-
-                            LabelFilter {
-                                key: key.to_string(),
-                                value: value.map(ToString::to_string),
-                            }
-                        })
-                        .collect(),
-                )
+                Some(labels.into_iter().map(|l| parse_label_filter(&l)).collect())
             },
             schedule_ids: if schedule_ids.is_empty() {
                 None

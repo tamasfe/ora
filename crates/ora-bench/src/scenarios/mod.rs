@@ -143,6 +143,7 @@ impl Run {
             labels: vec![LabelFilter {
                 key: RUN_LABEL.into(),
                 value: Some(self.id.clone()),
+                value_in: None,
             }],
             ..Default::default()
         }

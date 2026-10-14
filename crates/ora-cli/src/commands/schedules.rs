@@ -8,7 +8,7 @@ use futures::TryStreamExt;
 use jiff::{Timestamp, civil::Time};
 use ora::{
     AdminClient, JobTypeId, ScheduleFilters,
-    common::{LabelFilter, TimeRange},
+    common::TimeRange,
     proto::jobs::v1::{RetryPolicy, TimeoutBaseTime, TimeoutPolicy},
     schedule::{ScheduleId, SchedulingPolicy},
 };
@@ -16,7 +16,7 @@ use serde_json::Value;
 use tempfile::NamedTempFile;
 
 use crate::{
-    commands::jobs::BackoffStrategy,
+    commands::{jobs::BackoffStrategy, parse_label_filter},
     completions::complete_job_type,
     output::{self, OutputFormat, Record, print_records},
 };
@@ -170,7 +170,8 @@ pub(crate) struct ScheduleFilterArgs {
     job_type_ids: Vec<String>,
     /// Filter by labels.
     ///
-    /// The format can be either `key=value` or just `key`
+    /// The format can be either `key=value`, `key=a|b`
+    /// that will match any of the values, or just `key`
     /// that will match any value for the given key.
     ///
     /// Can be specified multiple times,
@@ -257,21 +258,7 @@ impl TryFrom<ScheduleFilterArgs> for ScheduleFilters {
             labels: if labels.is_empty() {
                 None
             } else {
-                Some(
-                    labels
-                        .into_iter()
-                        .map(|l| {
-                            let mut parts = l.trim().splitn(2, '=');
-                            let key = parts.next().unwrap_or_default().trim();
-                            let value = parts.next();
-
-                            LabelFilter {
-                                key: key.to_string(),
-                                value: value.map(ToString::to_string),
-                            }
-                        })
-                        .collect(),
-                )
+                Some(labels.into_iter().map(|l| parse_label_filter(&l)).collect())
             },
             statuses: if statuses.is_empty() {
                 None
