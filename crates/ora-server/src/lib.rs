@@ -5,11 +5,12 @@ use std::{sync::Arc, time::Duration};
 use either::Either;
 use wgroup::{WaitGroup, WaitGroupHandle, WaitGuard};
 
-use crate::{executor_pool::ExecutorPool, grpc::GrpcImpl};
+use crate::{executor_pool::ExecutorPool, grpc::GrpcImpl, metrics::InstrumentedBackend};
 
 mod broadcast;
 mod executor_pool;
 mod grpc;
+mod metrics;
 pub mod proto;
 mod server;
 mod util;
@@ -28,6 +29,13 @@ pub struct ServerOptions {
     ///
     /// Defaults to 15 seconds.
     pub shutdown_grace_period: Duration,
+    /// How often unfinished jobs are counted in the backend
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics.
+    ///
+    /// A zero duration disables counting.
+    ///
+    /// Defaults to 15 seconds.
+    pub job_count_metrics_interval: Duration,
 }
 
 impl Default for ServerOptions {
@@ -35,6 +43,7 @@ impl Default for ServerOptions {
         Self {
             delete_history_after: Default::default(),
             shutdown_grace_period: Duration::from_secs(15),
+            job_count_metrics_interval: Duration::from_secs(15),
         }
     }
 }
@@ -42,17 +51,14 @@ impl Default for ServerOptions {
 /// A builder for an Ora server.
 #[must_use]
 pub struct ServerBuilder<B> {
-    backend: Arc<B>,
+    backend: B,
     options: ServerOptions,
 }
 
 impl<B> ServerBuilder<B> {
     /// Create a new Ora server builder with the given backend.
     pub fn new(backend: B, options: ServerOptions) -> Self {
-        Self {
-            backend: Arc::new(backend),
-            options,
-        }
+        Self { backend, options }
     }
 
     /// Set the duration after which historical data is deleted.
@@ -68,6 +74,16 @@ impl<B> ServerBuilder<B> {
     /// Defaults to 15 seconds.
     pub fn shutdown_grace_period(mut self, duration: Duration) -> Self {
         self.options.shutdown_grace_period = duration;
+        self
+    }
+
+    /// Set how often unfinished jobs are counted in the backend
+    /// for the `ora_jobs` and `ora_executions_unassigned` metrics,
+    /// a zero duration disables counting.
+    ///
+    /// Defaults to 15 seconds.
+    pub fn job_count_metrics_interval(mut self, duration: Duration) -> Self {
+        self.options.job_count_metrics_interval = duration;
         self
     }
 }
@@ -101,7 +117,7 @@ where
 #[derive(Debug)]
 #[must_use]
 pub struct ServerHandle<B> {
-    backend: Arc<B>,
+    backend: Arc<InstrumentedBackend<B>>,
     executor_pool: ExecutorPool,
     wg: Either<WaitGroup, WaitGroupHandle>,
 }

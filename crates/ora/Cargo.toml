@@ -68,6 +68,7 @@ workspace = true
 axum = { version = "0.8.8", default-features = false, features = ["tokio", "http1", "http2"] }
 deadpool-postgres = "0.14.1"
 http = "1.4.0"
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 ora-backend-postgres = { path = "../ora-backend-postgres" }
 ora-backend = { path = "../ora-backend" }
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "net"] }

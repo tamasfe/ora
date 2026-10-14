@@ -90,18 +90,17 @@ where
             None => None,
         };
 
+        let new_jobs = jobs
+            .into_iter()
+            .map(|job| NewJob {
+                job,
+                schedule_id: None,
+            })
+            .collect::<Vec<_>>();
+
         let added_jobs = self
             .backend
-            .add_jobs(
-                &jobs
-                    .into_iter()
-                    .map(|job| NewJob {
-                        job,
-                        schedule_id: None,
-                    })
-                    .collect::<Vec<_>>(),
-                if_not_exists,
-            )
+            .add_jobs(&new_jobs, if_not_exists)
             .await
             .err_status()?;
 

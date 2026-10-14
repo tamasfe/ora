@@ -10,13 +10,14 @@ use std::{
 use ora_backend::{
     Backend,
     executions::{FailedExecution, RetriedExecution, StartedExecution, SucceededExecution},
-    jobs::{RetryPolicy, TimeoutBaseTime},
+    jobs::{JobTypeId, RetryPolicy, TimeoutBaseTime},
 };
 use tokio::time::Instant;
 use wgroup::WaitGuard;
 
 use crate::{
     executor_pool::{ExecutorEvent, ExecutorPool},
+    metrics::{self, FailureKind, JobOutcome},
     util::{deadline_after, validate_json},
 };
 
@@ -297,53 +298,60 @@ pub(super) async fn executor_events_loop(
         for event in events {
             match event {
                 ExecutorEvent::ExecutionSucceeded {
-                    job_id,
-                    execution_id,
                     timestamp,
                     output_payload_json,
-                    retry_policy,
-                    attempt_number,
+                    execution,
                 } => {
                     if let Err(error) = validate_json(&output_payload_json) {
                         maybe_retry_executions.push(MaybeRetryExecution {
                             execution: FailedExecution {
-                                job_id,
-                                execution_id,
+                                job_id: execution.job_id,
+                                execution_id: execution.execution_id,
                                 failed_at: timestamp,
                                 failure_reason: format!(
                                     "invalid output returned by the executor: {error}"
                                 ),
                             },
-                            retry_policy,
-                            attempt_number,
+                            retry_policy: execution.retry_policy,
+                            attempt_number: execution.attempt_number,
+                            job_type_id: execution.job_type_id,
+                            started_at: SystemTime::now(),
+                            failure_kind: FailureKind::InvalidOutput,
                         });
 
                         continue;
                     }
 
                     succeeded_executions.push(SucceededExecution {
-                        execution_id,
+                        execution_id: execution.execution_id,
                         succeeded_at: timestamp,
                         output_json: output_payload_json,
                     });
+
+                    metrics::execution_succeeded(
+                        &execution.job_type_id,
+                        execution.started_at,
+                        timestamp,
+                    );
+                    metrics::job_finished(&execution.job_type_id, JobOutcome::Succeeded);
                 }
                 ExecutorEvent::ExecutionFailed {
-                    job_id,
-                    execution_id,
                     timestamp,
                     failure_reason,
-                    retry_policy,
-                    attempt_number,
+                    execution,
                 } => {
                     maybe_retry_executions.push(MaybeRetryExecution {
                         execution: FailedExecution {
-                            job_id,
-                            execution_id,
+                            job_id: execution.job_id,
+                            execution_id: execution.execution_id,
                             failed_at: timestamp,
                             failure_reason,
                         },
-                        retry_policy,
-                        attempt_number,
+                        retry_policy: execution.retry_policy,
+                        attempt_number: execution.attempt_number,
+                        job_type_id: execution.job_type_id,
+                        started_at: SystemTime::now(),
+                        failure_kind: FailureKind::Error,
                     });
                 }
                 ExecutorEvent::ExecutorDisconnected { executor } => {
@@ -357,6 +365,9 @@ pub(super) async fn executor_events_loop(
                             },
                             retry_policy: execution.retry_policy,
                             attempt_number: execution.attempt_number,
+                            job_type_id: execution.job_type_id,
+                            started_at: SystemTime::now(),
+                            failure_kind: FailureKind::ExecutorDisconnected,
                         },
                     ));
                 }
@@ -497,6 +508,9 @@ pub(super) async fn execution_timeouts_loop(
                             failed_at: now,
                             failure_reason: "executor disconnected".to_string(),
                         },
+                        job_type_id: execution.job_type_id,
+                        started_at: execution.started_at,
+                        failure_kind: FailureKind::ExecutorDisconnected,
                         retry_policy: execution.retry_policy,
                         attempt_number: execution.attempt_number,
                     });
@@ -525,6 +539,9 @@ pub(super) async fn execution_timeouts_loop(
                             failed_at: now,
                             failure_reason: "execution timed out".to_string(),
                         },
+                        job_type_id: execution.job_type_id,
+                        started_at: execution.started_at,
+                        failure_kind: FailureKind::Timeout,
                         retry_policy: execution.retry_policy,
                         attempt_number: execution.attempt_number,
                     });
@@ -571,8 +588,40 @@ pub(super) async fn execution_timeouts_loop(
 
 pub(super) struct MaybeRetryExecution {
     pub(super) execution: FailedExecution,
+    pub(super) job_type_id: JobTypeId,
+    pub(super) started_at: SystemTime,
+    pub(super) failure_kind: FailureKind,
     pub(super) retry_policy: RetryPolicy,
     pub(super) attempt_number: u64,
+}
+
+/// Failure details kept for recording metrics
+/// once the backend has been updated.
+struct FailureMetrics {
+    job_type_id: JobTypeId,
+    failure_kind: FailureKind,
+    started_at: SystemTime,
+    failed_at: SystemTime,
+}
+
+impl FailureMetrics {
+    fn new(execution: &MaybeRetryExecution) -> Self {
+        Self {
+            job_type_id: execution.job_type_id.clone(),
+            failure_kind: execution.failure_kind,
+            started_at: execution.started_at,
+            failed_at: execution.execution.failed_at,
+        }
+    }
+
+    fn record(&self) {
+        metrics::execution_failed(
+            &self.job_type_id,
+            self.failure_kind,
+            self.started_at,
+            self.failed_at,
+        );
+    }
 }
 
 /// The maximum backoff duration of retries,
@@ -584,9 +633,13 @@ where
     B: Backend,
 {
     let mut failed_executions = Vec::new();
+    let mut failed_metrics = Vec::new();
     let mut retried_executions = Vec::new();
+    let mut retried_metrics = Vec::new();
 
     for execution in executions {
+        let execution_metrics = FailureMetrics::new(&execution);
+
         if execution.attempt_number <= execution.retry_policy.retries {
             let backoff_duration = retry_backoff(&execution.retry_policy, execution.attempt_number);
 
@@ -597,6 +650,7 @@ where
                 "retrying execution"
             );
 
+            retried_metrics.push(execution_metrics);
             retried_executions.push(RetriedExecution {
                 failed_execution: execution.execution,
                 retry_execution_time: SystemTime::now() + backoff_duration,
@@ -608,6 +662,7 @@ where
                 "execution reached max attempts, will not be retried"
             );
 
+            failed_metrics.push(execution_metrics);
             failed_executions.push(execution.execution);
         }
     }
@@ -624,6 +679,11 @@ where
                 count = failed_executions.len(),
                 "executions reached max retry attempts"
             );
+
+            for m in &failed_metrics {
+                m.record();
+                metrics::job_finished(&m.job_type_id, JobOutcome::Failed);
+            }
         }
     }
 
@@ -634,6 +694,11 @@ where
         .await
     {
         tracing::error!(%error, "error updating retried executions");
+    } else {
+        for m in &retried_metrics {
+            m.record();
+            metrics::execution_retried(&m.job_type_id);
+        }
     }
 }
 
