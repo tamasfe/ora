@@ -123,9 +123,18 @@ impl From<crate::common::TimeRange> for TimeRange {
 
 impl From<LabelFilter> for proto::common::v1::LabelFilter {
     fn from(value: LabelFilter) -> Self {
+        // Servers without `value_in` ignore it, the first value keeps them from matching any value.
+        let single_value = match &value.value_in {
+            Some(values) => values.first().cloned(),
+            None => value.value,
+        };
+
         Self {
             key: value.key,
-            value: value.value,
+            value: single_value,
+            value_in: value
+                .value_in
+                .map(|values| proto::common::v1::LabelValueSet { values }),
         }
     }
 }

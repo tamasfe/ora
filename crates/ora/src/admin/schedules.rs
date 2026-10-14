@@ -645,6 +645,7 @@ impl ScheduleFilters {
         self.labels.get_or_insert_with(Vec::new).push(LabelFilter {
             key: key.into(),
             value: None,
+            value_in: None,
         });
 
         self
@@ -655,6 +656,25 @@ impl ScheduleFilters {
         self.labels.get_or_insert_with(Vec::new).push(LabelFilter {
             key: key.into(),
             value: Some(value.into()),
+            value_in: None,
+        });
+
+        self
+    }
+
+    /// Filter by a label key and any of the given values.
+    ///
+    /// An empty set of values matches nothing.
+    pub fn has_label_value_in<K, I, V>(mut self, key: K, values: I) -> Self
+    where
+        K: Into<String>,
+        I: IntoIterator<Item = V>,
+        V: Into<String>,
+    {
+        self.labels.get_or_insert_with(Vec::new).push(LabelFilter {
+            key: key.into(),
+            value: None,
+            value_in: Some(values.into_iter().map(Into::into).collect()),
         });
 
         self

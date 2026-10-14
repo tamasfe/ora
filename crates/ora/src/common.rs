@@ -22,6 +22,12 @@ pub struct LabelFilter {
     /// if not specified, entities with
     /// the given key and any value will match.
     pub value: Option<String>,
+    /// An optional set of values of the label to filter by,
+    /// entities with any of the values will match.
+    ///
+    /// Takes precedence over `value`, an empty set matches nothing.
+    #[serde(default)]
+    pub value_in: Option<Vec<String>>,
 }
 
 /// A time range that can be open-ended on either side.

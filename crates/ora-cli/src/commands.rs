@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use ora::AdminClient;
+use ora::{AdminClient, common::LabelFilter};
 
 use crate::{
     commands::{
@@ -13,6 +13,26 @@ pub(crate) mod job_types;
 pub(crate) mod jobs;
 pub(crate) mod maintenance;
 pub(crate) mod schedules;
+
+/// Parse a label filter: `key` matches any value, `key=value` one value,
+/// `key=a|b` any of the values.
+pub(crate) fn parse_label_filter(filter: &str) -> LabelFilter {
+    let mut parts = filter.trim().splitn(2, '=');
+    let key = parts.next().unwrap_or_default().trim().to_string();
+
+    match parts.next() {
+        Some(values) if values.contains('|') => LabelFilter {
+            key,
+            value: None,
+            value_in: Some(values.split('|').map(ToString::to_string).collect()),
+        },
+        value => LabelFilter {
+            key,
+            value: value.map(ToString::to_string),
+            value_in: None,
+        },
+    }
+}
 
 /// Command-line client for the ora scheduler.
 #[derive(Parser)]

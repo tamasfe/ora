@@ -282,6 +282,7 @@ impl From<proto::common::v1::LabelFilter> for ora_backend::common::LabelFilter {
         Self {
             key: value.key,
             value: value.value,
+            value_in: value.value_in.map(|set| set.values),
         }
     }
 }
@@ -291,6 +292,9 @@ impl From<ora_backend::common::LabelFilter> for proto::common::v1::LabelFilter {
         Self {
             key: value.key,
             value: value.value,
+            value_in: value
+                .value_in
+                .map(|values| proto::common::v1::LabelValueSet { values }),
         }
     }
 }

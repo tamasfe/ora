@@ -312,7 +312,12 @@ pub(super) fn select_schedule_ids(filters: &ScheduleFilters) -> SelectStatement 
                 )
                 .take();
 
-            if let Some(value) = label_filter.value.clone() {
+            if let Some(values) = label_filter.value_in.clone() {
+                subquery.and_where(Expr::cust_with_values(
+                    "ora.schedule_label.label_value = ANY($1::TEXT[])",
+                    [values],
+                ));
+            } else if let Some(value) = label_filter.value.clone() {
                 subquery.and_where(
                     Expr::col(("ora", "schedule_label", "label_value"))
                         .eq(Expr::cust_with_values("$1", [value])),

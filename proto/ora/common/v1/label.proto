@@ -18,4 +18,15 @@ message LabelFilter {
   // if not specified, entities with
   // the given key and any value will match.
   optional string value = 2;
+  // An optional set of values of the label to filter by,
+  // entities with any of the values will match.
+  //
+  // Takes precedence over `value`, an empty set matches nothing.
+  LabelValueSet value_in = 3;
+}
+
+// A set of label values.
+message LabelValueSet {
+  // The values in the set.
+  repeated string values = 1;
 }

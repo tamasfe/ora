@@ -1,0 +1,2 @@
+allowBuilds:
+  '@bufbuild/buf': set this to true or false

@@ -272,8 +272,7 @@ pub(super) async fn stop_schedule(
     let _ = events.send_async(event).await;
 }
 
-/// Parse a comma-separated `key=value` filter as typed by the user,
-/// a bare `key` matches any value.
+/// Parse a comma-separated label filter as typed by the user.
 fn parse_label_filter(filter: &str) -> Option<Vec<LabelFilter>> {
     if filter.trim().is_empty() {
         return None;
@@ -283,15 +282,7 @@ fn parse_label_filter(filter: &str) -> Option<Vec<LabelFilter>> {
         filter
             .trim()
             .split(',')
-            .filter_map(|s| {
-                let mut s = s.trim().split('=');
-                let key = s.next()?;
-                let value = s.next();
-                Some(LabelFilter {
-                    key: key.to_string(),
-                    value: value.map(ToString::to_string),
-                })
-            })
+            .map(crate::commands::parse_label_filter)
             .collect(),
     )
 }
