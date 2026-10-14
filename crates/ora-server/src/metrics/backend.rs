@@ -1,6 +1,6 @@
 //! A backend wrapper recording metrics of backend operations.
 
-use std::{collections::HashSet, sync::Arc, time::SystemTime};
+use std::{collections::HashSet, time::SystemTime};
 
 use futures::{Stream, TryStreamExt};
 use ora_backend::{
@@ -23,11 +23,11 @@ use super::{JobOutcome, JobSource, backend_error, job_added, job_finished};
 /// regardless of where it is called from.
 #[derive(Debug)]
 pub(crate) struct InstrumentedBackend<B> {
-    backend: Arc<B>,
+    backend: B,
 }
 
 impl<B> InstrumentedBackend<B> {
-    pub(crate) fn new(backend: Arc<B>) -> Self {
+    pub(crate) fn new(backend: B) -> Self {
         Self { backend }
     }
 }

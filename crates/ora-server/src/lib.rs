@@ -51,17 +51,14 @@ impl Default for ServerOptions {
 /// A builder for an Ora server.
 #[must_use]
 pub struct ServerBuilder<B> {
-    backend: Arc<B>,
+    backend: B,
     options: ServerOptions,
 }
 
 impl<B> ServerBuilder<B> {
     /// Create a new Ora server builder with the given backend.
     pub fn new(backend: B, options: ServerOptions) -> Self {
-        Self {
-            backend: Arc::new(backend),
-            options,
-        }
+        Self { backend, options }
     }
 
     /// Set the duration after which historical data is deleted.

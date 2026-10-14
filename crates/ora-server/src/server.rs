@@ -26,7 +26,7 @@ mod schedules;
 pub(crate) use schedules::validate_schedule;
 
 pub(crate) fn spawn_server<B>(
-    backend: std::sync::Arc<B>,
+    backend: B,
     options: ServerOptions,
     wg: Either<WaitGroup, WaitGroupHandle>,
 ) -> ServerHandle<B>
