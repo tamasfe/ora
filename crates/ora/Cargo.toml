@@ -1,6 +1,6 @@
 [package]
 name = "ora"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2024"
 publish.workspace = true
 description.workspace = true
@@ -21,7 +21,7 @@ serde_json = "1.0.149"
 eyre = "0.6.12"
 uuid = { version = "1.19.0", features = ["serde"] }
 futures.workspace = true
-ora-server = { version = "0.13.0", path = "../ora-server", optional = true }
+ora-server = { version = "0.14.0", path = "../ora-server", optional = true }
 hyper-util = { version = "0.1.19", optional = true }
 tokio = { version = "1.49.0", features = [
     "rt",
@@ -76,4 +76,4 @@ tonic-web = "0.14.5"
 tower-http = { version = "0.7.1", features = ["cors", "trace"] }
 tracing-flame = "0.2.0"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-ora-ui = { version = "0.2.0", path = "../ora-ui" }
+ora-ui = { version = "0.3.0", path = "../ora-ui" }
